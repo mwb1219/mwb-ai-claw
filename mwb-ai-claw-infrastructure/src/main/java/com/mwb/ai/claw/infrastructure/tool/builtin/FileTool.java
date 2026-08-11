@@ -42,7 +42,7 @@ public class FileTool implements ToolExecutor {
                 + "    \"action\": {\n"
                 + "      \"type\": \"string\",\n"
                 + "      \"description\": \"操作类型: read(读取文件) / write(写入文件) / list(列出目录)\",\n"
-                + "      \"enum\": [\"read\", \"write\", \"list\"],\n"
+                + "      \"enum\": [\"read\", \"write\", \"list\"]\n"
                 + "    },\n"
                 + "    \"path\": {\n"
                 + "      \"type\": \"string\",\n"

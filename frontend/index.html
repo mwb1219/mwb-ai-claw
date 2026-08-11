@@ -28,6 +28,7 @@
         <div class="mode-switch" role="group" aria-label="对话模式">
           <button data-mode="sync" class="active">同步</button>
           <button data-mode="stream">流式</button>
+          <button data-mode="ws">WebSocket</button>
         </div>
       </div>
     </header>
@@ -88,6 +89,7 @@
             <ul>
               <li><code>POST</code> <span>/agent/chat</span></li>
               <li><code>GET</code> <span>/agent/chat/stream</span></li>
+              <li><code>WS</code> <span>/ws/agent</span></li>
               <li><code>POST</code> <span>/agent/session</span></li>
               <li><code>GET</code> <span>/agent/session/:id</span></li>
             </ul>

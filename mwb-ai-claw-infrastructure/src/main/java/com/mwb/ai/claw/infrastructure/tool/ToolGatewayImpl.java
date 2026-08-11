@@ -5,6 +5,8 @@ import com.mwb.ai.claw.domain.tool.ToolExecutor;
 import com.mwb.ai.claw.domain.tool.ToolGateway;
 import com.mwb.ai.claw.domain.tool.ToolResult;
 import com.mwb.ai.claw.domain.tool.ToolSpec;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -20,6 +22,8 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Component
 public class ToolGatewayImpl implements ToolGateway, DynamicToolRegistry {
+
+    private static final Logger log = LoggerFactory.getLogger(ToolGatewayImpl.class);
 
     private final Map<String, ToolExecutor> executors = new ConcurrentHashMap<>();
 
@@ -37,7 +41,12 @@ public class ToolGatewayImpl implements ToolGateway, DynamicToolRegistry {
         if (executor == null) {
             return ToolResult.error("工具不存在: " + toolName);
         }
-        return executor.execute(argumentsJson);
+        try {
+            return executor.execute(argumentsJson);
+        } catch (Exception e) {
+            log.error("工具执行异常: tool={}, err={}", toolName, e.getMessage(), e);
+            return ToolResult.error("工具执行异常: " + e.getMessage());
+        }
     }
 
     @Override

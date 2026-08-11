@@ -9,6 +9,7 @@ import com.mwb.ai.claw.domain.core.ProgressCallback;
 import com.mwb.ai.claw.domain.core.ReActLoopService;
 import com.mwb.ai.claw.domain.core.ReActResult;
 import com.mwb.ai.claw.domain.core.Session;
+import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
 import com.mwb.ai.claw.dto.ChatCmd;
 import com.mwb.ai.claw.dto.data.AgentErrorCode;
 import com.mwb.ai.claw.dto.data.ChatResponseDTO;
@@ -40,6 +41,14 @@ public class ChatCmdExe {
      * 执行对话（带进度回调）
      */
     public SingleResponse<ChatResponseDTO> execute(ChatCmd cmd, ProgressCallback callback) {
+        return execute(cmd, callback, null);
+    }
+
+    /**
+     * 执行对话（带进度回调 + LLM 流式回调）
+     */
+    public SingleResponse<ChatResponseDTO> execute(ChatCmd cmd, ProgressCallback callback,
+                                                   LlmStreamCallback streamCallback) {
         if (cmd.getMessage() == null || cmd.getMessage().trim().isEmpty()) {
             throw new BizException(AgentErrorCode.B_AGENT_CONFIG_ERROR.getErrCode(), "消息内容不能为空");
         }
@@ -53,8 +62,13 @@ public class ChatCmdExe {
         // 3. 追加用户消息
         session.addUserMessage(cmd.getMessage());
 
-        // 4. 执行 ReAct 推理循环（带进度回调）
-        ReActResult result = reActLoopService.run(session, agent, callback);
+        // 4. 执行 ReAct 推理循环（根据是否有流式回调选择调用方式）
+        ReActResult result;
+        if (streamCallback != null) {
+            result = reActLoopService.streamRun(session, agent, callback, streamCallback);
+        } else {
+            result = reActLoopService.run(session, agent, callback);
+        }
 
         // 5. 持久化会话
         memoryGateway.saveSession(session);

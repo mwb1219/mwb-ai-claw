@@ -19,6 +19,12 @@ function getBaseUrl() {
   return ($('baseUrl').value || '').replace(/\/$/, '');
 }
 
+/** 从 HTTP base URL 推导 WebSocket URL */
+function getWsUrl() {
+  const http = getBaseUrl();
+  return http.replace(/^http/, 'ws') + '/ws/agent';
+}
+
 function setStatus(msg, type = '') {
   const bar = $('statusBar');
   bar.textContent = msg;
@@ -138,18 +144,30 @@ function addMessage(role, content) {
 
 /**
  * 流式模式：创建或追加到当前助手消息
+ * 流式阶段使用 textContent（纯文本，快速且不会有不完整 Markdown 的问题）
+ * 最终通过 finalizeAssistantMessage 切换为 Markdown 渲染
  */
 function appendAssistantContent(chunk) {
   if (!state.currentAssistantBubble) {
-    // 首次创建气泡
+    // 首次创建气泡（使用 textContent，不走 renderMarkdown）
+    const wrap = document.createElement('div');
+    wrap.className = 'msg assistant';
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar';
+    avatar.textContent = 'AI';
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble streaming';
+    bubble.textContent = chunk;
+    wrap.appendChild(avatar);
+    wrap.appendChild(bubble);
+    $('messages').appendChild(wrap);
     state.currentAssistantContent = chunk;
-    state.currentAssistantBubble = addMessage('assistant', chunk);
-    state.currentAssistantBubble.classList.add('streaming');
+    state.currentAssistantBubble = bubble;
+    scrollMessages();
   } else {
-    // 追加内容并重新渲染
+    // 追加内容：用 textContent 累积，避免不完整 Markdown 导致渲染异常
     state.currentAssistantContent += chunk;
-    state.currentAssistantBubble.innerHTML = renderMarkdown(state.currentAssistantContent);
-    state.currentAssistantBubble.classList.add('streaming');
+    state.currentAssistantBubble.textContent = state.currentAssistantContent;
     scrollMessages();
   }
 }
@@ -200,7 +218,7 @@ function addTrace(text) {
   let type = 'thought';
   let label = 'THOUGHT';
   let body = text;
-  const m = text.match(/^\[([A-Za-z]+)\]\s*(.*)$/);
+  const m = text.match(/^\[([A-Za-z]+)\]\s*(.*)$/s);
   if (m) {
     const tag = m[1].toLowerCase();
     body = m[2];
@@ -295,6 +313,19 @@ function streamChat(cmd, callbacks) {
     callbacks.onStep && callbacks.onStep(e.data);
   });
 
+  // LLM token 级增量推送（核心流式体验）
+  es.addEventListener('token', (e) => {
+    callbacks.onToken && callbacks.onToken(e.data);
+  });
+
+  es.addEventListener('tool_name', (e) => {
+    callbacks.onToolName && callbacks.onToolName(e.data);
+  });
+
+  es.addEventListener('tool_args', (e) => {
+    callbacks.onToolArgs && callbacks.onToolArgs(e.data);
+  });
+
   es.addEventListener('reply', (e) => {
     callbacks.onReply && callbacks.onReply(e.data);
   });
@@ -350,6 +381,8 @@ async function send() {
   try {
     if (state.mode === 'sync') {
       await sendSync(cmd);
+    } else if (state.mode === 'ws') {
+      await sendWebSocket(cmd);
     } else {
       await sendStream(cmd);
     }
@@ -385,7 +418,8 @@ async function sendSync(cmd) {
 
 async function sendStream(cmd) {
   await new Promise((resolve, reject) => {
-    let replyEventCount = 0;
+    let replyData = null;
+    let replyReceived = false;
 
     streamChat(cmd, {
       onSession: (sid) => {
@@ -395,25 +429,46 @@ async function sendStream(cmd) {
         addTrace(step);
         setStatus('流式接收中…', 'busy');
       },
-      onReply: (replyData) => {
-        // replyData 可能是增量片段或完整回复
-        // 如果是 JSON 格式，尝试解析
-        let text = replyData;
-        try {
-          const obj = JSON.parse(replyData);
-          text = obj.content || obj.reply || obj.delta || replyData;
-        } catch (_) { /* 纯文本，直接使用 */ }
-
+      // LLM token 级流式：逐 token 追加为纯文本
+      onToken: (token) => {
         removeThinking();
-        // 追加到当前气泡（支持增量）
-        appendAssistantContent(text);
-        replyEventCount++;
+        appendAssistantContent(token);
         setStatus('流式接收中…', 'busy');
       },
+      onToolName: (name) => {
+        setStatus('调用工具: ' + name, 'busy');
+      },
+      onToolArgs: (_args) => {
+        // 工具参数增量（可在轨迹区展示）
+      },
+      // onReply 仅记录数据，不 finalize（避免与 onDone 冲突）
+      onReply: (data) => {
+        replyData = data;
+        replyReceived = true;
+      },
+      // onDone 统一负责 finalize：移除流式气泡，用 addMessage 重建确保格式一致
       onDone: () => {
         removeThinking();
-        // 如果没有 reply 事件，创建一个空回复
-        if (replyEventCount === 0) {
+        // 保存累积内容，然后移除流式气泡
+        let finalContent = '';
+        if (state.currentAssistantBubble) {
+          finalContent = state.currentAssistantContent;
+          const bubbleWrap = state.currentAssistantBubble.parentElement;
+          if (bubbleWrap) bubbleWrap.remove();
+          state.currentAssistantBubble = null;
+          state.currentAssistantContent = '';
+        }
+        if (finalContent) {
+          // 用 addMessage 渲染（与切换 session 完全相同的路径）
+          addMessage('assistant', finalContent);
+        } else if (replyReceived && replyData) {
+          let text = replyData;
+          try {
+            const obj = JSON.parse(replyData);
+            text = obj.content || obj.reply || obj.delta || replyData;
+          } catch (_) { /* 纯文本 */ }
+          addMessage('assistant', text);
+        } else {
           addMessage('assistant', '(无回复内容)');
         }
         setStatus('流式完成', 'ok');
@@ -421,7 +476,6 @@ async function sendStream(cmd) {
       },
       onError: (msg) => {
         removeThinking();
-        // 如果有部分内容，保留已接收的
         if (state.currentAssistantContent) {
           finalizeAssistantMessage(state.currentAssistantContent + '\n\n⚠️ 连接中断');
         } else {
@@ -431,6 +485,116 @@ async function sendStream(cmd) {
         reject(new Error(msg));
       },
     });
+  });
+}
+
+async function sendWebSocket(cmd) {
+  await new Promise((resolve, reject) => {
+    const wsUrl = getWsUrl();
+    setStatus('WebSocket 连接中…', 'busy');
+
+    let ws;
+    try {
+      ws = new WebSocket(wsUrl);
+    } catch (err) {
+      removeThinking();
+      addMessage('system', 'WebSocket 创建失败：' + err.message);
+      setStatus('WebSocket 创建失败', 'err');
+      reject(err);
+      return;
+    }
+
+    let replyReceived = false;
+    let replyData = null;
+
+    ws.onopen = () => {
+      setStatus('WebSocket 已连接，发送消息…', 'busy');
+      // 发送聊天请求
+      const request = { type: 'chat', message: cmd.message };
+      if (cmd.sessionId) request.sessionId = cmd.sessionId;
+      if (cmd.agentId) request.agentId = cmd.agentId;
+      ws.send(JSON.stringify(request));
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        switch (msg.type) {
+          case 'session':
+            ensureSession(msg.data, 'session');
+            break;
+          case 'step':
+            addTrace(msg.data);
+            setStatus('WebSocket 流式接收中…', 'busy');
+            break;
+          case 'token':
+            removeThinking();
+            appendAssistantContent(msg.data);
+            setStatus('WebSocket 流式接收中…', 'busy');
+            break;
+          case 'tool_name':
+            setStatus('调用工具: ' + msg.data, 'busy');
+            break;
+          case 'tool_args':
+            // 工具参数增量
+            break;
+          case 'reply':
+            replyData = msg.data;
+            replyReceived = true;
+            break;
+          case 'done':
+            ws.close();
+            removeThinking();
+            let finalContent = '';
+            if (state.currentAssistantBubble) {
+              finalContent = state.currentAssistantContent;
+              const bubbleWrap = state.currentAssistantBubble.parentElement;
+              if (bubbleWrap) bubbleWrap.remove();
+              state.currentAssistantBubble = null;
+              state.currentAssistantContent = '';
+            }
+            if (finalContent) {
+              addMessage('assistant', finalContent);
+            } else if (replyReceived && replyData) {
+              let text = replyData;
+              try {
+                const obj = JSON.parse(replyData);
+                text = obj.content || obj.reply || obj.delta || replyData;
+              } catch (_) { /* 纯文本 */ }
+              addMessage('assistant', text);
+            } else {
+              addMessage('assistant', '(无回复内容)');
+            }
+            setStatus('WebSocket 流式完成', 'ok');
+            resolve();
+            break;
+          case 'error':
+            setStatus('WebSocket 错误: ' + msg.data, 'err');
+            break;
+        }
+      } catch (err) {
+        setStatus('消息解析异常: ' + err.message, 'err');
+      }
+    };
+
+    ws.onerror = () => {
+      removeThinking();
+      if (state.currentAssistantContent) {
+        finalizeAssistantMessage(state.currentAssistantContent);
+      }
+      setStatus('WebSocket 连接异常', 'err');
+      if (ws.readyState !== WebSocket.OPEN && ws.readyState !== WebSocket.CONNECTING) {
+        reject(new Error('WebSocket 连接异常'));
+      }
+    };
+
+    ws.onclose = () => {
+      // 如果 done 事件未触发，说明异常关闭
+      if (!replyReceived && !state.currentAssistantContent) {
+        removeThinking();
+        reject(new Error('WebSocket 连接已关闭'));
+      }
+    };
   });
 }
 
@@ -502,7 +666,8 @@ function bindEvents() {
       document.querySelectorAll('.mode-switch button').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       state.mode = btn.dataset.mode;
-      setStatus('已切换到' + (state.mode === 'sync' ? '同步' : '流式') + '模式', 'ok');
+      const labels = { sync: '同步', stream: '流式', ws: 'WebSocket' };
+      setStatus('已切换到' + (labels[state.mode] || state.mode) + '模式', 'ok');
     });
   });
 

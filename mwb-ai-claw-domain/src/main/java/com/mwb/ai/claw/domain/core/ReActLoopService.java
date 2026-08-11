@@ -1,14 +1,12 @@
 package com.mwb.ai.claw.domain.core;
 
-import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.llm.LlmGateway;
 import com.mwb.ai.claw.domain.tool.ToolGateway;
 import com.mwb.ai.claw.domain.llm.LlmMessage;
 import com.mwb.ai.claw.domain.llm.LlmRequest;
 import com.mwb.ai.claw.domain.llm.LlmResponse;
+import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
 import com.mwb.ai.claw.domain.llm.ToolCall;
-import com.mwb.ai.claw.domain.core.Message;
-import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.tool.ToolResult;
 import com.mwb.ai.claw.domain.tool.ToolSpec;
 
@@ -83,7 +81,7 @@ public class ReActLoopService {
             // 5. 依次执行每个工具调用，结果作为 Observation 反馈
             for (ToolCall toolCall : toolCalls) {
                 String action = "[Action] 调用工具: " + toolCall.getName()
-                        + " 参数: " + toolCall.getArguments();
+                        + " 参数: " + truncateArgs(toolCall.getArguments());
                 result.getTraceSteps().add(action);
                 notify(callback, action);
 
@@ -101,6 +99,67 @@ public class ReActLoopService {
         }
 
         // 达到最大步数仍未完成
+        result.setMaxStepsReached(true);
+        result.setReply("达到最大推理步数限制(" + maxSteps + ")，未能完成最终回复。");
+        return result;
+    }
+
+    /**
+     * 执行 ReAct 循环（流式版本，LLM token 实时推送到上层）
+     *
+     * @param session        会话聚合根
+     * @param agent          Agent 配置
+     * @param callback       进度回调（trace step）
+     * @param streamCallback LLM 流式回调（token 级增量）
+     * @return 执行结果
+     */
+    public ReActResult streamRun(Session session, Agent agent,
+                                 ProgressCallback callback,
+                                 LlmStreamCallback streamCallback) {
+        ReActResult result = new ReActResult();
+        int maxSteps = agent.getMaxSteps();
+
+        for (int step = 1; step <= maxSteps; step++) {
+            LlmRequest request = buildRequest(session, agent);
+
+            // 流式调用 LLM
+            LlmResponse response = llmGateway.streamChat(request, agent.getModelConfig(), streamCallback);
+
+            List<ToolCall> toolCalls = response.getToolCalls();
+            boolean noToolCalls = toolCalls == null || toolCalls.isEmpty();
+
+            if (noToolCalls) {
+                session.addAssistantMessage(response.getContent(), null);
+                result.setReply(response.getContent());
+                String thought = "[Thought] " + truncate(response.getContent());
+                result.getTraceSteps().add(thought);
+                notify(callback, thought);
+                return result;
+            }
+
+            session.addAssistantMessage(response.getContent(), toolCalls);
+            String thought = "[Thought] 需要调用工具处理（第 " + step + " 步）";
+            result.getTraceSteps().add(thought);
+            notify(callback, thought);
+
+            for (ToolCall toolCall : toolCalls) {
+                String action = "[Action] 调用工具: " + toolCall.getName()
+                        + " 参数: " + truncateArgs(toolCall.getArguments());
+                result.getTraceSteps().add(action);
+                notify(callback, action);
+
+                ToolResult toolResult = toolGateway.execute(toolCall.getName(), toolCall.getArguments());
+                String observation = toolResult.isSuccess()
+                        ? toolResult.getOutput()
+                        : "ERROR: " + toolResult.getError();
+
+                session.addToolMessage(toolCall.getId(), observation);
+                String obs = "[Observation] " + truncate(observation);
+                result.getTraceSteps().add(obs);
+                notify(callback, obs);
+            }
+        }
+
         result.setMaxStepsReached(true);
         result.setReply("达到最大推理步数限制(" + maxSteps + ")，未能完成最终回复。");
         return result;
@@ -153,5 +212,13 @@ public class ReActLoopService {
             return "";
         }
         return text.length() > 200 ? text.substring(0, 200) + "..." : text;
+    }
+
+    /** 截断工具参数以免 trace step / SSE 事件过大 */
+    private String truncateArgs(String args) {
+        if (args == null) {
+            return "";
+        }
+        return args.length() > 300 ? args.substring(0, 300) + "..." : args;
     }
 }
