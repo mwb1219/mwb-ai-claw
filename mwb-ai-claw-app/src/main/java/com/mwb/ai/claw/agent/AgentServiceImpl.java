@@ -1,0 +1,47 @@
+package com.mwb.ai.claw.agent;
+
+import com.alibaba.cola.dto.SingleResponse;
+import com.alibaba.cola.catchlog.CatchAndLog;
+import com.mwb.ai.claw.api.AgentServiceI;
+import com.mwb.ai.claw.agent.executor.ChatCmdExe;
+import com.mwb.ai.claw.agent.executor.CreateSessionCmdExe;
+import com.mwb.ai.claw.agent.executor.SessionQueryExe;
+import com.mwb.ai.claw.dto.ChatCmd;
+import com.mwb.ai.claw.dto.CreateSessionCmd;
+import com.mwb.ai.claw.dto.data.ChatResponseDTO;
+import com.mwb.ai.claw.dto.data.SessionDTO;
+import org.springframework.stereotype.Service;
+
+import javax.annotation.Resource;
+
+/**
+ * Agent 应用服务实现：委托给各命令/查询执行器。
+ */
+@Service
+@CatchAndLog
+public class AgentServiceImpl implements AgentServiceI {
+
+    @Resource
+    private ChatCmdExe chatCmdExe;
+
+    @Resource
+    private CreateSessionCmdExe createSessionCmdExe;
+
+    @Resource
+    private SessionQueryExe sessionQueryExe;
+
+    @Override
+    public SingleResponse<ChatResponseDTO> chat(ChatCmd cmd) {
+        return chatCmdExe.execute(cmd);
+    }
+
+    @Override
+    public SingleResponse<SessionDTO> createSession(CreateSessionCmd cmd) {
+        return createSessionCmdExe.execute(cmd);
+    }
+
+    @Override
+    public SingleResponse<SessionDTO> getSession(String sessionId) {
+        return sessionQueryExe.execute(sessionId);
+    }
+}

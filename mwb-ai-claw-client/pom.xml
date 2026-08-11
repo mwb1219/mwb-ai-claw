@@ -17,9 +17,5 @@
             <groupId>com.alibaba.cola</groupId>
             <artifactId>cola-component-dto</artifactId>
         </dependency>
-        <dependency>
-            <groupId>javax.validation</groupId>
-            <artifactId>validation-api</artifactId>
-        </dependency>
     </dependencies>
 </project>

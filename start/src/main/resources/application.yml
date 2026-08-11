@@ -1,0 +1,84 @@
+project:
+  name: start
+
+# ================= Agent 配置（OpenAI 兼容） =================
+# 前缀 agent，对应 AgentProperties
+agent:
+  agent-id: default
+  name: mwb-ai-claw
+  system-prompt: 你是 mwb-ai-claw 智能助手。当需要时可以调用工具来完成任务，完成后给出简洁回复。
+  model: deepseek-v4-pro
+  base-url: https://api.deepseek.com
+  # 请填写你的 API Key（兼容 OpenAI / DeepSeek / 通义千问等接口）
+  api-key: "sk-06223e..."
+  temperature: 0.7
+  max-tokens: 2048
+  max-steps: 8
+  # 可用工具列表
+  tools:
+    - echo
+    - http
+    - file
+    - shell
+  # 工具安全配置
+  security:
+    enabled: true
+    # 文件操作根目录（留空则不限制）
+    workspace-dir: ""
+    # Shell 命令白名单（仅允许以下命令被 LLM 调用）
+    shell-whitelist:
+      - ls
+      - cat
+      - echo
+      - pwd
+      - mkdir
+      - touch
+      - rm
+      - cp
+      - mv
+      - grep
+      - find
+      - wc
+      - head
+      - tail
+      - date
+      - whoami
+      - env
+      - git
+      - python3
+      - node
+      - npm
+    # Shell 命令黑名单（优先级高于白名单，命中即拒绝）
+    shell-blacklist:
+      - "rm -rf /"
+      - sudo
+      - shutdown
+      - reboot
+      - mkfs
+      - "dd if="
+    # 单个工具执行超时（秒）
+    tool-timeout-seconds: 30
+    # 工具输出最大长度（字符数），超出截断
+    max-output-length: 10000
+    # HTTP 请求允许的 host 模式（空列表表示全部允许）
+    http-allowed-hosts: []
+
+# ================= MCP Server 配置 =================
+# 前缀 mcp，对应 McpProperties
+# 在此配置外部 MCP Server，启动时自动连接并注册其工具
+mcp:
+  servers:
+    # 示例 1：stdio 模式 - 文件系统 MCP Server
+    # - name: filesystem
+    #   transport: stdio
+    #   command: npx
+    #   args:
+    #     - "@modelcontextprotocol/server-filesystem"
+    #     - "/tmp/workspace"
+    #   enabled: true
+
+    # 示例 2：SSE 模式 - 远程 MCP Server
+    # - name: remote-api
+    #   transport: sse
+    #   url: http://localhost:3001/sse
+    #   enabled: true
