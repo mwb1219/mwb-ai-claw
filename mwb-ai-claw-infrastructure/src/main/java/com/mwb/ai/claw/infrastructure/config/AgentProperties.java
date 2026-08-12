@@ -43,6 +43,9 @@ public class AgentProperties {
     /** ReAct 最大推理步数 */
     private int maxSteps = 8;
 
+    /** 长期记忆目录（AGENT.md / MEMORY.md 存放位置，默认 ${user.dir}/.agent） */
+    private String memoryDir = "";
+
     /** 可用工具名称列表 */
     private List<String> tools = Arrays.asList("echo");
 
@@ -61,14 +64,48 @@ public class AgentProperties {
 
         /** Shell 命令白名单（空列表表示全部禁止） */
         private List<String> shellWhitelist = new ArrayList<>(Arrays.asList(
+                // 基础文件 & 目录
                 "ls", "cat", "echo", "pwd", "mkdir", "touch", "rm", "cp", "mv",
-                "grep", "find", "wc", "head", "tail", "date", "whoami", "env",
-                "git", "python3", "node", "npm", "pwd"
+                "cd", "chmod", "chown",
+                // 文本处理
+                "grep", "find", "wc", "head", "tail", "sort", "uniq", "cut",
+                "tr", "tee", "diff", "sed", "awk", "xargs",
+                // 压缩解压
+                "tar", "gzip", "gunzip", "zip", "unzip",
+                // 系统信息
+                "date", "whoami", "env", "uname", "df", "du", "free", "ps",
+                "lsof", "netstat", "ss", "top",
+                // 网络调试
+                "curl", "wget", "ping", "dig", "nslookup",
+                // 版本管理
+                "git", "nvm", "sdk", "pyenv",
+                // 语言运行时
+                "python3", "python", "node", "java", "javac", "go",
+                // 包管理 & 构建
+                "npm", "npx", "pip", "pip3", "mvn", "gradle", "make", "cargo",
+                "brew", "gem",
+                // 编辑器
+                "nano", "vim", "code",
+                // 进程管理
+                "kill",
+                // 数据库
+                "sqlite3",
+                // 远程操作（需黑名单严格限制）
+                "ssh", "scp"
         ));
 
         /** Shell 命令黑名单（在白名单匹配后再检查，优先级更高） */
         private List<String> shellBlacklist = new ArrayList<>(Arrays.asList(
-                "rm -rf /", "sudo", "shutdown", "reboot", "mkfs", "dd if="
+                // 危险删除
+                "rm -rf /", "rm -rf ~", "rm -rf .",
+                // 提权 & 关机
+                "sudo", "su ", "shutdown", "reboot", "halt", "poweroff",
+                // 磁盘操作
+                "mkfs", "dd if=", "> /dev/sda", "mkfs.",
+                // 权限 & 属主
+                "chmod 777", "chown root", "chmod -R",
+                // Fork bomb
+                ":(){ :|:"
         ));
 
         /** 单个工具执行超时（秒） */

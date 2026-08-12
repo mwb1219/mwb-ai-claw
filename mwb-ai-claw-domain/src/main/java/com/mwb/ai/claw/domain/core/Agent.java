@@ -18,6 +18,9 @@ public class Agent {
     /** 系统提示词 */
     private String systemPrompt;
 
+    /** AGENT.md 扩展指令（文件式长期记忆，在 systemPrompt 之后追加） */
+    private String agentInstructions;
+
     /** 模型配置 */
     private ModelConfig modelConfig;
 

@@ -19,5 +19,11 @@ public class SessionDTO {
     /** 状态：ACTIVE / CLOSED */
     private String status;
 
+    /** 创建时间戳 */
+    private long createTime;
+
+    /** 最后更新时间戳 */
+    private long updateTime;
+
     private List<MessageDTO> messages;
 }

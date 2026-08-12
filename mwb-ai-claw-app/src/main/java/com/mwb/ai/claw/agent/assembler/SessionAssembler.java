@@ -22,6 +22,8 @@ public class SessionAssembler {
         dto.setAgentId(session.getAgentId());
         dto.setTitle(session.getTitle());
         dto.setStatus(session.getStatus() == null ? null : session.getStatus().name());
+        dto.setCreateTime(session.getCreateTime());
+        dto.setUpdateTime(session.getUpdateTime());
 
         List<MessageDTO> messages = new ArrayList<>();
         for (Message msg : session.getMessages()) {

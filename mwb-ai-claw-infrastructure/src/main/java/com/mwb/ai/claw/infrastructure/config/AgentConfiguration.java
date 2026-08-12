@@ -2,6 +2,7 @@ package com.mwb.ai.claw.infrastructure.config;
 
 import com.mwb.ai.claw.domain.llm.LlmGateway;
 import com.mwb.ai.claw.domain.tool.ToolGateway;
+import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
 import com.mwb.ai.claw.domain.core.ReActLoopService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -21,7 +22,8 @@ public class AgentConfiguration {
     }
 
     @Bean
-    public ReActLoopService reActLoopService(LlmGateway llmGateway, ToolGateway toolGateway) {
-        return new ReActLoopService(llmGateway, toolGateway);
+    public ReActLoopService reActLoopService(LlmGateway llmGateway, ToolGateway toolGateway,
+                                             LongTermMemoryGateway memoryGateway) {
+        return new ReActLoopService(llmGateway, toolGateway, memoryGateway);
     }
 }

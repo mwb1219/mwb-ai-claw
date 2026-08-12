@@ -6,231 +6,323 @@
 
 构建一个 Java 版的智能体 Agent 框架，具备以下核心能力：
 
-- **多渠道接入**：Web / REST API / IM 渠道（飞书、钉钉、微信、Telegram 等）
+- **多渠道接入**：Web / REST API / WebSocket / Shell 终端
 - **ReAct 推理循环**：思考（Thought）→ 行动（Action）→ 观察（Observation）的迭代执行
-- **工具调用能力**：文件读写、Shell 执行、HTTP 请求、数据库操作、浏览器控制等
+- **工具调用能力**：文件读写、Shell 执行、HTTP 请求、长期记忆读写
 - **MCP 协议支持**：标准化工具接入，兼容生态内任意 MCP 工具
-- **记忆系统**：短期会话记忆 + 长期工作区记忆
-- **多模型适配**：支持 OpenAI、Anthropic、通义千问、DeepSeek、本地 Ollama 等
-- **本地优先**：会话与记忆数据本地化，支持私有化部署
+- **记忆系统**：短期会话记忆（文件持久化）+ 长期工作区记忆（AGENT.md / MEMORY.md）
+- **多模型适配**：支持 OpenAI 兼容接口（DeepSeek、通义千问等）
+- **本地优先**：会话与记忆数据本地化，工具执行受安全沙箱保护
 
 ## 二、整体架构
 
-项目延续 COLA 6 模块分层，将 OpenClaw 的「渠道适配 → 控制面 → Agent 运行时 + 工具」三层模型映射到 DDD 分层中：
+项目采用 DDD 六模块分层，通过 Gateway 接口实现依赖倒置：
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                        start (启动)                          │
-│              Spring Boot Application                        │
+│                      start（启动）                           │
+│            Spring Boot Application                          │
 └─────────────────────────────────────────────────────────────┘
                            ▲
 ┌─────────────────────────────────────────────────────────────┐
-│                    adapter (适配层)                          │
-│   渠道入口：WebController / IMAdapter / CLIAdapter          │
-│   职责：协议转换、鉴权、限流、请求转发到 app 层                │
+│                   adapter（适配层）                           │
+│   AgentController (REST/SSE) / WebSocket / AgentShell       │
+│   职责：协议转换、请求转发到 app 层                            │
 └─────────────────────────────────────────────────────────────┘
                            ▲
-┌─────────────────────────────────────────────────────────────┐
-│  client (客户端 SDK)              │     app (应用层)        │
-│  - AgentServiceI 等接口            │  - AgentServiceImpl    │
-│  - ChatCmd / SessionCmd 等 DTO     │  - executor (Cmd/Qry)   │
-│  - 事件契约 AgentRepliedEvent      │  - 会话编排、用例编排     │
-└───────────────────────────────────┴────────────────────────┘
+┌───────────────────────┬────────────────────────────────────┐
+│ client（客户端 SDK）    │          app（应用层）             │
+│ - AgentServiceI 接口   │ - AgentServiceImpl                 │
+│ - ChatCmd / DTO        │ - ChatCmdExe（对话编排）            │
+│ - SessionDTO           │ - SessionListQryExe               │
+│                        │ - SessionDeleteCmdExe              │
+│                        │ - SessionAssembler                 │
+└───────────────────────┴────────────────────────────────────┘
                            ▲
 ┌─────────────────────────────────────────────────────────────┐
-│                    domain (领域层)                          │
+│                    domain（领域层）                           │
 │   聚合：Session / Agent / Message                            │
-│   领域服务：ReActLoopService / ToolRouter / MemoryService    │
+│   领域服务：ReActLoopService                                 │
 │   Gateway 接口：LlmGateway / ToolGateway / MemoryGateway    │
-│   值对象：ToolSpec / Thought / Action / Observation          │
+│                 LongTermMemoryGateway / AgentGateway        │
+│   值对象：ToolSpec / ToolResult / ToolCall / LlmMessage      │
+│   回调接口：ProgressCallback / LlmStreamCallback            │
 └─────────────────────────────────────────────────────────────┘
                            ▲
 ┌─────────────────────────────────────────────────────────────┐
-│                infrastructure (基础设施)                     │
-│   core 实现：AgentGatewayImpl                                │
-│   tool 实现：ToolGatewayImpl + 内置工具 (EchoTool 等)        │
-│   memory 实现：MemoryGatewayImpl (内存/文件/DB)              │
-│   llm 实现：LlmGatewayImpl (多模型适配)                      │
+│                infrastructure（基础设施）                     │
+│   core：AgentGatewayImpl                                    │
+│   tool：ToolGatewayImpl + 内置工具 + MCP 适配                │
+│   memory：FileBasedSessionGateway + FileBasedMemoryGateway  │
+│   llm：LlmGatewayImpl（OpenAI 兼容流式/非流式）              │
 │   config：AgentConfiguration / AgentProperties              │
+│   security：ToolSecurity（命令白名单/路径限制/超时控制）       │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**依赖方向**：`adapter / app / infrastructure` → `client + domain`；`domain` 不依赖任何下层，通过 Gateway 接口实现依赖倒置（DIP）。
+**依赖方向**：`adapter / app / infrastructure` → `client + domain`；`domain` 不依赖任何下层。
 
-## 三、核心领域模型设计
+## 三、已实现能力
 
-### 3.1 聚合与实体
+### 3.1 Phase 1：最小可用 Agent（MVP）✅
 
-| 类型 | 名称 | 职责 |
-|------|------|------|
-| 聚合根 | `Session` | 一次 Agent 对话会话，聚合 Message 列表、上下文状态、所属 Agent |
-| 实体 | `Message` | 单条消息（user/assistant/tool/observation 角色） |
-| 实体 | `Agent` | Agent 配置实体（模型、system prompt、可用工具集、人设） |
-| 值对象 | `ToolSpec` | 工具规格（名称、描述、参数 JSON Schema） |
-| 值对象 | `Thought` | LLM 的思考文本 |
-| 值对象 | `Action` | LLM 决定调用的工具 + 入参 |
-| 值对象 | `Observation` | 工具执行返回结果 |
-| 值对象 | `ModelConfig` | 模型配置（provider、modelName、温度等） |
+- [x] `client` 层：`AgentServiceI`、`ChatCmd`、`ChatResponseDTO`、`SessionDTO`
+- [x] `domain` 层：`Session`/`Message` 聚合、`LlmGateway`/`ToolGateway`/`MemoryGateway` 接口、`ReActLoopService`
+- [x] `infrastructure` 层：`LlmGatewayImpl`（OpenAI 兼容 API）、内置 `EchoTool`
+- [x] `adapter` 层：`AgentController`（REST POST + SSE 流式 GET）
+- [x] 跑通「用户提问 → LLM 回答」与「LLM 调用 EchoTool」闭环
 
-### 3.2 领域服务
+### 3.2 Phase 2：工具能力扩展 ✅
 
-- **`ReActLoopService`**：ReAct 推理循环编排，是 Agent 的核心引擎。负责驱动 Thought → Action → Observation 的迭代，直到产出最终回答或达到终止条件（最大步数 / 无需工具）。
-- **`ToolRouter`**：根据 LLM 输出的 Action 路由到对应工具执行，聚合工具注册表。
-- **`MemoryService`**：管理短期记忆（当前会话消息窗口）与长期记忆（跨会话工作区记忆检索）。
-- **`PromptAssembler`**：组装 system prompt、历史消息、工具规格，输出给 LLM。
+- [x] 内置工具：`FileTool`（读/写/列目录）、`ShellTool`（沙箱执行）、`HttpTool`（GET/POST）、`EchoTool`
+- [x] MCP 协议适配：stdio / SSE 传输层 + JSON-RPC，动态注册外部 MCP Server 工具
+- [x] 工具安全沙箱：命令白名单（65 个）+ 黑名单（21 个）、路径限制、超时控制（30s）、输出截断（10000 字符）
+- [x] **WebSocket 流式接口**：`/ws/agent` 端点，JSON 事件推送
+- [x] LLM 流式回调：`LlmStreamCallback`（onToken / onToolName / onToolArguments）
 
-### 3.3 Gateway 接口（依赖倒置）
+### 3.3 Phase 3：记忆与多渠道 ✅
 
-```
-domain/
-├── core/                              # 核心域
-│   ├── Session.java                   # 聚合根：会话
-│   ├── Message.java                   # 实体：消息
-│   ├── MessageRole.java               # 枚举
-│   ├── SessionStatus.java             # 枚举
-│   ├── Agent.java                     # 实体：Agent 配置
-│   ├── ModelConfig.java               # 值对象：模型配置
-│   ├── ReActLoopService.java          # 领域服务：ReAct 推理循环
-│   ├── ReActResult.java               # 值对象：推理结果
-│   └── AgentGateway.java              # 接口：Agent 配置管理
-├── tool/                              # 工具域
-│   ├── ToolGateway.java               # 接口：工具执行路由
-│   ├── ToolExecutor.java              # 接口：工具执行器（扩展点）
-│   ├── ToolSpec.java                  # 值对象：工具规格
-│   └── ToolResult.java                # 值对象：工具执行结果
-├── memory/                            # 记忆域
-│   └── MemoryGateway.java             # 接口：记忆持久化
-└── llm/                               # LLM 域
-    ├── LlmGateway.java                # 接口：LLM 调用
-    ├── LlmRequest.java                # 值对象：LLM 请求
-    ├── LlmResponse.java               # 值对象：LLM 响应
-    ├── LlmMessage.java                # 值对象：LLM 消息
-    └── ToolCall.java                  # 值对象：工具调用
-```
+- [x] 文件式长期记忆：`AGENT.md`（Agent 扩展指令）+ `MEMORY.md`（跨会话记忆）
+- [x] 长期记忆工具：`read_memory` / `write_memory`
+- [x] 会话文件持久化：`.agent/sessions/<id>.json`，跨重启保留
+- [x] 多会话管理：创建、列表、切换、删除，按时间倒序
+- [x] 会话自动标题：取首条消息前 30 字符
+- [x] **Shell 终端交互**：JLine REPL，支持流式/同步对话，ANSI 彩色输出
 
-## 四、模块与目录结构规划
+### 3.4 待实施
 
-```
-mwb-ai-claw
-├── mwb-ai-claw-client        # 对外 API 与 DTO
-│   └── com.mwb.ai.claw
-│       ├── api/              # AgentServiceI, SessionServiceI
-│       ├── dto/              # ChatCmd, ChatQry, SessionCmd, AgentConfigCmd
-│       │   ├── cmd/          # ChatCmd, CreateSessionCmd
-│       │   ├── qry/          # SessionListQry, MessageHistoryQry
-│       │   ├── data/         # ChatResponseDTO, SessionDTO, AgentDTO
-│       │   └── event/        # AgentRepliedEvent, ToolInvokedEvent
-├── mwb-ai-claw-adapter       # 渠道适配
-│   └── com.mwb.ai.claw
-│       ├── web/              # AgentController (REST/SSE 流式)
-│       ├── im/               # FeishuAdapter, DingTalkAdapter, TelegramAdapter
-│       └── cli/              # CliAdapter (可选)
-├── mwb-ai-claw-app           # 应用层
-│   └── com.mwb.ai.claw
-│       ├── agent/            # AgentServiceImpl, executor/ChatCmdExe
-│       ├── session/          # SessionServiceImpl, executor/
-│       └── assembler/        # DTO ↔ Domain 转换
-├── mwb-ai-claw-domain        # 领域层（见 3.3）
-├── mwb-ai-claw-infrastructure
-│   └── com.mwb.ai.claw
-│       ├── llm/              # LlmGatewayImpl + 多 provider 适配
-│       │   ├── openai/ deepseek/ qwen/ ollama/ anthropic/
-│       │   └── LlmGatewayImpl.java
-│       ├── tool/             # ToolGatewayImpl + 内置工具实现
-│       │   ├── builtin/      # FileTool, ShellTool, HttpTool, DbTool
-│       │   ├── mcp/          # MCP 协议工具适配
-│       │   └── ToolGatewayImpl.java
-│       ├── memory/           # MemoryGatewayImpl (文件/DB)
-│       ├── im/               # 飞书/钉钉 SDK 接入
-│       └── config/           # Spring 配置
-└── start                     # 启动模块
-    └── resources/application.yml
-```
-
-## 五、关键流程设计
-
-### 5.1 一次对话的 ReAct 循环
-
-```
-用户消息
-  │
-  ▼
-adapter.AgentController.chat(ChatCmd)
-  │
-  ▼
-app.ChatCmdExe.execute()
-  │  1. 加载/创建 Session 聚合
-  │  2. 追加 user Message
-  │  3. 调用 ReActLoopService
-  ▼
-domain.core.ReActLoopService.run(session, agent)
-  │
-  │  loop (maxSteps):
-  │    ┌─ MemoryGateway 裁剪上下文窗口
-  │    ├─ PromptAssembler 组装 system+history+tools
-  │    ├─ LlmGateway.chat(messages, toolSpecs)   ← 依赖倒置
-  │    ├─ 解析返回：纯文本回答 → 终止；tool_call → Action
-  │    ├─ ToolGateway.execute(toolName, args) ← 依赖倒置
-  │    │    └─ ToolExecutor.execute()
-  │    ├─ 将 Observation 追加到 Session
-  │    └─ 继续下一轮
-  │
-  ▼
-返回最终回答 (SSE 流式推送到 adapter)
-```
-
-### 5.2 工具注册与路由
-
-- 启动时 Spring 自动收集所有 `ToolExecutor` Bean，`ToolGatewayImpl` 按名称路由。
-- 新增工具只需实现 `ToolExecutor` 接口并加 `@Component`，无需修改领域层。
-- 工具执行结果统一封装为 `ToolResult`，供下一轮 LLM 推理。
-
-### 5.3 记忆管理
-
-- **短期记忆**：当前 Session 的 Message 列表，按 token 上限滑动窗口。
-- **长期记忆**：工作区 `~/.mwb-ai-claw/workspace/` 下的 `AGENT.md`、`MEMORY.md`，跨会话检索注入。
-
-## 六、技术选型
-
-| 维度 | 选型 | 说明 |
-|------|------|------|
-| 框架 | Spring Boot 2.7 + COLA 5.0 | 沿用现有架构 |
-| LLM SDK | OkHttp + 各厂商 OpenAI 兼容 API | 统一 Chat Completions 接口 |
-| 流式输出 | SSE (SseEmitter) | 支持 Token 级流式返回 |
-| 工具协议 | MCP (Model Context Protocol) | 兼容 OpenClaw 生态工具 |
-| 持久化 | MyBatis + MySQL / 本地文件 | 会话与记忆存储 |
-| 序列化 | Fastjson + Jackson | 沿用现有依赖 |
-| 异步 | Spring 异步线程池 | 长任务工具执行 |
-
-## 七、实施路线图
-
-### Phase 1：最小可用 Agent（MVP）
-- [ ] client 层：定义 `AgentServiceI`、`ChatCmd`、`ChatResponseDTO`
-- [ ] domain 层：`Session`/`Message` 聚合、`LlmGateway`/`ToolGateway` 接口、`ReActLoopService`
-- [ ] infrastructure 层：`LlmGatewayImpl`（OpenAI 兼容）、内置 `EchoTool`、内存版 `MemoryGatewayImpl`
-- [ ] adapter 层：`AgentController`（REST + SSE 流式）
-- [ ] 跑通「用户提问 → LLM 回答」与「LLM 调用 EchoTool」闭环
-
-### Phase 2：工具能力扩展
-- [ ] 内置工具：`FileTool`（读写）、`ShellTool`（执行命令）、`HttpTool`、`DbTool`
-- [ ] MCP 协议适配，支持接入外部 MCP Server
-- [ ] 工具权限与安全沙箱（命令白名单、路径限制）
-
-### Phase 3：记忆与多渠道
-- [ ] 文件式长期记忆（`AGENT.md` / `MEMORY.md`）
 - [ ] IM 渠道接入：飞书、钉钉、Telegram
-- [ ] 多会话管理与隔离
-
-### Phase 4：进阶能力
 - [ ] 多 Agent 路由与协作
 - [ ] 浏览器控制工具（CDP）
 - [ ] 本地 Ollama 离线部署支持
-- [ ] 可视化控制台（Web Dashboard）
 
-## 八、架构约束与原则
+## 四、领域模型
 
-1. **领域层纯净**：`domain` 模块不依赖 Spring、不依赖任何 LLM SDK，仅通过 Gateway 接口定义能力契约。
-2. **依赖倒置**：所有外部能力（LLM、工具、存储、IM）的实现都在 `infrastructure`，向 `domain` 的接口靠拢。
-3. **CQRS 友好**：命令（ChatCmd）与查询（MessageHistoryQry）分离，执行器各司其职。
-4. **可扩展**：新增 LLM Provider 或工具，只需在 `infrastructure` 实现对应接口并注册，不改领域层。
-5. **本地优先**：默认数据本地化，敏感操作工具需显式授权。
+### 4.1 包结构
+
+```
+domain/
+├── core/                  # 核心域
+│   ├── Agent.java         # 实体：Agent 配置（含 agentInstructions）
+│   ├── AgentGateway.java  # 接口：Agent 配置加载
+│   ├── Session.java       # 聚合根：会话（含 createTime/updateTime/自动标题）
+│   ├── SessionStatus.java # 枚举
+│   ├── Message.java       # 实体：消息
+│   ├── MessageRole.java   # 枚举
+│   ├── ModelConfig.java   # 值对象：模型配置
+│   ├── ReActLoopService   # 领域服务：ReAct 推理循环（集成长期记忆）
+│   ├── ReActResult.java   # 值对象：推理结果
+│   └── ProgressCallback   # 回调：进度推送
+├── llm/                   # LLM 域
+│   ├── LlmGateway.java    # 接口：LLM 调用（流式 + 非流式）
+│   ├── LlmRequest.java
+│   ├── LlmResponse.java
+│   ├── LlmMessage.java
+│   ├── LlmStreamCallback  # 流式回调接口
+│   └── ToolCall.java      # 工具调用值对象
+├── tool/                  # 工具域
+│   ├── ToolGateway.java   # 接口：工具注册与执行
+│   ├── ToolExecutor.java  # 接口：工具执行器（扩展点）
+│   ├── ToolSpec.java      # 工具规格
+│   ├── ToolResult.java    # 工具结果
+│   ├── DynamicToolRegistry# 接口：动态工具注册
+│   ├── McpServerConfig    # MCP Server 配置
+│   └── McpToolDef.java    # MCP 工具定义
+└── memory/                # 记忆域
+    ├── MemoryGateway.java        # 接口：会话级记忆
+    └── LongTermMemoryGateway.java # 接口：长期记忆（AGENT.md/MEMORY.md）
+```
+
+### 4.2 基础设施实现
+
+```
+infrastructure/
+├── core/AgentGatewayImpl         # Agent 配置加载 + AGENT.md 注入
+├── llm/LlmGatewayImpl            # OpenAI 兼容 API（流式 SSE 解析）
+├── tool/
+│   ├── ToolGatewayImpl           # Bean 自动收集 + 动态注册
+│   ├── ToolSecurity.java         # 安全沙箱（路径/命令/输出）
+│   ├── builtin/
+│   │   ├── EchoTool              # 回显测试
+│   │   ├── FileTool              # 文件操作（受路径限制）
+│   │   ├── ShellTool             # Shell 执行（受白名单保护）
+│   │   ├── HttpTool              # HTTP 请求（受 host 限制）
+│   │   ├── ReadMemoryTool        # 读取 MEMORY.md
+│   │   └── WriteMemoryTool       # 写入 MEMORY.md
+│   └── mcp/                      # MCP 协议栈
+│       ├── McpClient / McpClientManager
+│       ├── McpToolAdapter / McpToolRegistrar
+│       └── transport/StdioTransport / SseTransport
+├── memory/
+│   ├── FileBasedSessionGateway   # 会话文件持久化
+│   ├── FileBasedMemoryGateway    # 长期记忆文件读写
+│   └── MemoryGatewayImpl         # 纯内存版（测试用）
+└── config/
+    ├── AgentProperties            # YAML 配置映射
+    └── AgentConfiguration         # Spring Bean 装配
+```
+
+## 五、交互方式
+
+### 5.1 REST API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `POST` | `/agent/chat` | 同步对话 |
+| `GET` | `/agent/chat/stream` | SSE 流式对话（实时 token 推送） |
+| `POST` | `/agent/session` | 创建会话 |
+| `GET` | `/agent/session/{id}` | 查询会话详情 |
+| `GET` | `/agent/sessions` | 列出所有会话 |
+| `DELETE` | `/agent/session/{id}` | 删除会话 |
+
+### 5.2 WebSocket
+
+```
+ws://localhost:8080/ws/agent
+```
+
+客户端发送 JSON：
+```json
+{"type":"chat","message":"你好","sessionId":"xxx","agentId":"default"}
+```
+
+服务端推送 JSON 事件流：`session` → `step` → `token` → `tool_name` → `tool_args` → `reply` → `done`
+
+### 5.3 Shell 终端（REPL）
+
+```bash
+# 构建
+mvn package -pl start -am -DskipTests
+
+# 启动 Shell 模式
+java -jar start/target/start-*.jar --spring.profiles.active=shell
+```
+
+**支持的命令**：
+
+| 命令 | 功能 |
+|------|------|
+| 自由文本 | 发送给 Agent 对话 |
+| `/mode` | 切换 流式/同步 模式 |
+| `/session` | 查看当前会话 |
+| `/session new` | 创建新会话 |
+| `/session list` | 列出所有会话 |
+| `/session switch <id>` | 切换会话（支持前缀匹配） |
+| `/session delete <id>` | 删除会话 |
+| `/clear` | 清屏 |
+| `/exit` / `/quit` | 退出 |
+
+流式模式下 AI 回复逐 token 绿色打印，Thought 紫色、Action 黄色、Observation 蓝色。命令历史自动保存至 `~/.mwb-ai-claw-history`。
+
+### 5.4 前端测试控制台
+
+项目根目录下的 `frontend/` 为纯静态前端，包含同步/流式/WebSocket 三种模式切换、会话列表（刷新/删除）、推理轨迹面板、Markdown 渲染。
+
+## 六、配置说明
+
+### 6.1 核心配置（application.yml）
+
+```yaml
+agent:
+  agent-id: default
+  system-prompt: "你是 mwb-ai-claw 智能助手..."
+  model: deepseek-v4-pro
+  base-url: https://api.deepseek.com
+  api-key: "sk-xxx"
+  max-steps: 8
+  memory-dir: ""                      # 长期记忆目录，默认 ${user.dir}/.agent
+  tools:
+    - echo
+    - http
+    - file
+    - shell
+    - read_memory
+    - write_memory
+
+  # 工具安全沙箱
+  security:
+    enabled: true
+    workspace-dir: ""                        # 文件操作根目录
+    shell-whitelist: [ls, cat, grep, ...]    # 65 个命令
+    shell-blacklist: ["rm -rf /", sudo, ...]  # 21 个危险模式
+    tool-timeout-seconds: 30
+    max-output-length: 10000
+    http-allowed-hosts: []
+```
+
+### 6.2 长期记忆文件
+
+```
+.agent/
+├── AGENT.md            # Agent 扩展指令（追加到 system prompt）
+├── MEMORY.md           # 长期记忆（Agent 可通过工具读写）
+└── sessions/
+    ├── a1b2c3d4.json   # 会话文件（JSON 持久化）
+    └── e5f6g7h8.json
+```
+
+### 6.3 MCP Server 配置
+
+```yaml
+mcp:
+  servers:
+    - name: filesystem
+      transport: stdio
+      command: npx
+      args: ["@modelcontextprotocol/server-filesystem", "/tmp/workspace"]
+      enabled: true
+```
+
+## 七、安全机制
+
+| 机制 | 说明 |
+|------|------|
+| 命令白名单 | 65 个允许的 Shell 命令，涵盖文件操作、文本处理、构建工具、包管理等 |
+| 命令黑名单 | 21 个危险模式：`rm -rf /`、`sudo`、`mkfs`、fork bomb、`chmod 777` 等 |
+| 路径限制 | `FileTool` 和 `ShellTool` 仅允许在配置的 `workspace-dir` 内操作 |
+| 超时控制 | 工具执行 30 秒超时，超时后强制终止进程 |
+| 输出截断 | 工具输出限制 10000 字符，防止撑爆上下文 |
+| HTTP 限制 | 可配置允许的 host 列表，阻止 SSRF |
+
+所有安全违规均捕获为 `SecurityException`，返回 `ToolResult.error("安全拦截: ...")`，不会中断 ReAct 循环。
+
+## 八、技术选型
+
+| 维度 | 选型 | 说明 |
+|------|------|------|
+| 框架 | Spring Boot 2.7 + COLA 5.0 | DDD 分层架构 |
+| LLM 调用 | OkHttp + OpenAI 兼容 API | 统一 Chat Completions 接口 |
+| 流式输出 | SSE (SseEmitter) + WebSocket (TextWebSocketHandler) | Token 级实时推送 |
+| 工具协议 | MCP (Model Context Protocol) | stdio / SSE 传输层 |
+| Shell 终端 | JLine 3.20 | ANSI 着色、命令历史、行编辑 |
+| 序列化 | Jackson | Session JSON 持久化 |
+| 持久化 | 本地文件 (.agent/ 目录) | 会话文件 + 长期记忆文件 |
+| 前端 | 原生 HTML/CSS/JS | 无框架依赖，可直接打开 |
+
+## 九、开发指南
+
+### 新增工具
+
+实现 `ToolExecutor` 接口并添加 `@Component`：
+
+```java
+@Component
+public class MyTool implements ToolExecutor {
+    public String getName() { return "my_tool"; }
+    public ToolSpec getSpec() { return new ToolSpec("my_tool", "描述", schema); }
+    public ToolResult execute(String argsJson) { ... }
+}
+```
+
+然后在 `application.yml` 的 `agent.tools` 列表中添加工具名即可。
+
+### 新增 LLM Provider
+
+实现 `LlmGateway` 接口的 `chat()` 和 `streamChat()` 方法，替换或扩展 `LlmGatewayImpl`。
+
+### 测试
+
+```bash
+# 运行长期记忆测试
+mvn test -pl mwb-ai-claw-infrastructure -Dtest=MemoryFilePersistenceTest
+```

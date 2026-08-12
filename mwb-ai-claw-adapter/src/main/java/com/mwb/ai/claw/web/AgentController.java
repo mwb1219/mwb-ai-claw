@@ -10,6 +10,7 @@ import com.mwb.ai.claw.dto.data.SessionDTO;
 import com.mwb.ai.claw.domain.core.ProgressCallback;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
 import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -22,11 +23,12 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import javax.annotation.Resource;
 import javax.annotation.PreDestroy;
 import java.io.IOException;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Agent 对外 REST 接口：提供同步对话、会话管理与 SSE 流式对话能力。
+ * Agent 对外 REST 接口：提供同步对话、会话管理与 SSE/WS 流式对话能力。
  */
 @RestController
 @RequestMapping("/agent")
@@ -62,6 +64,22 @@ public class AgentController {
     @GetMapping("/session/{sessionId}")
     public SingleResponse<SessionDTO> getSession(@PathVariable String sessionId) {
         return agentService.getSession(sessionId);
+    }
+
+    /**
+     * 列出所有会话
+     */
+    @GetMapping("/sessions")
+    public SingleResponse<List<SessionDTO>> listSessions() {
+        return agentService.listSessions();
+    }
+
+    /**
+     * 删除指定会话
+     */
+    @DeleteMapping("/session/{sessionId}")
+    public SingleResponse<Void> deleteSession(@PathVariable String sessionId) {
+        return agentService.deleteSession(sessionId);
     }
 
     /**

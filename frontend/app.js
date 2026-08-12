@@ -243,15 +243,44 @@ function renderSessionList() {
     return;
   }
   list.innerHTML = '';
-  state.sessions.forEach((s) => {
+  // 按更新时间倒序排列（如果有 createTime）
+  const sorted = Array.from(state.sessions.values());
+  sorted.sort((a, b) => (b.createTime || 0) - (a.createTime || 0));
+  sorted.forEach((s) => {
+    const isActive = s.sessionId === state.currentSessionId;
     const card = document.createElement('div');
-    card.className = 'session-card' + (s.sessionId === state.currentSessionId ? ' active' : '');
+    card.className = 'session-card' + (isActive ? ' active' : '');
+
+    const timeLabel = s.createTime ? formatTime(s.createTime) : '';
     card.innerHTML = `
-      <span class="sid">${escapeHtml(s.sessionId.slice(0, 12))}…</span>
-      <span class="stitle">${escapeHtml(s.title || '未命名会话')}</span>`;
-    card.addEventListener('click', () => selectSession(s.sessionId));
+      <div class="session-card-main">
+        <span class="stitle">${escapeHtml(s.title || '未命名会话')}</span>
+        <span class="sid">${escapeHtml(s.sessionId.slice(0, 12))}…</span>
+        ${timeLabel ? `<span class="stime">${timeLabel}</span>` : ''}
+      </div>
+      <button class="session-del-btn" title="删除会话" data-sid="${escapeHtml(s.sessionId)}">&times;</button>`;
+
+    card.querySelector('.session-card-main').addEventListener('click', () => selectSession(s.sessionId));
+    card.querySelector('.session-del-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteCurrentSession(s.sessionId);
+    });
     list.appendChild(card);
   });
+}
+
+function formatTime(ts) {
+  const d = new Date(ts);
+  const now = new Date();
+  const diffMs = now - d;
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return '刚刚';
+  if (diffMin < 60) return diffMin + '分钟前';
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return diffH + '小时前';
+  const diffD = Math.floor(diffH / 24);
+  if (diffD < 7) return diffD + '天前';
+  return d.toLocaleDateString('zh-CN');
 }
 
 function ensureSession(sessionId, title) {
@@ -284,6 +313,18 @@ async function apiCreateSession(cmd) {
 
 async function apiGetSession(sessionId) {
   const resp = await fetch(getBaseUrl() + '/agent/session/' + sessionId);
+  return resp.json();
+}
+
+async function apiListSessions() {
+  const resp = await fetch(getBaseUrl() + '/agent/sessions');
+  return resp.json();
+}
+
+async function apiDeleteSession(sessionId) {
+  const resp = await fetch(getBaseUrl() + '/agent/session/' + sessionId, {
+    method: 'DELETE',
+  });
   return resp.json();
 }
 
@@ -599,6 +640,53 @@ async function sendWebSocket(cmd) {
 }
 
 // ============ 会话操作 ============
+async function refreshSessions() {
+  setStatus('加载会话列表…', 'busy');
+  try {
+    const resp = await apiListSessions();
+    if (!resp.success) {
+      setStatus('加载失败: ' + (resp.errMessage || resp.errCode), 'err');
+      return;
+    }
+    const list = resp.data || [];
+    state.sessions.clear();
+    list.forEach((s) => {
+      state.sessions.set(s.sessionId, {
+        sessionId: s.sessionId,
+        title: s.title,
+        createTime: s.createTime,
+        messages: s.messages || [],
+      });
+    });
+    renderSessionList();
+    setStatus(`已加载 ${list.length} 个会话`, 'ok');
+  } catch (err) {
+    setStatus('加载失败: ' + err.message, 'err');
+  }
+}
+
+async function deleteCurrentSession(sessionId) {
+  if (!confirm('确定要删除此会话？此操作不可恢复。')) return;
+  setStatus('删除会话…', 'busy');
+  try {
+    const resp = await apiDeleteSession(sessionId);
+    if (!resp.success) {
+      setStatus('删除失败: ' + (resp.errMessage || resp.errCode), 'err');
+      return;
+    }
+    state.sessions.delete(sessionId);
+    if (state.currentSessionId === sessionId) {
+      state.currentSessionId = null;
+      $('currentSessionId').value = '';
+      clearMessages();
+      clearTrace();
+    }
+    renderSessionList();
+    setStatus('会话已删除', 'ok');
+  } catch (err) {
+    setStatus('删除失败: ' + err.message, 'err');
+  }
+}
 async function createSession() {
   if (state.busy) return;
   setBusy(true);
@@ -673,6 +761,8 @@ function bindEvents() {
 
   $('newSessionBtn').addEventListener('click', createSession);
 
+  $('refreshSessionsBtn').addEventListener('click', refreshSessions);
+
   document.querySelectorAll('.tabs button').forEach((btn) => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.tabs button').forEach((b) => b.classList.remove('active'));
@@ -687,4 +777,6 @@ function bindEvents() {
 document.addEventListener('DOMContentLoaded', () => {
   bindEvents();
   setStatus('就绪 · 后端 ' + getBaseUrl(), 'ok');
+  // 启动时加载已有会话列表
+  refreshSessions();
 });

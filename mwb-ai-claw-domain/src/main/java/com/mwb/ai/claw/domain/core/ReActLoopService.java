@@ -7,6 +7,7 @@ import com.mwb.ai.claw.domain.llm.LlmRequest;
 import com.mwb.ai.claw.domain.llm.LlmResponse;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
 import com.mwb.ai.claw.domain.llm.ToolCall;
+import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
 import com.mwb.ai.claw.domain.tool.ToolResult;
 import com.mwb.ai.claw.domain.tool.ToolSpec;
 
@@ -23,10 +24,13 @@ public class ReActLoopService {
 
     private final LlmGateway llmGateway;
     private final ToolGateway toolGateway;
+    private final LongTermMemoryGateway memoryGateway;
 
-    public ReActLoopService(LlmGateway llmGateway, ToolGateway toolGateway) {
+    public ReActLoopService(LlmGateway llmGateway, ToolGateway toolGateway,
+                            LongTermMemoryGateway memoryGateway) {
         this.llmGateway = llmGateway;
         this.toolGateway = toolGateway;
+        this.memoryGateway = memoryGateway;
     }
 
     /**
@@ -172,7 +176,7 @@ public class ReActLoopService {
     }
 
     /**
-     * 组装 LLM 请求：system prompt + 历史消息 + 可用工具规格
+     * 组装 LLM 请求：system prompt + AGENT.md + MEMORY.md + 历史消息 + 可用工具规格
      */
     private LlmRequest buildRequest(Session session, Agent agent) {
         LlmRequest request = new LlmRequest();
@@ -181,7 +185,20 @@ public class ReActLoopService {
         request.setMaxTokens(agent.getModelConfig().getMaxTokens());
 
         List<LlmMessage> messages = new ArrayList<>();
-        messages.add(LlmMessage.system(agent.getSystemPrompt()));
+
+        // 组装 system prompt：配置 systemPrompt + AGENT.md（长期指令） + MEMORY.md（长期记忆）
+        StringBuilder systemPrompt = new StringBuilder(agent.getSystemPrompt());
+        if (agent.getAgentInstructions() != null && !agent.getAgentInstructions().trim().isEmpty()) {
+            systemPrompt.append("\n\n## Agent 扩展指令\n")
+                    .append(agent.getAgentInstructions());
+        }
+        String memContent = memoryGateway.loadMemory();
+        if (memContent != null && !memContent.trim().isEmpty()) {
+            systemPrompt.append("\n\n## 长期记忆（跨会话）：\n")
+                    .append(memContent);
+        }
+        messages.add(LlmMessage.system(systemPrompt.toString()));
+
         for (Message msg : session.getMessages()) {
             messages.add(toLlmMessage(msg));
         }

@@ -14,12 +14,16 @@ agent:
   temperature: 0.7
   max-tokens: 2048
   max-steps: 8
+  # 长期记忆目录（AGENT.md / MEMORY.md 存放位置，默认 ${user.dir}/.agent）
+  memory-dir: ""
   # 可用工具列表
   tools:
     - echo
     - http
     - file
     - shell
+    - read_memory
+    - write_memory
   # 工具安全配置
   security:
     enabled: true
@@ -27,6 +31,7 @@ agent:
     workspace-dir: ""
     # Shell 命令白名单（仅允许以下命令被 LLM 调用）
     shell-whitelist:
+      # 基础文件 & 目录
       - ls
       - cat
       - echo
@@ -36,26 +41,107 @@ agent:
       - rm
       - cp
       - mv
+      - cd
+      - chmod
+      - chown
+      # 文本处理
       - grep
       - find
       - wc
       - head
       - tail
+      - sort
+      - uniq
+      - cut
+      - tr
+      - tee
+      - diff
+      - sed
+      - awk
+      - xargs
+      # 压缩解压
+      - tar
+      - gzip
+      - gunzip
+      - zip
+      - unzip
+      # 系统信息
       - date
       - whoami
       - env
+      - uname
+      - df
+      - du
+      - free
+      - ps
+      - lsof
+      - netstat
+      - ss
+      - top
+      # 网络调试
+      - curl
+      - wget
+      - ping
+      - dig
+      - nslookup
+      # 版本管理
       - git
+      - nvm
+      - sdk
+      - pyenv
+      # 语言运行时
       - python3
+      - python
       - node
+      - java
+      - javac
+      - go
+      # 包管理 & 构建
       - npm
+      - npx
+      - pip
+      - pip3
+      - mvn
+      - gradle
+      - make
+      - cargo
+      - brew
+      - gem
+      # 编辑器
+      - nano
+      - vim
+      - code
+      # 进程管理
+      - kill
+      # 数据库
+      - sqlite3
+      # 远程操作（需黑名单严格限制）
+      - ssh
+      - scp
     # Shell 命令黑名单（优先级高于白名单，命中即拒绝）
     shell-blacklist:
+      # 危险删除
       - "rm -rf /"
+      - "rm -rf ~"
+      - "rm -rf ."
+      # 提权 & 关机
       - sudo
+      - "su "
       - shutdown
       - reboot
+      - halt
+      - poweroff
+      # 磁盘操作
       - mkfs
       - "dd if="
+      - "> /dev/sda"
+      - "mkfs."
+      # 权限 & 属主
+      - "chmod 777"
+      - "chown root"
+      - "chmod -R"
+      # Fork bomb
+      - ":(){ :|:"
     # 单个工具执行超时（秒）
     tool-timeout-seconds: 30
     # 工具输出最大长度（字符数），超出截断
