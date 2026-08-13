@@ -49,6 +49,36 @@ public class AgentProperties {
     /** 可用工具名称列表 */
     private List<String> tools = Arrays.asList("echo");
 
+    /** 专家 Agent 定义列表（多 Agent 路由） */
+    private List<AgentConfig> agents = new ArrayList<>();
+
+    /**
+     * 专家 Agent 配置（可覆盖默认 Agent 的部分字段）
+     */
+    @Data
+    public static class AgentConfig {
+        /** Agent 标识 */
+        private String agentId;
+
+        /** Agent 名称 */
+        private String name;
+
+        /** 能力描述（供 LLM 路由判断意图使用） */
+        private String description;
+
+        /** 规则路由关键词 */
+        private List<String> keywords = new ArrayList<>();
+
+        /** 系统提示词 */
+        private String systemPrompt;
+
+        /** 可用工具名称列表 */
+        private List<String> tools = new ArrayList<>();
+
+        /** ReAct 最大推理步数（可选，为空时继承默认值） */
+        private Integer maxSteps;
+    }
+
     /**
      * 工具安全配置
      */

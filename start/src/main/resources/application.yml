@@ -1,3 +1,10 @@
+# ================= Spring 默认 Profile =================
+# 默认激活 web 交互模式（REST/SSE/WebSocket）
+# 切换 Shell 交互模式：--spring.profiles.active=shell
+spring:
+  profiles:
+    active: web
+
 project:
   name: start
 
@@ -24,6 +31,44 @@ agent:
     - shell
     - read_memory
     - write_memory
+  # 专家 Agent 列表（多 Agent 专家路由，未配置字段继承默认值）
+  agents:
+    - agent-id: coder
+      name: 编码专家
+      description: 擅长编写代码、调试 bug、代码审查与技术实现
+      keywords:
+        - 代码
+        - bug
+        - 实现
+        - 开发
+        - 调试
+        - 编译
+        - 报错
+        - 函数
+        - 接口
+      system-prompt: 你是资深软件工程师，擅长编码、调试与问题排查，代码示例清晰规范。
+      tools:
+        - file
+        - shell
+        - http
+        - read_memory
+        - write_memory
+      max-steps: 10
+    - agent-id: researcher
+      name: 信息检索专家
+      description: 擅长信息检索、资料查询与知识整理
+      keywords:
+        - 搜索
+        - 查询
+        - 资料
+        - 调研
+        - 对比
+        - 有哪些
+      system-prompt: 你是信息检索专家，擅长高效检索网络信息并归纳整理。
+      tools:
+        - http
+        - read_memory
+      max-steps: 5
   # 工具安全配置
   security:
     enabled: true

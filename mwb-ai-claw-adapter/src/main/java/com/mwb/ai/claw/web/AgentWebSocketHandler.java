@@ -14,6 +14,7 @@ import com.mwb.ai.claw.web.dto.WsEvent;
 import com.mwb.ai.claw.web.dto.WsRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -46,6 +47,7 @@ import java.util.concurrent.Executors;
  * </pre>
  */
 @Component
+@Profile("web")
 public class AgentWebSocketHandler extends TextWebSocketHandler {
 
     private static final Logger log = LoggerFactory.getLogger(AgentWebSocketHandler.class);

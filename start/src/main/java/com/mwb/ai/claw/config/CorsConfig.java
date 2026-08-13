@@ -1,6 +1,7 @@
 package com.mwb.ai.claw.config;
 
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -10,6 +11,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * 仅用于开发联调场景，生产环境请按需收紧 allowedOriginPatterns。
  */
 @Configuration
+@Profile("web")
 public class CorsConfig implements WebMvcConfigurer {
 
     @Override

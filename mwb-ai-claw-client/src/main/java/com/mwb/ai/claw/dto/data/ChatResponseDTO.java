@@ -14,6 +14,9 @@ public class ChatResponseDTO {
     /** 会话 ID */
     private String sessionId;
 
+    /** 实际处理本次对话的 Agent ID */
+    private String agentId;
+
     /** 最终回复内容 */
     private String reply;
 

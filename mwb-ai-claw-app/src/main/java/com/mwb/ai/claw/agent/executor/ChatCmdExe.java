@@ -4,6 +4,7 @@ import com.alibaba.cola.dto.SingleResponse;
 import com.alibaba.cola.exception.BizException;
 import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.AgentGateway;
+import com.mwb.ai.claw.domain.core.AgentRouter;
 import com.mwb.ai.claw.domain.memory.MemoryGateway;
 import com.mwb.ai.claw.domain.core.ProgressCallback;
 import com.mwb.ai.claw.domain.core.ReActLoopService;
@@ -19,13 +20,16 @@ import javax.annotation.Resource;
 import java.util.UUID;
 
 /**
- * 对话执行器：编排「加载会话 → 追加用户消息 → ReAct 循环 → 持久化 → 组装响应」用例。
+ * 对话执行器：编排「路由选 Agent → 加载会话 → 追加用户消息 → ReAct 循环 → 持久化 → 组装响应」用例。
  */
 @Component
 public class ChatCmdExe {
 
     @Resource
     private AgentGateway agentGateway;
+
+    @Resource
+    private AgentRouter agentRouter;
 
     @Resource
     private MemoryGateway memoryGateway;
@@ -53,8 +57,8 @@ public class ChatCmdExe {
             throw new BizException(AgentErrorCode.B_AGENT_CONFIG_ERROR.getErrCode(), "消息内容不能为空");
         }
 
-        // 1. 加载 Agent 配置
-        Agent agent = agentGateway.getAgent(cmd.getAgentId());
+        // 1. 解析目标 Agent（显式指定优先，否则走路由）
+        Agent agent = resolveAgent(cmd);
 
         // 2. 获取或创建会话
         Session session = getOrCreateSession(cmd.getSessionId(), agent);
@@ -76,9 +80,24 @@ public class ChatCmdExe {
         // 6. 组装响应
         ChatResponseDTO dto = new ChatResponseDTO();
         dto.setSessionId(session.getSessionId());
+        dto.setAgentId(agent.getAgentId());
         dto.setReply(result.getReply());
         dto.setTraceSteps(result.getTraceSteps());
         return SingleResponse.of(dto);
+    }
+
+    /**
+     * 解析目标 Agent：显式指定 agentId 优先，否则通过路由决策，路由未命中回退默认 Agent。
+     */
+    private Agent resolveAgent(ChatCmd cmd) {
+        if (cmd.getAgentId() != null && !cmd.getAgentId().trim().isEmpty()) {
+            return agentGateway.getAgent(cmd.getAgentId());
+        }
+        String routedAgentId = agentRouter.route(cmd.getMessage());
+        if (routedAgentId != null && !routedAgentId.trim().isEmpty()) {
+            return agentGateway.getAgent(routedAgentId);
+        }
+        return agentGateway.getAgent(null);
     }
 
     private Session getOrCreateSession(String sessionId, Agent agent) {

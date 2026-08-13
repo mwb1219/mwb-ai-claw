@@ -1,0 +1,9 @@
+${AnsiColor.BRIGHT_CYAN}
+#   # #   # ####    ###  #####   #### #     ###  #   #
+## ## #   # #   #  #   #   #    #     #     #   # #   #
+# # # # # # ####   #####   #    #     #     ##### # # #
+#   # ## ## #   #  #   #   #    #     #     #   # ## ##
+#   # #   # ####   #   # #####   #### ##### #   # #   #
+${AnsiColor.DEFAULT}
+${AnsiColor.BRIGHT_GREEN}
+:: mwb-ai-claw ::  COLA/DDD 智能体 Agent${AnsiColor.DEFAULT}

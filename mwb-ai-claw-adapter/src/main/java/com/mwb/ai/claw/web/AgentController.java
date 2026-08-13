@@ -1,14 +1,14 @@
 package com.mwb.ai.claw.web;
 
-import com.alibaba.cola.dto.SingleResponse;
-import com.mwb.ai.claw.api.AgentServiceI;
-import com.mwb.ai.claw.agent.executor.ChatCmdExe;
-import com.mwb.ai.claw.dto.ChatCmd;
-import com.mwb.ai.claw.dto.CreateSessionCmd;
-import com.mwb.ai.claw.dto.data.ChatResponseDTO;
-import com.mwb.ai.claw.dto.data.SessionDTO;
-import com.mwb.ai.claw.domain.core.ProgressCallback;
-import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
+import java.io.IOException;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+import javax.annotation.PreDestroy;
+import javax.annotation.Resource;
+
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,18 +20,22 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import javax.annotation.Resource;
-import javax.annotation.PreDestroy;
-import java.io.IOException;
-import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import com.alibaba.cola.dto.SingleResponse;
+import com.mwb.ai.claw.agent.executor.ChatCmdExe;
+import com.mwb.ai.claw.api.AgentServiceI;
+import com.mwb.ai.claw.domain.core.ProgressCallback;
+import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
+import com.mwb.ai.claw.dto.ChatCmd;
+import com.mwb.ai.claw.dto.CreateSessionCmd;
+import com.mwb.ai.claw.dto.data.ChatResponseDTO;
+import com.mwb.ai.claw.dto.data.SessionDTO;
 
 /**
  * Agent 对外 REST 接口：提供同步对话、会话管理与 SSE/WS 流式对话能力。
  */
 @RestController
 @RequestMapping("/agent")
+@Profile("web")
 public class AgentController {
 
     @Resource

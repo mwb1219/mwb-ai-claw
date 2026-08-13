@@ -8,9 +8,13 @@ import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * Agent 网关实现：从配置属性加载默认 Agent 配置，并注入 AGENT.md 扩展指令。
+ * Agent 网关实现：从配置属性加载默认 Agent 与专家 Agent，并注入 AGENT.md 扩展指令。
+ * <p>
+ * 支持多 Agent：默认 Agent 由 agent.* 单 Agent 配置构建，专家 Agent 由 agent.agents 列表构建。
  */
 @Component
 public class AgentGatewayImpl implements AgentGateway {
@@ -23,21 +27,73 @@ public class AgentGatewayImpl implements AgentGateway {
 
     @Override
     public Agent getAgent(String agentId) {
-        ModelConfig modelConfig = new ModelConfig();
-        modelConfig.setModel(agentProperties.getModel());
-        modelConfig.setBaseUrl(agentProperties.getBaseUrl());
-        modelConfig.setApiKey(agentProperties.getApiKey());
-        modelConfig.setTemperature(agentProperties.getTemperature());
-        modelConfig.setMaxTokens(agentProperties.getMaxTokens());
+        // 1. 显式指定 agentId 且命中专家 Agent → 返回该 Agent
+        if (agentId != null && !agentId.trim().isEmpty()) {
+            for (AgentProperties.AgentConfig config : agentProperties.getAgents()) {
+                if (agentId.equals(config.getAgentId())) {
+                    return buildAgent(config);
+                }
+            }
+            // 指定了 agentId 但未命中专家列表，且等于默认 agentId → 返回默认 Agent
+            if (agentId.equals(agentProperties.getAgentId())) {
+                return buildDefaultAgent();
+            }
+        }
+        // 2. 其他情况返回默认 Agent
+        return buildDefaultAgent();
+    }
 
+    @Override
+    public List<Agent> listAgents() {
+        List<Agent> agents = new ArrayList<>();
+        agents.add(buildDefaultAgent());
+        for (AgentProperties.AgentConfig config : agentProperties.getAgents()) {
+            agents.add(buildAgent(config));
+        }
+        return agents;
+    }
+
+    /** 构建默认 Agent（基于 agent.* 单 Agent 配置） */
+    private Agent buildDefaultAgent() {
         Agent agent = new Agent();
         agent.setAgentId(agentProperties.getAgentId());
         agent.setName(agentProperties.getName());
         agent.setSystemPrompt(agentProperties.getSystemPrompt());
         agent.setAgentInstructions(longTermMemoryGateway.loadAgentInstructions());
-        agent.setModelConfig(modelConfig);
+        agent.setModelConfig(buildModelConfig(agentProperties.getModel(), agentProperties.getBaseUrl(),
+                agentProperties.getApiKey(), agentProperties.getTemperature(), agentProperties.getMaxTokens()));
         agent.setToolNames(agentProperties.getTools());
         agent.setMaxSteps(agentProperties.getMaxSteps());
         return agent;
+    }
+
+    /** 构建专家 Agent（基于 AgentConfig，未配置字段继承默认值） */
+    private Agent buildAgent(AgentProperties.AgentConfig config) {
+        Agent agent = new Agent();
+        agent.setAgentId(config.getAgentId());
+        agent.setName(config.getName() != null ? config.getName() : config.getAgentId());
+        agent.setSystemPrompt(config.getSystemPrompt() != null
+                ? config.getSystemPrompt() : agentProperties.getSystemPrompt());
+        agent.setDescription(config.getDescription());
+        agent.setKeywords(config.getKeywords());
+        agent.setAgentInstructions(longTermMemoryGateway.loadAgentInstructions());
+        agent.setModelConfig(buildModelConfig(agentProperties.getModel(), agentProperties.getBaseUrl(),
+                agentProperties.getApiKey(), agentProperties.getTemperature(), agentProperties.getMaxTokens()));
+        // 工具集：未配置则继承默认
+        agent.setToolNames(config.getTools() != null && !config.getTools().isEmpty()
+                ? config.getTools() : agentProperties.getTools());
+        agent.setMaxSteps(config.getMaxSteps() != null ? config.getMaxSteps() : agentProperties.getMaxSteps());
+        return agent;
+    }
+
+    private ModelConfig buildModelConfig(String model, String baseUrl, String apiKey,
+                                         double temperature, int maxTokens) {
+        ModelConfig modelConfig = new ModelConfig();
+        modelConfig.setModel(model);
+        modelConfig.setBaseUrl(baseUrl);
+        modelConfig.setApiKey(apiKey);
+        modelConfig.setTemperature(temperature);
+        modelConfig.setMaxTokens(maxTokens);
+        return modelConfig;
     }
 }

@@ -19,8 +19,8 @@
         <cola.components.version>5.0.0</cola.components.version>
 
         <spring-boot.version>2.7.2</spring-boot.version>
-        <!-- 覆盖 Lombok 版本以兼容 JDK 21（Spring Boot 2.7.2 默认 1.18.24 不支持 JDK 16+） -->
-        <lombok.version>1.18.30</lombok.version>
+        <!-- 覆盖 Lombok 版本以兼容 JDK 21 及新版语言服务器编译器（1.18.30 会触发 lombok.javac.Javac 初始化失败） -->
+        <lombok.version>1.18.46</lombok.version>
     </properties>
 
     <modules>
@@ -100,6 +100,11 @@
     <build>
         <pluginManagement>
             <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>2.22.2</version>
+                </plugin>
                 <plugin>
                     <artifactId>maven-resources-plugin</artifactId>
                     <version>3.3.0</version>
