@@ -1,9 +1,9 @@
 package com.mwb.ai.claw.infrastructure.memory;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.memory.MemoryGateway;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
+import com.mwb.ai.claw.infrastructure.util.JsonUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -32,7 +32,6 @@ public class FileBasedSessionGateway implements MemoryGateway {
     private static final Logger log = LoggerFactory.getLogger(FileBasedSessionGateway.class);
 
     private final Path sessionsDir;
-    private final ObjectMapper objectMapper = new ObjectMapper();
     private final ConcurrentMap<String, Session> cache = new ConcurrentHashMap<>();
 
     public FileBasedSessionGateway(AgentProperties properties) {
@@ -53,7 +52,7 @@ public class FileBasedSessionGateway implements MemoryGateway {
                 files.filter(p -> p.toString().endsWith(".json")).forEach(p -> {
                     try {
                         String json = new String(Files.readAllBytes(p), StandardCharsets.UTF_8);
-                        Session session = objectMapper.readValue(json, Session.class);
+                        Session session = JsonUtils.fromJson(json, Session.class);
                         cache.put(session.getSessionId(), session);
                     } catch (Exception e) {
                         log.warn("加载会话文件失败: {} -> {}", p.getFileName(), e.getMessage());
@@ -77,7 +76,7 @@ public class FileBasedSessionGateway implements MemoryGateway {
         Path file = sessionFile(session.getSessionId());
         try {
             Files.createDirectories(sessionsDir);
-            String json = objectMapper.writeValueAsString(session);
+            String json = JsonUtils.toJson(session);
             Files.write(file, json.getBytes(StandardCharsets.UTF_8));
             log.debug("会话已持久化: {} ({} bytes)", session.getSessionId(), json.length());
         } catch (IOException e) {
@@ -98,7 +97,7 @@ public class FileBasedSessionGateway implements MemoryGateway {
         }
         try {
             String json = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
-            Session session = objectMapper.readValue(json, Session.class);
+            Session session = JsonUtils.fromJson(json, Session.class);
             cache.put(sessionId, session);
             return session;
         } catch (IOException e) {

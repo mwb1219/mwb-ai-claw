@@ -1,11 +1,11 @@
 package com.mwb.ai.claw.infrastructure.tool.builtin;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mwb.ai.claw.domain.tool.ToolExecutor;
 import com.mwb.ai.claw.domain.tool.ToolResult;
 import com.mwb.ai.claw.domain.tool.ToolSpec;
 import com.mwb.ai.claw.infrastructure.tool.ToolSecurity;
+import com.mwb.ai.claw.infrastructure.tool.builtin.dto.FileParams;
+import com.mwb.ai.claw.infrastructure.util.JsonUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -24,7 +24,6 @@ import java.nio.file.Path;
 public class FileTool implements ToolExecutor {
 
     private static final Logger log = LoggerFactory.getLogger(FileTool.class);
-    private static final ObjectMapper mapper = new ObjectMapper();
 
     @Resource
     private ToolSecurity toolSecurity;
@@ -61,9 +60,9 @@ public class FileTool implements ToolExecutor {
     @Override
     public ToolResult execute(String argumentsJson) {
         try {
-            JsonNode args = mapper.readTree(argumentsJson);
-            String action = getText(args, "action");
-            String path = getText(args, "path");
+            FileParams params = JsonUtils.fromJson(argumentsJson, FileParams.class);
+            String action = params.getAction();
+            String path = params.getPath();
 
             if (action == null || path == null) {
                 return ToolResult.error("缺少必填参数: action 和 path");
@@ -73,7 +72,7 @@ public class FileTool implements ToolExecutor {
                 case "read":
                     return doRead(path);
                 case "write":
-                    return doWrite(path, getText(args, "content"));
+                    return doWrite(path, params.getContent());
                 case "list":
                     return doList(path);
                 default:
@@ -140,10 +139,5 @@ public class FileTool implements ToolExecutor {
         }
         String output = toolSecurity.truncateOutput(sb.toString());
         return ToolResult.success("目录: " + path + "\n" + output);
-    }
-
-    private String getText(JsonNode node, String field) {
-        JsonNode v = node.get(field);
-        return v == null || v.isNull() ? null : v.asText();
     }
 }

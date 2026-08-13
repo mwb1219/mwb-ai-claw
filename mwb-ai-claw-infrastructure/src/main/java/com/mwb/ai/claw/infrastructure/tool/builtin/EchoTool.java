@@ -1,10 +1,10 @@
 package com.mwb.ai.claw.infrastructure.tool.builtin;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mwb.ai.claw.domain.tool.ToolResult;
 import com.mwb.ai.claw.domain.tool.ToolSpec;
 import com.mwb.ai.claw.domain.tool.ToolExecutor;
+import com.mwb.ai.claw.infrastructure.tool.builtin.dto.EchoParams;
+import com.mwb.ai.claw.infrastructure.util.JsonUtils;
 import org.springframework.stereotype.Component;
 
 /**
@@ -23,8 +23,6 @@ public class EchoTool implements ToolExecutor {
             + "\"required\":[\"text\"]"
             + "}";
 
-    private final ObjectMapper mapper = new ObjectMapper();
-
     @Override
     public String getName() {
         return NAME;
@@ -38,9 +36,8 @@ public class EchoTool implements ToolExecutor {
     @Override
     public ToolResult execute(String argumentsJson) {
         try {
-            JsonNode node = mapper.readTree(argumentsJson == null ? "{}" : argumentsJson);
-            JsonNode textNode = node.get("text");
-            String text = textNode == null ? "" : textNode.asText();
+            EchoParams params = JsonUtils.fromJson(argumentsJson == null ? "{}" : argumentsJson, EchoParams.class);
+            String text = params.getText() == null ? "" : params.getText();
             return ToolResult.success("echo: " + text);
         } catch (Exception e) {
             return ToolResult.error("参数解析失败: " + e.getMessage());

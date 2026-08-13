@@ -1,9 +1,5 @@
 package com.mwb.ai.claw.infrastructure.llm;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mwb.ai.claw.domain.core.ModelConfig;
 import com.mwb.ai.claw.domain.llm.LlmGateway;
 import com.mwb.ai.claw.domain.llm.LlmMessage;
@@ -12,6 +8,16 @@ import com.mwb.ai.claw.domain.llm.LlmResponse;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
 import com.mwb.ai.claw.domain.llm.ToolCall;
 import com.mwb.ai.claw.domain.tool.ToolSpec;
+import com.mwb.ai.claw.infrastructure.llm.dto.ChatChoice;
+import com.mwb.ai.claw.infrastructure.llm.dto.ChatCompletionRequest;
+import com.mwb.ai.claw.infrastructure.llm.dto.ChatCompletionResponse;
+import com.mwb.ai.claw.infrastructure.llm.dto.ChatDelta;
+import com.mwb.ai.claw.infrastructure.llm.dto.ChatFunctionCall;
+import com.mwb.ai.claw.infrastructure.llm.dto.ChatFunctionDef;
+import com.mwb.ai.claw.infrastructure.llm.dto.ChatMessage;
+import com.mwb.ai.claw.infrastructure.llm.dto.ChatTool;
+import com.mwb.ai.claw.infrastructure.llm.dto.ChatToolCall;
+import com.mwb.ai.claw.infrastructure.util.JsonUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpEntity;
@@ -31,6 +37,7 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * LLM 网关实现：调用 OpenAI 兼容的 /chat/completions 接口。
@@ -38,13 +45,13 @@ import java.util.List;
  * 支持两种模式：
  * - 同步模式：chat() 一次性获取完整响应
  * - 流式模式：streamChat() 逐 token 推送增量，支持工具调用的流式解析
+ * <p>
+ * 请求/响应序列化统一走 {@link JsonUtils} + {@code llm.dto} 实体类，避免原生 JsonNode 解析。
  */
 @Component
 public class LlmGatewayImpl implements LlmGateway {
 
     private static final Logger log = LoggerFactory.getLogger(LlmGatewayImpl.class);
-
-    private final ObjectMapper mapper = new ObjectMapper();
 
     @Resource
     private RestTemplate restTemplate;
@@ -53,7 +60,7 @@ public class LlmGatewayImpl implements LlmGateway {
     public LlmResponse chat(LlmRequest request, ModelConfig modelConfig) {
         String url = modelConfig.getBaseUrl() + "/chat/completions";
         try {
-            String requestBody = buildRequestBody(request, modelConfig, false);
+            String requestBody = JsonUtils.toJson(buildRequest(request, modelConfig, false));
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -74,7 +81,7 @@ public class LlmGatewayImpl implements LlmGateway {
         String url = modelConfig.getBaseUrl() + "/chat/completions";
         HttpURLConnection conn = null;
         try {
-            String requestBody = buildRequestBody(request, modelConfig, true);
+            String requestBody = JsonUtils.toJson(buildRequest(request, modelConfig, true));
 
             conn = (HttpURLConnection) new URL(url).openConnection();
             conn.setRequestMethod("POST");
@@ -140,51 +147,40 @@ public class LlmGatewayImpl implements LlmGateway {
                 }
 
                 try {
-                    JsonNode chunk = mapper.readTree(data);
-                    JsonNode choices = chunk.path("choices");
-                    if (!choices.isArray() || choices.size() == 0) {
+                    ChatCompletionResponse chunk = JsonUtils.fromJson(data, ChatCompletionResponse.class);
+                    if (chunk.getChoices() == null || chunk.getChoices().isEmpty()) {
                         continue;
                     }
-
-                    JsonNode choice = choices.get(0);
-                    String deltaRole = choice.path("delta").path("role").asText("");
-                    String deltaContent = choice.path("delta").path("content").asText("");
-                    String deltaFinish = choice.path("finish_reason").asText("");
+                    ChatDelta delta = chunk.getChoices().get(0).getDelta();
+                    if (delta == null) {
+                        continue;
+                    }
+                    String deltaFinish = chunk.getChoices().get(0).getFinishReason();
 
                     // 处理 finish reason
                     if (deltaFinish != null && !deltaFinish.isEmpty()) {
                         finishReason = deltaFinish;
                     }
 
-                    // 处理 role（通常在第一个 chunk）
-                    if ("assistant".equals(deltaRole)) {
-                        // 忽略，主要用于初始化
-                    }
-
                     // 处理 content 增量
-                    if (deltaContent != null && !deltaContent.isEmpty()) {
-                        fullContent.append(deltaContent);
+                    if (delta.getContent() != null && !delta.getContent().isEmpty()) {
+                        fullContent.append(delta.getContent());
                         if (callback != null) {
-                            callback.onToken(deltaContent);
+                            callback.onToken(delta.getContent());
                         }
                     }
 
                     // 处理 tool_calls 增量
-                    JsonNode deltaToolCalls = choice.path("delta").path("tool_calls");
-                    if (deltaToolCalls.isArray()) {
-                        for (JsonNode tcDelta : deltaToolCalls) {
-                            int index = tcDelta.path("index").asInt(0);
-                            JsonNode fn = tcDelta.path("function");
+                    if (delta.getToolCalls() != null) {
+                        for (ChatToolCall tcDelta : delta.getToolCalls()) {
+                            int index = tcDelta.getIndex() != null ? tcDelta.getIndex() : 0;
+                            ChatFunctionCall fn = tcDelta.getFunction();
 
                             // 检测新的 tool_call 开始
                             if (index != currentToolIndex) {
                                 // 保存上一个 tool_call
                                 if (currentToolName != null) {
-                                    ToolCall tc = new ToolCall();
-                                    tc.setId(currentToolId);
-                                    tc.setName(currentToolName);
-                                    tc.setArguments(currentToolArgs.toString());
-                                    toolCalls.add(tc);
+                                    toolCalls.add(buildToolCall(currentToolId, currentToolName, currentToolArgs.toString()));
                                 }
                                 // 开始新的 tool_call
                                 currentToolIndex = index;
@@ -194,30 +190,23 @@ public class LlmGatewayImpl implements LlmGateway {
                             }
 
                             // 工具名增量
-                            String fnName = fn.path("name").asText("");
-                            if (fnName != null && !fnName.isEmpty()) {
-                                if (currentToolName == null) {
-                                    currentToolName = fnName;
-                                } else {
-                                    currentToolName += fnName;
-                                }
+                            if (fn != null && fn.getName() != null && !fn.getName().isEmpty()) {
+                                currentToolName = currentToolName == null ? fn.getName() : currentToolName + fn.getName();
                                 if (callback != null) {
-                                    callback.onToolName(fnName);
+                                    callback.onToolName(fn.getName());
                                 }
                             }
 
-                            // 工具名在 tool_calls[].function.name 中
-                            String tcId = tcDelta.path("id").asText("");
-                            if (tcId != null && !tcId.isEmpty()) {
-                                currentToolId = tcId;
+                            // 工具调用 ID
+                            if (tcDelta.getId() != null && !tcDelta.getId().isEmpty()) {
+                                currentToolId = tcDelta.getId();
                             }
 
                             // 参数增量
-                            String fnArgs = fn.path("arguments").asText("");
-                            if (fnArgs != null && !fnArgs.isEmpty()) {
-                                currentToolArgs.append(fnArgs);
+                            if (fn != null && fn.getArguments() != null && !fn.getArguments().isEmpty()) {
+                                currentToolArgs.append(fn.getArguments());
                                 if (callback != null) {
-                                    callback.onToolArguments(fnArgs);
+                                    callback.onToolArguments(fn.getArguments());
                                 }
                             }
                         }
@@ -236,11 +225,7 @@ public class LlmGatewayImpl implements LlmGateway {
                                 ? currentToolArgs.substring(0, 200) + "..." : currentToolArgs.toString());
                 toolCalls.clear(); // 丢弃所有可能不完整的 tool calls
             } else {
-                ToolCall tc = new ToolCall();
-                tc.setId(currentToolId);
-                tc.setName(currentToolName);
-                tc.setArguments(currentToolArgs.toString());
-                toolCalls.add(tc);
+                toolCalls.add(buildToolCall(currentToolId, currentToolName, currentToolArgs.toString()));
             }
         }
 
@@ -258,97 +243,111 @@ public class LlmGatewayImpl implements LlmGateway {
     }
 
     /** 构造 OpenAI 兼容请求体 */
-    private String buildRequestBody(LlmRequest request, ModelConfig modelConfig, boolean stream) throws Exception {
-        ObjectNode root = mapper.createObjectNode();
-        root.put("model", modelConfig.getModel());
-        root.put("temperature", modelConfig.getTemperature());
-        root.put("max_tokens", modelConfig.getMaxTokens());
+    private ChatCompletionRequest buildRequest(LlmRequest request, ModelConfig modelConfig, boolean stream) {
+        ChatCompletionRequest body = new ChatCompletionRequest();
+        body.setModel(modelConfig.getModel());
+        body.setTemperature(modelConfig.getTemperature());
+        body.setMaxTokens(modelConfig.getMaxTokens());
         if (stream) {
-            root.put("stream", true);
+            body.setStream(true);
         }
 
         // messages
-        ArrayNode messages = mapper.createArrayNode();
+        List<ChatMessage> messages = new ArrayList<>();
         for (LlmMessage msg : request.getMessages()) {
-            messages.add(buildMessageNode(msg));
+            messages.add(toChatMessage(msg));
         }
-        root.set("messages", messages);
+        body.setMessages(messages);
 
         // tools
         if (request.getTools() != null && !request.getTools().isEmpty()) {
-            ArrayNode tools = mapper.createArrayNode();
+            List<ChatTool> tools = new ArrayList<>();
             for (ToolSpec spec : request.getTools()) {
                 try {
-                    ObjectNode tool = mapper.createObjectNode();
-                    tool.put("type", "function");
-                    ObjectNode function = mapper.createObjectNode();
-                    function.put("name", spec.getName());
-                    function.put("description", spec.getDescription());
-                    function.set("parameters", mapper.readTree(spec.getParametersJson()));
-                    tool.set("function", function);
+                    ChatTool tool = new ChatTool();
+                    tool.setType("function");
+                    ChatFunctionDef function = new ChatFunctionDef();
+                    function.setName(spec.getName());
+                    function.setDescription(spec.getDescription());
+                    function.setParameters(JsonUtils.fromJson(spec.getParametersJson(), Map.class));
+                    tool.setFunction(function);
                     tools.add(tool);
                 } catch (Exception e) {
                     log.warn("工具 {} 的参数 JSON 解析失败，跳过: {}", spec.getName(), e.getMessage());
                 }
             }
-            root.set("tools", tools);
+            body.setTools(tools);
         }
 
-        return mapper.writeValueAsString(root);
+        return body;
     }
 
-    /** domain LlmMessage → OpenAI message 节点 */
-    private ObjectNode buildMessageNode(LlmMessage msg) {
-        ObjectNode node = mapper.createObjectNode();
-        node.put("role", msg.getRole());
+    /** domain LlmMessage → OpenAI 消息 DTO */
+    private ChatMessage toChatMessage(LlmMessage msg) {
+        ChatMessage node = new ChatMessage();
+        node.setRole(msg.getRole());
         if (msg.getContent() != null) {
-            node.put("content", msg.getContent());
+            node.setContent(msg.getContent());
         }
         if (msg.getToolCalls() != null && !msg.getToolCalls().isEmpty()) {
-            ArrayNode toolCalls = mapper.createArrayNode();
+            List<ChatToolCall> toolCalls = new ArrayList<>();
             for (ToolCall tc : msg.getToolCalls()) {
-                ObjectNode tcNode = mapper.createObjectNode();
-                tcNode.put("id", tc.getId());
-                tcNode.put("type", "function");
-                ObjectNode fn = mapper.createObjectNode();
-                fn.put("name", tc.getName());
-                fn.put("arguments", tc.getArguments());
-                tcNode.set("function", fn);
+                ChatToolCall tcNode = new ChatToolCall();
+                tcNode.setId(tc.getId());
+                tcNode.setType("function");
+                ChatFunctionCall fn = new ChatFunctionCall();
+                fn.setName(tc.getName());
+                fn.setArguments(tc.getArguments());
+                tcNode.setFunction(fn);
                 toolCalls.add(tcNode);
             }
-            node.set("tool_calls", toolCalls);
+            node.setToolCalls(toolCalls);
         }
         if (msg.getToolCallId() != null) {
-            node.put("tool_call_id", msg.getToolCallId());
+            node.setToolCallId(msg.getToolCallId());
         }
         return node;
     }
 
     /** 解析 OpenAI 响应为 domain LlmResponse */
-    private LlmResponse parseResponse(String body) throws Exception {
-        JsonNode root = mapper.readTree(body);
-        JsonNode firstChoice = root.path("choices").path(0);
-        JsonNode message = firstChoice.path("message");
-
+    private LlmResponse parseResponse(String body) {
+        ChatCompletionResponse resp = JsonUtils.fromJson(body, ChatCompletionResponse.class);
         LlmResponse response = new LlmResponse();
-        response.setContent(message.path("content").asText(""));
-        response.setFinishReason(firstChoice.path("finish_reason").asText("stop"));
 
-        JsonNode toolCallsNode = message.path("tool_calls");
-        if (toolCallsNode.isArray() && toolCallsNode.size() > 0) {
-            List<ToolCall> toolCalls = new ArrayList<>();
-            for (JsonNode tc : toolCallsNode) {
-                ToolCall toolCall = new ToolCall();
-                toolCall.setId(tc.path("id").asText());
-                JsonNode fn = tc.path("function");
-                toolCall.setName(fn.path("name").asText());
-                toolCall.setArguments(fn.path("arguments").asText());
-                toolCalls.add(toolCall);
-            }
-            response.setToolCalls(toolCalls);
+        if (resp.getChoices() == null || resp.getChoices().isEmpty()) {
+            response.setContent("");
+            response.setFinishReason("stop");
+            return response;
         }
 
+        ChatChoice firstChoice = resp.getChoices().get(0);
+        ChatMessage message = firstChoice.getMessage();
+        if (message != null) {
+            response.setContent(message.getContent() == null ? "" : message.getContent());
+            if (message.getToolCalls() != null && !message.getToolCalls().isEmpty()) {
+                List<ToolCall> toolCalls = new ArrayList<>();
+                for (ChatToolCall tc : message.getToolCalls()) {
+                    ToolCall toolCall = new ToolCall();
+                    toolCall.setId(tc.getId());
+                    if (tc.getFunction() != null) {
+                        toolCall.setName(tc.getFunction().getName());
+                        toolCall.setArguments(tc.getFunction().getArguments());
+                    }
+                    toolCalls.add(toolCall);
+                }
+                response.setToolCalls(toolCalls);
+            }
+        }
+        response.setFinishReason(firstChoice.getFinishReason() == null ? "stop" : firstChoice.getFinishReason());
         return response;
+    }
+
+    private ToolCall buildToolCall(String id, String name, String arguments) {
+        ToolCall tc = new ToolCall();
+        tc.setId(id);
+        tc.setName(name);
+        tc.setArguments(arguments);
+        return tc;
     }
 
     private LlmResponse errorResponse(String message) {

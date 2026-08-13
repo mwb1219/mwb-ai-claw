@@ -1,11 +1,11 @@
 package com.mwb.ai.claw.infrastructure.tool.builtin;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
 import com.mwb.ai.claw.domain.tool.ToolResult;
 import com.mwb.ai.claw.domain.tool.ToolSpec;
 import com.mwb.ai.claw.domain.tool.ToolExecutor;
+import com.mwb.ai.claw.infrastructure.tool.builtin.dto.WriteMemoryParams;
+import com.mwb.ai.claw.infrastructure.util.JsonUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -28,8 +28,6 @@ public class WriteMemoryTool implements ToolExecutor {
             + "\"required\":[\"content\"]"
             + "}";
 
-    private final ObjectMapper mapper = new ObjectMapper();
-
     @Resource
     private LongTermMemoryGateway memoryGateway;
 
@@ -49,12 +47,11 @@ public class WriteMemoryTool implements ToolExecutor {
     @Override
     public ToolResult execute(String argumentsJson) {
         try {
-            JsonNode node = mapper.readTree(argumentsJson == null ? "{}" : argumentsJson);
-            JsonNode contentNode = node.get("content");
-            if (contentNode == null || contentNode.asText().trim().isEmpty()) {
+            WriteMemoryParams params = JsonUtils.fromJson(argumentsJson == null ? "{}" : argumentsJson, WriteMemoryParams.class);
+            String content = params.getContent();
+            if (content == null || content.trim().isEmpty()) {
                 return ToolResult.error("参数 content 不能为空");
             }
-            String content = contentNode.asText();
             memoryGateway.saveMemory(content);
             log.info("长期记忆已更新: {} 字符", content.length());
             return ToolResult.success("记忆已保存到 MEMORY.md（" + content.length() + " 字符）");

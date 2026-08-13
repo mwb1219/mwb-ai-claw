@@ -1,7 +1,6 @@
 package com.mwb.ai.claw.web;
 
 import com.alibaba.cola.dto.SingleResponse;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mwb.ai.claw.agent.executor.ChatCmdExe;
 import com.mwb.ai.claw.api.AgentServiceI;
 import com.mwb.ai.claw.dto.ChatCmd;
@@ -10,6 +9,9 @@ import com.mwb.ai.claw.dto.data.ChatResponseDTO;
 import com.mwb.ai.claw.dto.data.SessionDTO;
 import com.mwb.ai.claw.domain.core.ProgressCallback;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
+import com.mwb.ai.claw.infrastructure.util.JsonUtils;
+import com.mwb.ai.claw.web.dto.WsEvent;
+import com.mwb.ai.claw.web.dto.WsRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -21,8 +23,6 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 import javax.annotation.PreDestroy;
 import javax.annotation.Resource;
 import java.io.IOException;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -56,7 +56,6 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
     @Resource
     private ChatCmdExe chatCmdExe;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
     @Override
@@ -72,9 +71,8 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
 
         executor.execute(() -> {
             try {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> req = objectMapper.readValue(payload, Map.class);
-                String type = (String) req.getOrDefault("type", "chat");
+                WsRequest req = JsonUtils.fromJson(payload, WsRequest.class);
+                String type = req.getType() != null ? req.getType() : "chat";
 
                 if ("chat".equals(type)) {
                     handleChat(session, req);
@@ -95,10 +93,10 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
     /**
      * 处理聊天消息，执行完整的 ReAct 流式对话流程。
      */
-    private void handleChat(WebSocketSession session, Map<String, Object> req) throws Exception {
-        String message = (String) req.get("message");
-        String sessionId = (String) req.get("sessionId");
-        String agentId = (String) req.get("agentId");
+    private void handleChat(WebSocketSession session, WsRequest req) throws Exception {
+        String message = req.getMessage();
+        String sessionId = req.getSessionId();
+        String agentId = req.getAgentId();
 
         if (message == null || message.trim().isEmpty()) {
             sendEvent(session, "error", "消息内容不能为空");
@@ -182,12 +180,7 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
         if (!session.isOpen()) {
             return;
         }
-        Map<String, String> event = new ConcurrentHashMap<>();
-        event.put("type", type);
-        if (data != null) {
-            event.put("data", data);
-        }
-        String json = objectMapper.writeValueAsString(event);
+        String json = JsonUtils.toJson(new WsEvent(type, data));
         synchronized (session) {
             if (session.isOpen()) {
                 session.sendMessage(new TextMessage(json));

@@ -1,11 +1,11 @@
 package com.mwb.ai.claw.infrastructure.tool.builtin;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mwb.ai.claw.domain.tool.ToolExecutor;
 import com.mwb.ai.claw.domain.tool.ToolResult;
 import com.mwb.ai.claw.domain.tool.ToolSpec;
 import com.mwb.ai.claw.infrastructure.tool.ToolSecurity;
+import com.mwb.ai.claw.infrastructure.tool.builtin.dto.ShellParams;
+import com.mwb.ai.claw.infrastructure.util.JsonUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -24,7 +24,6 @@ import java.util.concurrent.TimeUnit;
 public class ShellTool implements ToolExecutor {
 
     private static final Logger log = LoggerFactory.getLogger(ShellTool.class);
-    private static final ObjectMapper mapper = new ObjectMapper();
 
     @Resource
     private ToolSecurity toolSecurity;
@@ -56,9 +55,9 @@ public class ShellTool implements ToolExecutor {
     @Override
     public ToolResult execute(String argumentsJson) {
         try {
-            JsonNode args = mapper.readTree(argumentsJson);
-            String command = getText(args, "command");
-            String workingDir = getText(args, "workingDir");
+            ShellParams params = JsonUtils.fromJson(argumentsJson, ShellParams.class);
+            String command = params.getCommand();
+            String workingDir = params.getWorkingDir();
 
             if (command == null || command.trim().isEmpty()) {
                 return ToolResult.error("命令不能为空");
@@ -155,10 +154,5 @@ public class ShellTool implements ToolExecutor {
             tokens.add(current.toString());
         }
         return tokens.toArray(new String[0]);
-    }
-
-    private String getText(JsonNode node, String field) {
-        JsonNode v = node.get(field);
-        return v == null || v.isNull() ? null : v.asText();
     }
 }

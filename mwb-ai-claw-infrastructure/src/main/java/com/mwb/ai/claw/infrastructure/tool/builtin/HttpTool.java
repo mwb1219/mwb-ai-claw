@@ -1,11 +1,11 @@
 package com.mwb.ai.claw.infrastructure.tool.builtin;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mwb.ai.claw.domain.tool.ToolExecutor;
 import com.mwb.ai.claw.domain.tool.ToolResult;
 import com.mwb.ai.claw.domain.tool.ToolSpec;
 import com.mwb.ai.claw.infrastructure.tool.ToolSecurity;
+import com.mwb.ai.claw.infrastructure.tool.builtin.dto.HttpParams;
+import com.mwb.ai.claw.infrastructure.util.JsonUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -17,7 +17,6 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.util.Iterator;
 import java.util.Map;
 
 /**
@@ -27,7 +26,6 @@ import java.util.Map;
 public class HttpTool implements ToolExecutor {
 
     private static final Logger log = LoggerFactory.getLogger(HttpTool.class);
-    private static final ObjectMapper mapper = new ObjectMapper();
 
     @Resource
     private ToolSecurity toolSecurity;
@@ -69,13 +67,13 @@ public class HttpTool implements ToolExecutor {
     @Override
     public ToolResult execute(String argumentsJson) {
         try {
-            JsonNode args = mapper.readTree(argumentsJson);
-            String url = getText(args, "url");
-            String method = getText(args, "method");
+            HttpParams params = JsonUtils.fromJson(argumentsJson, HttpParams.class);
+            String url = params.getUrl();
+            String method = params.getMethod();
             if (method == null || method.isEmpty()) {
                 method = "GET";
             }
-            String body = getText(args, "body");
+            String body = params.getBody();
 
             // 安全校验
             toolSecurity.validateHttpUrl(url);
@@ -87,12 +85,9 @@ public class HttpTool implements ToolExecutor {
             conn.setReadTimeout(toolSecurity.getToolTimeoutSeconds() * 1000);
 
             // 设置请求头
-            JsonNode headers = args.get("headers");
-            if (headers != null && headers.isObject()) {
-                Iterator<Map.Entry<String, JsonNode>> fields = headers.fields();
-                while (fields.hasNext()) {
-                    Map.Entry<String, JsonNode> entry = fields.next();
-                    conn.setRequestProperty(entry.getKey(), entry.getValue().asText());
+            if (params.getHeaders() != null) {
+                for (Map.Entry<String, String> entry : params.getHeaders().entrySet()) {
+                    conn.setRequestProperty(entry.getKey(), entry.getValue());
                 }
             }
             conn.setRequestProperty("User-Agent", "mwb-ai-claw-agent/1.0");
@@ -132,10 +127,5 @@ public class HttpTool implements ToolExecutor {
             log.error("HTTP 请求失败", e);
             return ToolResult.error("HTTP 请求失败: " + e.getMessage());
         }
-    }
-
-    private String getText(JsonNode node, String field) {
-        JsonNode v = node.get(field);
-        return v == null || v.isNull() ? null : v.asText();
     }
 }

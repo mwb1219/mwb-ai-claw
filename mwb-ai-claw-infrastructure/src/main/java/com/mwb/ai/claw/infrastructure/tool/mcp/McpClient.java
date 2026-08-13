@@ -1,13 +1,13 @@
 package com.mwb.ai.claw.infrastructure.tool.mcp;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mwb.ai.claw.domain.tool.McpServerConfig;
 import com.mwb.ai.claw.domain.tool.McpToolDef;
 import com.mwb.ai.claw.infrastructure.tool.mcp.transport.McpTransport;
 import com.mwb.ai.claw.infrastructure.tool.mcp.transport.StdioTransport;
 import com.mwb.ai.claw.infrastructure.tool.mcp.transport.SseTransport;
+import com.mwb.ai.claw.infrastructure.util.JsonUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,11 +19,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  * MCP 客户端：封装 JSON-RPC 2.0 协议，提供 initialize / tools/list / tools/call 等方法。
  * <p>
  * 一个 McpClient 对应一个 MCP Server 连接。
+ * JSON-RPC 的 params/result 为动态结构，此处保留 JsonNode，但统一通过 {@link JsonUtils} 进行序列化/解析。
  */
 public class McpClient {
 
     private static final Logger log = LoggerFactory.getLogger(McpClient.class);
-    private static final ObjectMapper mapper = new ObjectMapper();
 
     private final McpServerConfig config;
     private final McpTransport transport;
@@ -54,13 +54,13 @@ public class McpClient {
         transport.connect();
 
         // 发送 initialize 请求
-        ObjectNode params = mapper.createObjectNode();
+        ObjectNode params = JsonUtils.mapper().createObjectNode();
         params.put("protocolVersion", "2024-11-05");
-        ObjectNode clientInfo = mapper.createObjectNode();
+        ObjectNode clientInfo = JsonUtils.mapper().createObjectNode();
         clientInfo.put("name", "mwb-ai-claw");
         clientInfo.put("version", "1.0.0");
         params.set("clientInfo", clientInfo);
-        ObjectNode caps = mapper.createObjectNode();
+        ObjectNode caps = JsonUtils.mapper().createObjectNode();
         params.set("capabilities", caps);
 
         JsonNode result = call("initialize", params);
@@ -70,10 +70,10 @@ public class McpClient {
                 result.path("serverInfo").path("name").asText());
 
         // 发送 initialized 通知
-        ObjectNode notif = mapper.createObjectNode();
+        ObjectNode notif = JsonUtils.mapper().createObjectNode();
         notif.put("jsonrpc", "2.0");
         notif.put("method", "notifications/initialized");
-        transport.sendNotification(mapper.writeValueAsString(notif));
+        transport.sendNotification(JsonUtils.toJson(notif));
 
         initialized = true;
     }
@@ -92,7 +92,7 @@ public class McpClient {
                 def.setName(toolNode.path("name").asText());
                 def.setDescription(toolNode.path("description").asText());
                 JsonNode schema = toolNode.get("inputSchema");
-                def.setInputSchema(schema != null ? mapper.writeValueAsString(schema) : "{}");
+                def.setInputSchema(schema != null ? JsonUtils.toJson(schema) : "{}");
                 tools.add(def);
             }
         }
@@ -108,15 +108,15 @@ public class McpClient {
      * @return 工具输出文本
      */
     public String callTool(String toolName, String argumentsJson) throws Exception {
-        ObjectNode params = mapper.createObjectNode();
+        ObjectNode params = JsonUtils.mapper().createObjectNode();
         params.put("name", toolName);
 
         // 解析参数
         if (argumentsJson != null && !argumentsJson.trim().isEmpty()) {
-            JsonNode argsNode = mapper.readTree(argumentsJson);
+            JsonNode argsNode = JsonUtils.readTree(argumentsJson);
             params.set("arguments", argsNode);
         } else {
-            params.set("arguments", mapper.createObjectNode());
+            params.set("arguments", JsonUtils.mapper().createObjectNode());
         }
 
         JsonNode result = call("tools/call", params);
@@ -142,7 +142,7 @@ public class McpClient {
      * 执行 JSON-RPC 调用
      */
     private JsonNode call(String method, JsonNode params) throws Exception {
-        ObjectNode request = mapper.createObjectNode();
+        ObjectNode request = JsonUtils.mapper().createObjectNode();
         int id = requestId.incrementAndGet();
         request.put("jsonrpc", "2.0");
         request.put("id", id);
@@ -151,13 +151,13 @@ public class McpClient {
             request.set("params", params);
         }
 
-        String requestJson = mapper.writeValueAsString(request);
+        String requestJson = JsonUtils.toJson(request);
         log.debug("MCP 请求 [{}]: {}", method, requestJson);
 
         String responseJson = transport.sendAndWait(requestJson);
         log.debug("MCP 响应: {}", responseJson);
 
-        JsonNode response = mapper.readTree(responseJson);
+        JsonNode response = JsonUtils.readTree(responseJson);
 
         // 检查错误
         JsonNode error = response.get("error");
