@@ -1,9 +1,9 @@
 package com.mwb.ai.claw.infrastructure.tool.mcp;
 
-import lombok.Data;
-
 import java.util.List;
 import java.util.Map;
+
+import lombok.Data;
 
 /**
  * mcp-server.json 顶层结构。
@@ -54,7 +54,10 @@ public class McpServersFile {
         /** 远程：请求头 */
         private Map<String, String> headers;
 
-        /** 可选：显式指定传输类型 stdio/sse，缺省时按 command/url 自动推断 */
+        /** 可选：显式指定传输类型 stdio/sse/streamable_http，缺省时按 command/url 自动推断 */
+        private String type;
+
+        /** 兼容别名：与 type 等价 */
         private String transport;
 
         /** 可选：是否启用，缺省 true */

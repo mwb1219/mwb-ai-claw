@@ -1,19 +1,21 @@
 package com.mwb.ai.claw.infrastructure.tool.mcp;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mwb.ai.claw.domain.tool.McpServerConfig;
 import com.mwb.ai.claw.domain.tool.McpToolDef;
 import com.mwb.ai.claw.infrastructure.tool.mcp.transport.McpTransport;
-import com.mwb.ai.claw.infrastructure.tool.mcp.transport.StdioTransport;
 import com.mwb.ai.claw.infrastructure.tool.mcp.transport.SseTransport;
+import com.mwb.ai.claw.infrastructure.tool.mcp.transport.StdioTransport;
+import com.mwb.ai.claw.infrastructure.tool.mcp.transport.StreamableHttpTransport;
 import com.mwb.ai.claw.infrastructure.util.JsonUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * MCP 客户端：封装 JSON-RPC 2.0 协议，提供 initialize / tools/list / tools/call 等方法。
@@ -42,6 +44,10 @@ public class McpClient {
                 return new StdioTransport(config.getCommand(), config.getArgs(), config.getEnv());
             case "sse":
                 return new SseTransport(config.getUrl(), config.getHeaders());
+            case "streamable_http":
+            case "streamable-http":
+            case "http":
+                return new StreamableHttpTransport(config.getUrl(), config.getHeaders());
             default:
                 throw new IllegalArgumentException("不支持的传输类型: " + type);
         }

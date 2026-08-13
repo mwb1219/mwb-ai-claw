@@ -30,6 +30,7 @@ import org.springframework.web.client.RestTemplate;
 
 import javax.annotation.Resource;
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
@@ -135,10 +136,11 @@ public class LlmGatewayImpl implements LlmGateway {
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
-            while ((line = reader.readLine()) != null) {
-                if (!line.startsWith("data:")) {
-                    continue;
-                }
+            try {
+                while ((line = reader.readLine()) != null) {
+                    if (!line.startsWith("data:")) {
+                        continue;
+                    }
                 String data = line.substring(5).trim();
 
                 // 流结束标记
@@ -214,6 +216,13 @@ public class LlmGatewayImpl implements LlmGateway {
                 } catch (Exception e) {
                     log.warn("解析流式 chunk 失败: data={}, err={}", data, e.getMessage());
                 }
+            }
+            } catch (IOException e) {
+                // 流被提前关闭（Premature EOF）：已收到部分内容则保留，否则重新抛出
+                if (fullContent.length() == 0 && toolCalls.isEmpty() && currentToolName == null) {
+                    throw e;
+                }
+                log.warn("LLM 流式响应被提前中断，保留已收到的部分内容: {}", e.getMessage());
             }
         }
 

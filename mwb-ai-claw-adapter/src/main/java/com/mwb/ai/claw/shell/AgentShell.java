@@ -1,14 +1,12 @@
 package com.mwb.ai.claw.shell;
 
-import com.alibaba.cola.dto.SingleResponse;
-import com.mwb.ai.claw.agent.executor.ChatCmdExe;
-import com.mwb.ai.claw.api.AgentServiceI;
-import com.mwb.ai.claw.domain.core.ProgressCallback;
-import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
-import com.mwb.ai.claw.dto.ChatCmd;
-import com.mwb.ai.claw.dto.CreateSessionCmd;
-import com.mwb.ai.claw.dto.data.ChatResponseDTO;
-import com.mwb.ai.claw.dto.data.SessionDTO;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.List;
+
+import javax.annotation.Resource;
+
 import org.jline.reader.EndOfFileException;
 import org.jline.reader.LineReader;
 import org.jline.reader.LineReaderBuilder;
@@ -23,12 +21,15 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
-import javax.annotation.Resource;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.List;
+import com.alibaba.cola.dto.SingleResponse;
+import com.mwb.ai.claw.agent.executor.ChatCmdExe;
+import com.mwb.ai.claw.api.AgentServiceI;
+import com.mwb.ai.claw.domain.core.ProgressCallback;
+import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
+import com.mwb.ai.claw.dto.ChatCmd;
+import com.mwb.ai.claw.dto.CreateSessionCmd;
+import com.mwb.ai.claw.dto.data.ChatResponseDTO;
+import com.mwb.ai.claw.dto.data.SessionDTO;
 
 /**
  * Agent Shell：终端 REPL 交互模式。
@@ -57,6 +58,9 @@ public class AgentShell implements CommandLineRunner {
     private LineReader reader;
     private String sessionId;
     private boolean streamMode = true;    // 默认流式模式
+    private boolean verbose = false;      // 默认观察结果缩写展示（/trace 切换完整显示）
+    private boolean resultStarted = false; // 结果区是否已开始输出
+    private final MarkdownRenderer markdownRenderer = new MarkdownRenderer();
 
     // ANSI 风格
     private static final AttributedStyle STYLE_PROMPT = AttributedStyle.DEFAULT.foreground(AttributedStyle.CYAN).bold();
@@ -94,7 +98,7 @@ public class AgentShell implements CommandLineRunner {
     private void printBanner() {
         println(STYLE_PROMPT, "  ◈  mwb-ai-claw Agent Shell");
         println(STYLE_INFO, "  输入消息与 Agent 对话，/help 查看命令");
-        println(STYLE_INFO, "  模式: " + (streamMode ? "流式" : "同步") + " | 会话: " + (sessionId == null ? "（自动创建）" : sessionId));
+        println(STYLE_INFO, "  模式: " + (streamMode ? "流式" : "同步") + " | 观察: " + (verbose ? "完整" : "缩写") + " | 会话: " + (sessionId == null ? "（自动创建）" : sessionId));
         println(STYLE_INFO, "");
     }
 
@@ -158,6 +162,10 @@ public class AgentShell implements CommandLineRunner {
             case "/mode":
                 streamMode = !streamMode;
                 println(STYLE_INFO, "模式已切换为: " + (streamMode ? "流式" : "同步"));
+                break;
+            case "/trace":
+                verbose = !verbose;
+                println(STYLE_INFO, "观察结果完整显示: " + (verbose ? "开启" : "关闭（缩写）"));
                 break;
             case "/session":
                 handleSessionCommand(arg1, arg2);
@@ -231,6 +239,7 @@ public class AgentShell implements CommandLineRunner {
     }
 
     private void doSyncChat(ChatCmd cmd) {
+        resultStarted = false;
         println(STYLE_INFO, "（同步等待中…）");
         SingleResponse<ChatResponseDTO> resp = agentService.chat(cmd);
         if (!resp.isSuccess()) {
@@ -240,30 +249,29 @@ public class AgentShell implements CommandLineRunner {
         ChatResponseDTO data = resp.getData();
         sessionId = data.getSessionId();
 
-        // 打印轨迹
+        // 执行区：按顺序展示每一步轨迹（思考 / 工具调用+入参 / 观察结果）
         if (data.getTraceSteps() != null) {
             for (String step : data.getTraceSteps()) {
-                printTrace(step);
+                printTraceStep(step);
             }
         }
-        // 打印回复
-        println(STYLE_AI, data.getReply() != null ? data.getReply() : "（空回复）");
+        // 结果区
+        beginResultSection();
+        markdownRenderer.reset();
+        String reply = data.getReply() != null ? data.getReply() : "（空回复）";
+        terminal.writer().print(markdownRenderer.render(reply));
+        terminal.writer().flush();
     }
 
     private void doStreamChat(ChatCmd cmd) {
-        ProgressCallback progressCb = step -> terminal.writer().println(styleLine(step));
-        LlmStreamCallback streamCb = new LlmStreamCallback() {
-            @Override
-            public void onToken(String token) {
-                terminal.writer().print(ansi(STYLE_AI, token));
-                terminal.writer().flush();
-            }
+        resultStarted = false;
+        markdownRenderer.reset();
 
-            @Override
-            public void onToolName(String toolName) {
-                terminal.writer().print(ansi(STYLE_ACTION, "[调用工具: " + toolName + "] "));
-                terminal.writer().flush();
-            }
+        // 执行区：按顺序展示每一步轨迹（思考 / 工具调用+入参 / 观察结果）
+        ProgressCallback progressCb = this::printTraceStep;
+
+        // 流式回调：最终结果不在此渲染，统一在 execute 返回后从最终回复渲染，避免遗漏
+        LlmStreamCallback streamCb = new LlmStreamCallback() {
         };
 
         println(STYLE_INFO, ""); // 换行
@@ -274,25 +282,35 @@ public class AgentShell implements CommandLineRunner {
             println(STYLE_ERROR, "错误: " + resp.getErrMessage());
             return;
         }
-        sessionId = resp.getData().getSessionId();
-    }
 
-    /** 根据内容自动识别轨迹类型并着色 */
-    private void printTrace(String step) {
-        terminal.writer().println(styleLine(step));
+        // 结果区：渲染最终回复（覆盖正常回复、达到最大步数、空回复等所有情况）
+        beginResultSection();
+        ChatResponseDTO data = resp.getData();
+        String reply = (data != null && data.getReply() != null) ? data.getReply() : "（空回复）";
+        terminal.writer().print(markdownRenderer.render(reply));
         terminal.writer().flush();
+
+        sessionId = data.getSessionId();
     }
 
-    private String styleLine(String step) {
-        if (step == null || step.isEmpty()) return "";
-        if (step.startsWith("[Thought")) {
-            return ansi(STYLE_THOUGHT, step);
-        } else if (step.startsWith("[Action")) {
-            return ansi(STYLE_ACTION, step);
-        } else if (step.startsWith("[Observation")) {
-            return ansi(STYLE_OBS, step);
+    /** 按顺序展示每一步轨迹：思考 / 工具调用（含入参）/ 观察结果 */
+    private void printTraceStep(String step) {
+        if (step == null || step.isEmpty()) {
+            return;
         }
-        return step;
+        if (step.startsWith("[Thought]")) {
+            String content = step.substring("[Thought]".length()).trim();
+            // 仅展示中间思考；最终回复会以 [Thought] 携带正文，这里跳过，交给结果区完整渲染
+            if (content.startsWith("需要调用工具处理")) {
+                println(STYLE_THOUGHT, "[思考] " + content);
+            }
+        } else if (step.startsWith("[Action]")) {
+            printActionStep(step);
+        } else if (step.startsWith("[Observation]")) {
+            String content = step.substring("[Observation]".length()).trim();
+            String display = verbose ? content : abbreviate(content, 200);
+            println(STYLE_OBS, "[观察] " + display);
+        }
     }
 
     // ==================== 会话管理 ====================
@@ -418,6 +436,7 @@ public class AgentShell implements CommandLineRunner {
         println(STYLE_INFO, "  命令:");
         println(STYLE_INFO, "  /help                  显示此帮助");
         println(STYLE_INFO, "  /mode                  切换 同步/流式 模式");
+        println(STYLE_INFO, "  /trace                 切换 观察结果 完整/缩写");
         println(STYLE_INFO, "  /session               查看当前会话");
         println(STYLE_INFO, "  /session new           创建新会话");
         println(STYLE_INFO, "  /session list          列出所有会话");
@@ -427,11 +446,53 @@ public class AgentShell implements CommandLineRunner {
         println(STYLE_INFO, "  /exit, /quit           退出");
         println(STYLE_INFO, "");
         println(STYLE_INFO, "  模式: " + (streamMode ? "流式（逐 token 输出）" : "同步（等待完整回复）"));
+        println(STYLE_INFO, "  观察: " + (verbose ? "完整" : "缩写"));
         println(STYLE_INFO, "  会话: " + (sessionId == null ? "自动创建" : sessionId));
         println(STYLE_INFO, "");
     }
 
     // ==================== 终端输出工具 ====================
+
+    /** 打印结果区标题（首次调用时），实现结果区与执行区的视觉隔离 */
+    private void beginResultSection() {
+        if (!resultStarted) {
+            println(STYLE_AI, "━━━━━━ 结果 ━━━━━━");
+            resultStarted = true;
+        }
+    }
+
+    /** 打印工具调用（执行区）：工具名 + 缩写入参 */
+    private void printToolInvocation(String toolName, String arguments) {
+        println(STYLE_ACTION, "[工具] " + toolName);
+        String args = abbreviate(arguments, 120);
+        if (!args.isEmpty()) {
+            println(STYLE_ACTION, "     入参: " + args);
+        }
+    }
+
+    /** 缩写长文本（去换行），避免终端显示过长 */
+    private String abbreviate(String text, int maxLen) {
+        if (text == null || text.isEmpty()) {
+            return "";
+        }
+        String single = text.replace('\n', ' ').replace('\r', ' ').trim();
+        if (single.length() <= maxLen) {
+            return single;
+        }
+        return single.substring(0, maxLen) + "…（共 " + single.length() + " 字符）";
+    }
+
+    /** 从 [Action] step 中解析工具名与入参并展示（同步模式） */
+    private void printActionStep(String step) {
+        String body = step.substring("[Action]".length()).trim();
+        if (body.startsWith("调用工具: ")) {
+            body = body.substring("调用工具: ".length());
+        }
+        int sep = body.indexOf(" 参数: ");
+        String toolName = sep >= 0 ? body.substring(0, sep) : body;
+        String args = sep >= 0 ? body.substring(sep + " 参数: ".length()) : "";
+        printToolInvocation(toolName, args);
+    }
 
     private void println(AttributedStyle style, String text) {
         terminal.writer().println(ansi(style, text));

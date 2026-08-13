@@ -1,13 +1,5 @@
 package com.mwb.ai.claw.infrastructure.tool.mcp;
 
-import com.mwb.ai.claw.domain.tool.McpServerConfig;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.core.io.ClassPathResource;
-import org.springframework.stereotype.Component;
-import org.springframework.util.StreamUtils;
-
 import java.io.File;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -15,6 +7,15 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.stereotype.Component;
+import org.springframework.util.StreamUtils;
+
+import com.mwb.ai.claw.domain.tool.McpServerConfig;
+import com.mwb.ai.claw.infrastructure.util.JsonUtils;
 
 /**
  * MCP Server 配置加载器：从 mcp-server.json 读取配置。
@@ -93,17 +94,19 @@ public class McpServerConfigLoader {
     }
 
     /**
-     * 推断传输类型：显式 transport 优先，其次按 command（stdio）/ url（sse）推断。
+     * 推断传输类型：显式 type/transport 优先，其次按 command（stdio）/ url（streamable_http）推断。
      */
     private String resolveTransport(McpServersFile.McpServerEntry entry) {
-        if (entry.getTransport() != null && !entry.getTransport().trim().isEmpty()) {
-            return entry.getTransport().toLowerCase();
+        // 优先显式 type / transport 字段
+        String explicit = entry.getType() != null ? entry.getType() : entry.getTransport();
+        if (explicit != null && !explicit.trim().isEmpty()) {
+            return explicit.toLowerCase();
         }
         if (entry.getCommand() != null && !entry.getCommand().trim().isEmpty()) {
             return "stdio";
         }
         if (entry.getUrl() != null && !entry.getUrl().trim().isEmpty()) {
-            return "sse";
+            return "streamable_http";
         }
         return "stdio";
     }
