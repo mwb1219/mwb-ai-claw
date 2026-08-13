@@ -195,21 +195,5 @@ agent:
     http-allowed-hosts: []
 
 # ================= MCP Server 配置 =================
-# 前缀 mcp，对应 McpProperties
-# 在此配置外部 MCP Server，启动时自动连接并注册其工具
-mcp:
-  servers:
-    # 示例 1：stdio 模式 - 文件系统 MCP Server
-    # - name: filesystem
-    #   transport: stdio
-    #   command: npx
-    #   args:
-    #     - "@modelcontextprotocol/server-filesystem"
-    #     - "/tmp/workspace"
-    #   enabled: true
-
-    # 示例 2：SSE 模式 - 远程 MCP Server
-    # - name: remote-api
-    #   transport: sse
-    #   url: http://localhost:3001/sse
-    #   enabled: true
+# 已独立到 mcp-server.json 文件（与 Cursor / Claude 的 mcp.json 格式一致）。
+# 编辑 start/src/main/resources/mcp-server.json，或在运行目录放置外部 mcp-server.json 覆盖。

@@ -29,11 +29,9 @@ public class McpClientManager implements SmartInitializingSingleton {
     private final List<McpServerConfig> serverConfigs = new ArrayList<>();
     private final McpToolRegistrar toolRegistrar;
 
-    public McpClientManager(McpProperties mcpProperties, McpToolRegistrar toolRegistrar) {
+    public McpClientManager(McpServerConfigLoader configLoader, McpToolRegistrar toolRegistrar) {
         this.toolRegistrar = toolRegistrar;
-        if (mcpProperties.getServers() != null) {
-            serverConfigs.addAll(mcpProperties.getServers());
-        }
+        serverConfigs.addAll(configLoader.load());
     }
 
     @Override
