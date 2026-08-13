@@ -23,7 +23,10 @@ public class McpToolAdapter implements ToolExecutor {
     public McpToolAdapter(McpClient client, McpToolDef toolDef) {
         this.client = client;
         this.toolDef = toolDef;
-        this.spec = new ToolSpec(toolDef.getName(), toolDef.getDescription(), toolDef.getInputSchema());
+        // spec.name 与 getName() 保持一致（带 mcp_<serverName>_ 前缀），确保工具调用时能正确路由
+        this.spec = new ToolSpec(getName(), toolDef.getDescription(), toolDef.getInputSchema());
+        // MCP 工具为全局工具，默认对所有 Agent 可见
+        this.spec.setGlobal(true);
     }
 
     @Override

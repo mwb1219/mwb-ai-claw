@@ -17,6 +17,9 @@ public class ToolSpec {
     /** 参数 JSON Schema 字符串 */
     private String parametersJson;
 
+    /** 是否为全局工具（如 MCP 动态注册的工具），默认对所有 Agent 可见，无需在配置中显式声明 */
+    private boolean global = false;
+
     public ToolSpec() {
     }
 

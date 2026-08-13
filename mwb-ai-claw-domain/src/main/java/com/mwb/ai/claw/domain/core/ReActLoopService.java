@@ -12,7 +12,9 @@ import com.mwb.ai.claw.domain.tool.ToolResult;
 import com.mwb.ai.claw.domain.tool.ToolSpec;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * ReAct 推理循环领域服务：Agent 的核心引擎。
@@ -205,9 +207,17 @@ public class ReActLoopService {
         request.setMessages(messages);
 
         List<ToolSpec> tools = new ArrayList<>();
+        Set<String> added = new HashSet<>();
+        // 1. Agent 显式配置的工具
         for (String toolName : agent.getToolNames()) {
             ToolSpec spec = toolGateway.getToolSpec(toolName);
-            if (spec != null) {
+            if (spec != null && added.add(spec.getName())) {
+                tools.add(spec);
+            }
+        }
+        // 2. 全局工具（MCP 动态注册），默认对所有 Agent 可见，无需在配置中声明
+        for (ToolSpec spec : toolGateway.listTools()) {
+            if (spec.isGlobal() && added.add(spec.getName())) {
                 tools.add(spec);
             }
         }
