@@ -77,6 +77,7 @@ public class AgentShell implements CommandLineRunner {
     @Override
     public void run(String... args) throws Exception {
         initTerminal();
+        restoreLastSession();
         printBanner();
         repl();
     }
@@ -363,6 +364,20 @@ public class AgentShell implements CommandLineRunner {
     }
 
     // ==================== 会话管理 ====================
+
+    /** 启动时恢复上次使用的会话：会话列表已按最后使用时间倒序，首个即最近会话 */
+    private void restoreLastSession() {
+        try {
+            SingleResponse<List<SessionDTO>> resp = agentService.listSessions();
+            if (!resp.isSuccess() || resp.getData() == null || resp.getData().isEmpty()) {
+                return;
+            }
+            sessionId = resp.getData().get(0).getSessionId();
+            println(STYLE_INFO, "已恢复上次会话: " + sessionId);
+        } catch (Exception e) {
+            log.warn("恢复上次会话失败: {}", e.getMessage());
+        }
+    }
 
     private void createSession() {
         try {

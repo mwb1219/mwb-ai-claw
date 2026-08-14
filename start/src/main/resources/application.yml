@@ -21,7 +21,9 @@ agent:
   base-url: ${DEFAULT_BASE_URL:https://api.deepseek.com}
   api-key: ${DEFAULT_API_KEY:}
   temperature: 0.7
-  max-tokens: 2048
+  # DeepSeek V4 思考模式下 reasoning 计入 max_tokens 预算：2048 会被推理占满导致最终回复/工具调用被截断为空，
+  # 提高到 8192 保证「推理 + 完整回复 + 工具调用」有足够空间
+  max-tokens: 8192
   max-steps: 8
   # 长期记忆目录（AGENT.md / MEMORY.md 存放位置，默认 ${user.dir}/.agent）
   memory-dir: ""
@@ -38,7 +40,7 @@ agent:
   #   --agent.memory.summary-block-size=2 --agent.memory.hot-window-size=4
   memory:
     enabled: true                  # 是否启用分层记忆
-    context-window-tokens: 65536   # 模型上下文窗口（tokens），用于预算计算
+    context-window-tokens: 200000   # 模型上下文窗口（tokens），用于预算计算
     context-budget-ratio: 0.6      # 记忆区占模型窗口比例
     prompt-budget-ratio: 0.25      # System 区（AGENT.md + 事实页）占记忆预算比例
     tool-budget-ratio: 0.25        # Tools 区占记忆预算比例

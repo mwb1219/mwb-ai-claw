@@ -63,6 +63,47 @@
 | **长期记忆** | 跨会话事实条目（结构化 Facts）     | 磁盘全量 | 事实页注入 / 检索  | 自动提炼 + `write_memory` |
 | **档案知识** | 归档全文 + 关键词/向量索引        | 磁盘全量 | 检索召回（RAG）   | 工具写入 / 自动归档           |
 
+### 3.1 记忆转化关系图（PlantUML）
+
+```plantuml
+@startuml
+title 分层记忆转化关系（mwb-ai-claw 当前实现）
+skinparam state {
+  BackgroundColor #FBFBFB
+  BorderColor #888888
+  ArrowColor #333333
+}
+state "短期记忆 SHORT\nSession 完整历史（磁盘 .agent/sessions/\<id\>.json）" as SHORT #moccasin
+note right of SHORT : 每轮自动持久化\n（saveSession），全量落盘
+state "工作记忆 HOT\n预算内最近原文（内存视图）" as HOT #lightgreen
+note right of HOT : readContext 从 SHORT 取最新\nMemory 预算内成组保留\n（tool 配对 + 最新 user 强制保留）
+state "中期记忆 SUMMARY\n多级摘要页（磁盘 pages/summaries/）" as SUMMARY #lightblue
+note right of SUMMARY : 旧块 LLM 压缩，多级叠加\n（block → section → session）
+state "长期记忆 FACT\nfacts.jsonl（跨会话，磁盘）" as FACT #pink
+note right of FACT : 结构化事实，带 key/重要度/\n版本/时间戳，同 key 去重合并
+state "检索页 RETRIEVED\n（临时召回，不落盘）" as RETRIEVED #lightgray
+note right of RETRIEVED : 仅 read_memory / search\n工具触发；当前版本\n不自动注入 readContext
+state "LLM 上下文" as LLM
+
+[*] --> SHORT : 用户输入 / LLM 回复 / 工具结果
+SHORT --> HOT : readContext\nMemory 预算内取最新
+HOT --> LLM : 工作记忆（消息区）
+HOT --> SUMMARY : afterTurn 换页\n（Token / Importance 策略可插拔）\nLLM summarize 最旧 block
+SUMMARY --> LLM : 历史摘要（System 区）
+HOT --> FACT : afterSession 提炼\nextractFacts（重要度评分）
+SHORT --> FACT : afterSession\n整会话提取
+FACT --> FACT : merge 去重\n（同 key：重要度高者胜，\n版本自增，时间戳保留最新）
+note bottom: write_memory(topic,content,importance)\n工具 → saveFact → 同 key merge → FACT\n（重要度 < 阈值则丢弃）
+SUMMARY --> RETRIEVED : search 关键词召回\n（命中计数 + key 加权）
+FACT --> RETRIEVED : search 关键词召回
+RETRIEVED --> LLM : 工具结果（当前不自动注入）
+FACT --> LLM : 长期记忆（System 区\n重要度降序，System 预算截取）
+LLM --> SHORT : 回复 / tool_calls 写回 Session
+@enduml
+```
+
+> 说明：RETRIEVED 目前不自动注入上下文（`readContext` 中 `retrievedPages` 恒为空），只有 `read_memory` 工具显式触发召回；SUMMARY 目前只有一级（`afterTurn` 生成 block 级摘要），多级 Summary Tree 尚未实现。
+
 ## 四、核心机制一：动态换页（Paging）
 
 ### 4.1 Token 预算模型
@@ -202,6 +243,65 @@ memory/
    ├─ afterTurn()：Hot 溢出 → summarize / extract（异步）
    └─ afterSession()：会话级摘要 + 事实 merge
    └─ memoryGateway.saveSession()（短期持久化）
+```
+
+流程交互时序图（PlantUML）：
+
+```plantuml
+@startuml
+title 分层记忆交互时序（一次对话）
+actor 用户
+participant "ChatCmdExe / ReActLoopService" as Loop
+participant "DefaultContextAssembler" as Ctx
+participant "LayeredMemoryGateway" as Mem
+participant "MemoryPageStore（磁盘）" as Store
+participant "LlmMemorySynthesizer" as Syn
+participant "KeywordMemoryRetriever" as Retr
+participant "LLM" as LLM
+
+用户 -> Loop: 输入消息
+Loop -> Ctx: assemble(session, agent)
+Ctx -> Mem: readContext(session, agent)
+Mem -> Store: loadFacts()
+Store --> Mem: FACT 页（重要度降序，System 预算截取）
+Mem -> Store: loadSummaries(sessionId)
+Store --> Mem: SUMMARY 页
+Mem -> Mem: takeRecentMessages(HOT)\nMemory 预算 = contextBudget - System 25% - Tools 25%
+Mem --> Ctx: MemoryView（HOT 原文 + SUMMARY + FACT）
+Ctx --> Loop: LlmRequest（System 含记忆页 + 消息区 HOT）
+
+loop ReAct 多轮
+  Loop -> LLM: chat(request)
+  LLM --> Loop: 回复 / tool_calls
+  alt 有工具调用
+    Loop -> 用户: 工具结果 → 写回 Session
+  end
+  Loop -> Mem: afterTurn(session)（异步）
+  Mem -> Syn: summarizeBlock(最旧 blockSize 条)
+  Syn -> LLM: 摘要请求（LLM 提炼）
+  LLM --> Syn: 摘要文本
+  Syn --> Mem: summary
+  Mem -> Store: saveSummary(page)
+end
+
+用户 -> Loop: 会话结束
+Loop -> Mem: afterSession(session)（异步）
+Mem -> Syn: extractFacts(全量消息)
+Syn -> LLM: 事实提取请求（JSON）
+LLM --> Syn: FACT 列表（key/content/importance）
+Mem -> Mem: 重要度 ≥ 阈值？ mergeFact 去重
+Mem -> Store: appendFact / deleteFact（facts.jsonl）
+
+note over 用户, Mem: 显式工具路径（对话中随时触发）
+用户 -> Mem: write_memory(topic, content, importance)
+Mem -> Store: appendFact（同 key merge）
+用户 -> Mem: read_memory(query) → search(query, topK)
+Mem -> Retr: search(query, topK)
+Retr -> Store: loadFacts + listAllSummaries
+Store --> Retr: 候选页
+Retr --> Mem: 打分 Top-K
+Mem --> 用户: RETRIEVED 召回页
+@enduml
 ```
 
 ## 八、持久化格式

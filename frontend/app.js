@@ -243,9 +243,9 @@ function renderSessionList() {
     return;
   }
   list.innerHTML = '';
-  // 按更新时间倒序排列（如果有 createTime）
+  // 按最后使用时间倒序排列（优先 updateTime，兼容旧数据回退 createTime）
   const sorted = Array.from(state.sessions.values());
-  sorted.sort((a, b) => (b.createTime || 0) - (a.createTime || 0));
+  sorted.sort((a, b) => (b.updateTime || b.createTime || 0) - (a.updateTime || a.createTime || 0));
   sorted.forEach((s) => {
     const isActive = s.sessionId === state.currentSessionId;
     const card = document.createElement('div');
@@ -289,7 +289,17 @@ function ensureSession(sessionId, title) {
   }
   state.currentSessionId = sessionId;
   $('currentSessionId').value = sessionId;
+  persistLastSession();
   renderSessionList();
+}
+
+/** 持久化当前会话，供下次打开时恢复 */
+function persistLastSession() {
+  if (state.currentSessionId) {
+    localStorage.setItem('mwb-ai-claw-last-session', state.currentSessionId);
+  } else {
+    localStorage.removeItem('mwb-ai-claw-last-session');
+  }
 }
 
 // ============ API 调用 ============
@@ -655,6 +665,7 @@ async function refreshSessions() {
         sessionId: s.sessionId,
         title: s.title,
         createTime: s.createTime,
+        updateTime: s.updateTime,
         messages: s.messages || [],
       });
     });
@@ -678,6 +689,7 @@ async function deleteCurrentSession(sessionId) {
     if (state.currentSessionId === sessionId) {
       state.currentSessionId = null;
       $('currentSessionId').value = '';
+      persistLastSession();
       clearMessages();
       clearTrace();
     }
@@ -726,6 +738,7 @@ async function selectSession(sessionId) {
     const s = resp.data;
     state.currentSessionId = s.sessionId;
     $('currentSessionId').value = s.sessionId;
+    persistLastSession();
     renderSessionList();
 
     clearMessages();
@@ -774,9 +787,24 @@ function bindEvents() {
 }
 
 // ============ 启动 ============
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   bindEvents();
   setStatus('就绪 · 后端 ' + getBaseUrl(), 'ok');
-  // 启动时加载已有会话列表
-  refreshSessions();
+  // 启动时加载已有会话列表并恢复上次使用的会话
+  await refreshSessions();
+  await restoreLastSession();
 });
+
+/** 打开页面时恢复上次会话：优先 localStorage 保存的会话，否则默认最近使用的会话 */
+async function restoreLastSession() {
+  const savedId = localStorage.getItem('mwb-ai-claw-last-session');
+  if (savedId && state.sessions.has(savedId)) {
+    await selectSession(savedId);
+    return;
+  }
+  const sorted = Array.from(state.sessions.values());
+  sorted.sort((a, b) => (b.updateTime || b.createTime || 0) - (a.updateTime || a.createTime || 0));
+  if (sorted.length > 0) {
+    await selectSession(sorted[0].sessionId);
+  }
+}

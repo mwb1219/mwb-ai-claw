@@ -5,11 +5,14 @@ import com.mwb.ai.claw.domain.core.Message;
 import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.llm.LlmMessage;
 import com.mwb.ai.claw.domain.llm.LlmRequest;
+import com.mwb.ai.claw.domain.llm.ToolCall;
 import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
 import com.mwb.ai.claw.domain.memory.MemoryPage;
 import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
 import com.mwb.ai.claw.domain.tool.ToolGateway;
 import com.mwb.ai.claw.domain.tool.ToolSpec;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -25,6 +28,8 @@ import java.util.Set;
  * 3. 工具规格：Agent 显式配置的工具 + 全局工具（如 MCP 动态注册）
  */
 public class DefaultContextAssembler implements ContextAssembler {
+
+    private static final Logger log = LoggerFactory.getLogger(DefaultContextAssembler.class);
 
     private final ToolGateway toolGateway;
     private final LongTermMemoryGateway memoryGateway;
@@ -68,7 +73,79 @@ public class DefaultContextAssembler implements ContextAssembler {
                 messages.add(toLlmMessage(msg));
             }
         }
-        return messages;
+        return sanitizeMessages(messages);
+    }
+
+    /**
+     * 清洗发送给 LLM 的消息序列，保证 tool_calls/tool 消息配对完整。
+     * <p>
+     * 分层记忆按 token 预算/条数上限截取工作记忆时，可能裁掉「携带 tool_calls 的 assistant 消息」
+     * 却保留紧跟其后的 tool 消息，导致 OpenAI 报错
+     * "Messages with role 'tool' must be a response to a preceding message with 'tool_calls'"。
+     * 此处双向兜底：
+     * 1) 丢弃无法匹配前置 assistant tool_calls 的孤立 tool 消息；
+     * 2) 清理声明了 tool_calls 却没有任何 tool 结果消费的孤立 assistant（清空其 tool_calls，
+     *    content 也为空时整条丢弃），避免 LLM 收到"有 tool_calls 无结果"的非法序列。
+     */
+    private List<LlmMessage> sanitizeMessages(List<LlmMessage> messages) {
+        List<LlmMessage> result = new ArrayList<>(messages.size());
+        Set<String> activeToolCallIds = new HashSet<>();
+        Set<String> consumedToolCallIds = new HashSet<>();
+        for (LlmMessage msg : messages) {
+            if ("tool".equals(msg.getRole())) {
+                String toolCallId = msg.getToolCallId();
+                if (toolCallId == null || toolCallId.isEmpty() || !activeToolCallIds.remove(toolCallId)) {
+                    log.warn("丢弃孤立的 tool 消息（前置 assistant tool_calls 已被截断）: toolCallId={}", toolCallId);
+                    continue;
+                }
+                consumedToolCallIds.add(toolCallId);
+            } else if ("assistant".equals(msg.getRole())
+                    && msg.getToolCalls() != null && !msg.getToolCalls().isEmpty()) {
+                for (ToolCall tc : msg.getToolCalls()) {
+                    if (tc.getId() != null && !tc.getId().isEmpty()) {
+                        activeToolCallIds.add(tc.getId());
+                    }
+                }
+            }
+            result.add(msg);
+        }
+
+        List<LlmMessage> cleaned = new ArrayList<>(result.size());
+        for (LlmMessage msg : result) {
+            if ("assistant".equals(msg.getRole())
+                    && msg.getToolCalls() != null && !msg.getToolCalls().isEmpty()) {
+                List<ToolCall> kept = new ArrayList<>();
+                for (ToolCall tc : msg.getToolCalls()) {
+                    if (tc.getId() != null && consumedToolCallIds.contains(tc.getId())) {
+                        kept.add(tc);
+                    }
+                }
+                if (kept.isEmpty()) {
+                    log.warn("清理孤立的 assistant tool_calls（无对应 tool 结果）: ids={}", toolCallIdsText(msg));
+                    msg.setToolCalls(null);
+                    if (msg.getContent() == null || msg.getContent().trim().isEmpty()) {
+                        continue; // 无 content 也无 tool_calls → 空消息，整体丢弃
+                    }
+                } else {
+                    msg.setToolCalls(kept);
+                }
+            }
+            cleaned.add(msg);
+        }
+        return cleaned;
+    }
+
+    private String toolCallIdsText(LlmMessage msg) {
+        StringBuilder sb = new StringBuilder();
+        if (msg.getToolCalls() != null) {
+            for (ToolCall tc : msg.getToolCalls()) {
+                if (sb.length() > 0) {
+                    sb.append(',');
+                }
+                sb.append(tc.getId());
+            }
+        }
+        return sb.toString();
     }
 
     private String buildSystemPrompt(Agent agent) {

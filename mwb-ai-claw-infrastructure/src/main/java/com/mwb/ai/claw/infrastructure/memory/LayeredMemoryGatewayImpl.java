@@ -1,8 +1,20 @@
 package com.mwb.ai.claw.infrastructure.memory;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+
 import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.Message;
 import com.mwb.ai.claw.domain.core.Session;
+import com.mwb.ai.claw.domain.llm.ToolCall;
 import com.mwb.ai.claw.domain.memory.EvictionContext;
 import com.mwb.ai.claw.domain.memory.LayeredMemoryConfig;
 import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
@@ -14,13 +26,6 @@ import com.mwb.ai.claw.domain.memory.MemorySynthesizer;
 import com.mwb.ai.claw.domain.memory.PageEvictionPolicy;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.util.TokenEstimator;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Component;
-
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
 
 /**
  * 分层记忆门面实现：工作记忆组装（预算内）+ 摘要换页（策略可插拔）+ 事实提炼与合并（异步）+ 检索。
@@ -247,19 +252,112 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
         return result;
     }
 
-    /** 从最新消息往前取，直到 token 用尽或达到条数上限 */
+    /**
+     * 从最新消息往前取，直到 token 用尽或达到条数上限。
+     * <p>
+     * 关键保证：
+     * 1) tool 消息与其前置的 assistant（携带 tool_calls）消息<b>成组保留或整体跳过</b>，
+     *    避免预算截断时裁掉 assistant 却留下孤立的 tool 结果——那会导致 LLM 收到
+     *    "role=tool 无前置 tool_calls" 的非法序列（HTTP 400）或工具结果丢失；
+     * 2) 最新 user 消息（当前任务的提问）<b>强制保留</b>，避免巨型工具结果把用户问题挤出预算，
+     *    否则 LLM 会因看不到用户意图而答非所问或返回空回复；
+     * 3) 输出严格保持时间正序（旧 → 新）。
+     */
     private List<Message> takeRecentMessages(List<Message> all, int tokenBudget, int maxCount) {
-        List<Message> result = new ArrayList<>();
-        int used = 0;
-        for (int i = all.size() - 1; i >= 0 && result.size() < maxCount; i--) {
-            Message msg = all.get(i);
-            int tokens = TokenEstimator.estimate(msg);
-            if (used + tokens > tokenBudget && !result.isEmpty()) {
+        // 定位最新 user 消息：它是当前任务的提问，必须保留
+        int latestUserIdx = -1;
+        for (int i = all.size() - 1; i >= 0; i--) {
+            if ("user".equals(all.get(i).getRole())) {
+                latestUserIdx = i;
                 break;
             }
-            result.add(0, msg);
+        }
+
+        // 1. 从尾部往前聚合成「组」：tool 消息并入其前置 assistant(tool_calls) 所在组
+        List<List<Message>> groups = new ArrayList<>();
+        List<Message> pendingTools = new ArrayList<>();
+        for (int i = all.size() - 1; i >= 0; i--) {
+            Message msg = all.get(i);
+            if ("tool".equals(msg.getRole())) {
+                pendingTools.add(0, msg);
+                continue;
+            }
+            if ("assistant".equals(msg.getRole())
+                    && msg.getToolCalls() != null && !msg.getToolCalls().isEmpty()) {
+                // 仅并入该 assistant 实际声明了 id 的 tool 结果，避免错配
+                Set<String> callIds = new HashSet<>();
+                for (ToolCall tc : msg.getToolCalls()) {
+                    if (tc.getId() != null && !tc.getId().isEmpty()) {
+                        callIds.add(tc.getId());
+                    }
+                }
+                List<Message> matched = new ArrayList<>();
+                for (Message t : pendingTools) {
+                    if (t.getToolCallId() != null && callIds.contains(t.getToolCallId())) {
+                        matched.add(t);
+                    }
+                }
+                List<Message> group = new ArrayList<>(1 + matched.size());
+                group.add(msg);
+                group.addAll(matched);
+                groups.add(group);
+                pendingTools = new ArrayList<>();
+                continue;
+            }
+            // 普通消息（user / 无 tool_calls 的 assistant）：pending 中无法配对的 tool 视为孤儿丢弃
+            pendingTools = new ArrayList<>();
+            groups.add(Collections.singletonList(msg));
+        }
+
+        // 2. 组装：最新 user 消息所在组强制保留（它是当前任务的提问），
+        //    其余组从最新往前按预算/条数选中
+        boolean[] selected = new boolean[groups.size()];
+        int selectedCount = 0;
+        int used = 0;
+        int userGroupIdx = -1;
+        for (int i = 0; i < groups.size(); i++) {
+            if (latestUserIdx >= 0 && groups.get(i).size() == 1
+                    && groups.get(i).get(0) == all.get(latestUserIdx)) {
+                userGroupIdx = i;
+                break;
+            }
+        }
+        if (userGroupIdx >= 0) {
+            selected[userGroupIdx] = true;
+            selectedCount += groups.get(userGroupIdx).size();
+            used += sumTokens(groups.get(userGroupIdx));
+        }
+        for (int i = 0; i < groups.size(); i++) {
+            if (selected[i]) {
+                continue;
+            }
+            int tokens = sumTokens(groups.get(i));
+            if (used + tokens > tokenBudget && selectedCount > 0) {
+                break;
+            }
+            if (selectedCount + groups.get(i).size() > maxCount) {
+                break;
+            }
+            selected[i] = true;
+            selectedCount += groups.get(i).size();
             used += tokens;
         }
+
+        // 3. 按时间正序输出（groups[0] 最新 → groups[last] 最旧；组内保持 assistant → tool 顺序）
+        List<Message> result = new ArrayList<>();
+        for (int i = groups.size() - 1; i >= 0; i--) {
+            if (selected[i]) {
+                result.addAll(groups.get(i));
+            }
+        }
         return result;
+    }
+
+    private int sumTokens(List<Message> group) {
+        int tokens = 0;
+        for (Message m : group) {
+            tokens += TokenEstimator.estimate(m);
+        }
+        return tokens;
     }
 }

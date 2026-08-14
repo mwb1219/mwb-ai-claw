@@ -90,7 +90,8 @@ public class LlmGatewayImpl implements LlmGateway {
             conn.setRequestProperty("Authorization", "Bearer " + modelConfig.getApiKey());
             conn.setDoOutput(true);
             conn.setConnectTimeout(30000);
-            conn.setReadTimeout(0); // 流式不超时
+            // 流式读取也设置有限超时：避免 LLM 服务端长时间无响应时主线程无限阻塞在 readLine()（原 readTimeout(0) 会永久挂起）
+            conn.setReadTimeout(120000);
 
             try (OutputStream os = conn.getOutputStream()) {
                 os.write(requestBody.getBytes(StandardCharsets.UTF_8));
