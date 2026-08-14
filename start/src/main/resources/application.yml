@@ -14,10 +14,12 @@ agent:
   agent-id: default
   name: mwb-ai-claw
   system-prompt: 你是 mwb-ai-claw 智能助手。当需要时可以调用工具来完成任务，完成后给出简洁回复。
-  model: deepseek-v4-pro
-  base-url: https://api.deepseek.com
-  # 请填写你的 API Key（兼容 OpenAI / DeepSeek / 通义千问等接口）
-  api-key: "sk-06223e..."
+  # 协作模式（决定加载哪个 {mode}-agents.json），默认 routing
+  mode: routing
+  # 模型配置通过环境变量（.env / 系统环境变量）注入，避免密钥泄露
+  model: ${DEFAULT_MODEL:deepseek-chat}
+  base-url: ${DEFAULT_BASE_URL:https://api.deepseek.com}
+  api-key: ${DEFAULT_API_KEY:}
   temperature: 0.7
   max-tokens: 2048
   max-steps: 8
@@ -31,44 +33,8 @@ agent:
     - shell
     - read_memory
     - write_memory
-  # 专家 Agent 列表（多 Agent 专家路由，未配置字段继承默认值）
-  agents:
-    - agent-id: coder
-      name: 编码专家
-      description: 擅长编写代码、调试 bug、代码审查与技术实现
-      keywords:
-        - 代码
-        - bug
-        - 实现
-        - 开发
-        - 调试
-        - 编译
-        - 报错
-        - 函数
-        - 接口
-      system-prompt: 你是资深软件工程师，擅长编码、调试与问题排查，代码示例清晰规范。
-      tools:
-        - file
-        - shell
-        - http
-        - read_memory
-        - write_memory
-      max-steps: 10
-    - agent-id: researcher
-      name: 信息检索专家
-      description: 擅长信息检索、资料查询与知识整理
-      keywords:
-        - 搜索
-        - 查询
-        - 资料
-        - 调研
-        - 对比
-        - 有哪些
-      system-prompt: 你是信息检索专家，擅长高效检索网络信息并归纳整理。
-      tools:
-        - http
-        - read_memory
-      max-steps: 5
+  # 专家 Agent 配置已独立到 {mode}-agents.json（默认 routing-agents.json）
+  # 可在运行目录下新增/修改，或使用 classpath 默认模板
   # 工具安全配置
   security:
     enabled: true

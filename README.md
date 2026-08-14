@@ -55,7 +55,7 @@
 │   tool：ToolGatewayImpl + 内置工具 + MCP 适配                │
 │   memory：FileBasedSessionGateway + FileBasedMemoryGateway  │
 │   llm：LlmGatewayImpl（OpenAI 兼容流式/非流式）              │
-│   config：AgentConfiguration / AgentProperties              │
+│   config：AgentConfiguration / AgentProperties / AgentConfigLoader│
 │   security：ToolSecurity（命令白名单/路径限制/超时控制）       │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -89,12 +89,24 @@
 - [x] 会话自动标题：取首条消息前 30 字符
 - [x] **Shell 终端交互**：JLine REPL，支持流式/同步对话，ANSI 彩色输出
 
-### 3.4 待实施
+### 3.4 Phase 4：多 Agent 路由与配置工程 ✅
+
+- [x] 多 Agent 专家路由：规则路由（关键词）+ LLM 语义路由（LLM 决策）+ 组合路由（规则优先、LLM 兜底）
+- [x] Context Engineering 领域抽象：`ContextAssembler`（system prompt + 历史 + 工具统一组装）
+- [x] 敏感配置抽象到 `.env`：`application.yml` 通过 `${VAR:default}` 占位符引用，避免密钥泄露
+- [x] Agent 配置按协作模式分文件：`{mode}-agents.json`（运行目录优先），`--agent.mode` 启动参数切换
+- [x] 多 Agent 独立模型：每个 Agent 可配置自己的 `model` / `api-key`（缺省继承默认）
+
+### 3.5 待实施
 
 - [ ] IM 渠道接入：飞书、钉钉、Telegram
-- [ ] 多 Agent 路由与协作
+- [ ] 多 Agent 协作模式：编排（orchestration）/ 流水线（pipeline）编排服务
 - [ ] 浏览器控制工具（CDP）
 - [ ] 本地 Ollama 离线部署支持
+- [ ] Context Engineering：上下文压缩/裁剪（token 预算、历史裁剪、摘要）
+- [ ] Context Engineering：检索增强（RAG/向量库相关内容注入）
+- [ ] Context Engineering：上下文策略（优先级排序、多策略实现）
+- [ ] Context Engineering：成本优化（token 用量统计与控制）
 
 ## 四、领域模型
 
@@ -110,9 +122,12 @@ domain/
 │   ├── Message.java       # 实体：消息
 │   ├── MessageRole.java   # 枚举
 │   ├── ModelConfig.java   # 值对象：模型配置
-│   ├── ReActLoopService   # 领域服务：ReAct 推理循环（集成长期记忆）
+│   ├── ReActLoopService   # 领域服务：ReAct 推理循环
 │   ├── ReActResult.java   # 值对象：推理结果
 │   └── ProgressCallback   # 回调：进度推送
+├── context/               # 上下文工程域
+│   ├── ContextAssembler.java        # 接口：上下文组装（Context Engineering 核心入口）
+│   └── DefaultContextAssembler.java # 默认实现：system prompt + 历史 + 工具
 ├── llm/                   # LLM 域
 │   ├── LlmGateway.java    # 接口：LLM 调用（流式 + 非流式）
 │   ├── LlmRequest.java
@@ -194,7 +209,7 @@ ws://localhost:8080/ws/agent
 # 构建
 mvn package -pl start -am -DskipTests
 
-# 启动 Shell 模式
+# 启动 Shell 模式（可追加 --agent.mode=xxx 切换协作模式）
 java -jar start/target/start-*.jar --spring.profiles.active=shell
 ```
 
@@ -220,15 +235,35 @@ java -jar start/target/start-*.jar --spring.profiles.active=shell
 
 ## 六、配置说明
 
-### 6.1 核心配置（application.yml）
+### 6.1 密钥配置（.env）
+
+敏感配置（API Key 等）统一通过 `.env` 环境变量文件注入，避免提交代码时泄露：
+
+```bash
+# 1. 复制模板（首次运行）
+cp .env.example .env
+
+# 2. 填入真实密钥
+DEFAULT_API_KEY=sk-xxx
+```
+
+- `.env` 已被 `.gitignore` 排除，不会提交；`.env.example`（key 留空）作为模板提交供团队参考。
+- **环境变量优先级**（由高到低）：命令行参数 > 系统环境变量 > `.env` 文件 > 配置文件默认值。生产环境可直接注入系统环境变量覆盖 `.env`。
+- 支持 `KEY=value` 格式（忽略 `#` 注释、去除引号），Spring 配置中用 `${VAR:default}` 引用，`default` 为兜底值。
+
+### 6.2 核心配置（application.yml）
 
 ```yaml
 agent:
   agent-id: default
+  name: mwb-ai-claw
   system-prompt: "你是 mwb-ai-claw 智能助手..."
-  model: deepseek-v4-pro
-  base-url: https://api.deepseek.com
-  api-key: "sk-xxx"
+  mode: routing                      # 协作模式，决定加载哪个 {mode}-agents.json
+  model: ${DEFAULT_MODEL:deepseek-chat}            # 通过环境变量引用，避免硬编码
+  base-url: ${DEFAULT_BASE_URL:https://api.deepseek.com}
+  api-key: ${DEFAULT_API_KEY:}
+  temperature: 0.7
+  max-tokens: 2048
   max-steps: 8
   memory-dir: ""                      # 长期记忆目录，默认 ${user.dir}/.agent
   tools:
@@ -250,7 +285,79 @@ agent:
     http-allowed-hosts: []
 ```
 
-### 6.2 长期记忆文件
+### 6.3 多 Agent 配置（{mode}-agents.json）
+
+专家 Agent 定义按协作模式分文件存放，命名 `{mode}-agents.json`（如 `routing-agents.json`）。**加载优先级：运行目录下的同名文件 > jar 内置 classpath 默认模板**。使用者可在运行目录放置自己的 `routing-agents.json`，自由增删、调整 Agent，无需重新打包。
+
+```bash
+# 从 jar 内置模板导出后按需修改（或直接参照下方格式在运行目录新建）
+unzip -p start/target/start-*.jar routing-agents.json > routing-agents.json
+```
+
+文件格式：
+
+```json
+{
+  "mode": "routing",
+  "agents": [
+    {
+      "agentId": "coder",
+      "name": "编码专家",
+      "description": "擅长编写代码、调试 bug、代码审查与技术实现",
+      "keywords": ["代码", "bug", "实现", "开发", "调试", "编译", "报错", "函数", "接口"],
+      "systemPrompt": "你是资深软件工程师，擅长编码、调试与问题排查，代码示例清晰规范。",
+      "tools": ["file", "shell", "http", "read_memory", "write_memory"],
+      "maxSteps": 10,
+      "model": "${CODER_MODEL:${DEFAULT_MODEL:deepseek-chat}}",
+      "apiKey": "${CODER_API_KEY:${DEFAULT_API_KEY:}}"
+    }
+  ]
+}
+```
+
+字段说明：
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `agentId` | 是 | Agent 标识（路由目标） |
+| `name` | 是 | 显示名称 |
+| `description` | 否 | 能力描述，供 LLM 语义路由判断意图 |
+| `keywords` | 否 | 规则路由关键词 |
+| `systemPrompt` | 否 | 系统提示词，缺省继承默认 |
+| `tools` | 否 | 可用工具列表，缺省继承默认 |
+| `maxSteps` | 否 | 最大推理步数，缺省继承默认 |
+| `model` / `baseUrl` / `apiKey` | 否 | 独立模型配置，缺省继承默认，支持 `${VAR:default}` 占位符 |
+| `temperature` / `maxTokens` | 否 | 采样温度 / 单次最大 tokens，缺省继承默认 |
+
+### 6.4 协作模式切换与多模型
+
+启动时通过 `--agent.mode=xxx` 指定加载哪个 `{mode}-agents.json`：
+
+```bash
+# 专家路由模式（默认，内置 coder / researcher 两个专家）
+java -jar start/target/start-*.jar --agent.mode=routing
+
+# 未来编排 / 流水线模式（需在运行目录提供对应 agents 文件）
+java -jar start/target/start-*.jar --agent.mode=orchestration
+```
+
+每个 Agent 的模型独立配置：在 `{mode}-agents.json` 中为 Agent 指定 `model` / `apiKey`（用 `${VAR}` 引用 `.env` 变量），未配置的字段自动继承默认值。`.env` 示例：
+
+```bash
+# 默认模型
+DEFAULT_MODEL=deepseek-chat
+DEFAULT_API_KEY=sk-default-xxx
+
+# coder 专家（独立模型，key 留空则继承 DEFAULT_API_KEY）
+CODER_MODEL=deepseek-coder
+CODER_API_KEY=
+
+# researcher 专家
+RESEARCHER_MODEL=deepseek-chat
+RESEARCHER_API_KEY=sk-researcher-xxx
+```
+
+### 6.5 长期记忆文件
 
 ```
 .agent/
@@ -261,17 +368,27 @@ agent:
     └── e5f6g7h8.json
 ```
 
-### 6.3 MCP Server 配置
+### 6.6 MCP Server 配置（mcp-server.json）
 
-```yaml
-mcp:
-  servers:
-    - name: filesystem
-      transport: stdio
-      command: npx
-      args: ["@modelcontextprotocol/server-filesystem", "/tmp/workspace"]
-      enabled: true
+MCP Server 配置独立在 `mcp-server.json`（与 Cursor / Claude 的 mcp.json 格式一致），**加载优先级：运行目录下的 `mcp-server.json` > classpath 默认模板**。支持 stdio 与 streamable_http 两种传输：
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-filesystem", "/tmp/workspace"]
+    },
+    "fetch": {
+      "type": "streamable_http",
+      "url": "https://mcp.example.com/fetch"
+    }
+  }
+}
 ```
+
+- **stdio**：`command` + `args`，可加 `env` 传入密钥（如 `TAVILY_API_KEY`）。
+- **streamable_http**：`type: streamable_http` + `url`（单端点 HTTP 传输，自动兼容 SSE 响应与 `Mcp-Session-Id`）。
 
 ## 七、安全机制
 
@@ -293,7 +410,7 @@ mcp:
 | 框架 | Spring Boot 2.7 + COLA 5.0 | DDD 分层架构 |
 | LLM 调用 | OkHttp + OpenAI 兼容 API | 统一 Chat Completions 接口 |
 | 流式输出 | SSE (SseEmitter) + WebSocket (TextWebSocketHandler) | Token 级实时推送 |
-| 工具协议 | MCP (Model Context Protocol) | stdio / SSE 传输层 |
+| 工具协议 | MCP (Model Context Protocol) | stdio / streamable_http（SSE 兼容） |
 | Shell 终端 | JLine 3.20 | ANSI 着色、命令历史、行编辑 |
 | 序列化 | Jackson | Session JSON 持久化 |
 | 持久化 | 本地文件 (.agent/ 目录) | 会话文件 + 长期记忆文件 |

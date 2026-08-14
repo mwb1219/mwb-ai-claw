@@ -13,6 +13,7 @@ public class MarkdownRenderer {
     private static final String BOLD = "\u001b[1m";
     private static final String DIM = "\u001b[2m";
     private static final String CYAN = "\u001b[36m";
+    private static final String BRIGHT_CYAN = "\u001b[96m";
     private static final String YELLOW = "\u001b[33m";
     private static final String GRAY = "\u001b[90m";
 
@@ -47,10 +48,10 @@ public class MarkdownRenderer {
         // 代码块围栏 ``` 切换状态
         if (t.startsWith("```")) {
             inCodeBlock = !inCodeBlock;
-            return GRAY + line + RESET;
+            return BRIGHT_CYAN + line + RESET;
         }
         if (inCodeBlock) {
-            return GRAY + line + RESET;
+            return BRIGHT_CYAN + line + RESET;
         }
 
         // 标题

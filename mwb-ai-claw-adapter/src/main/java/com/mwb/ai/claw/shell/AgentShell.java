@@ -25,6 +25,7 @@ import com.alibaba.cola.dto.SingleResponse;
 import com.mwb.ai.claw.agent.executor.ChatCmdExe;
 import com.mwb.ai.claw.api.AgentServiceI;
 import com.mwb.ai.claw.domain.core.ProgressCallback;
+import com.mwb.ai.claw.domain.llm.LlmResponse;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
 import com.mwb.ai.claw.dto.ChatCmd;
 import com.mwb.ai.claw.dto.CreateSessionCmd;
@@ -61,11 +62,11 @@ public class AgentShell implements CommandLineRunner {
     private boolean verbose = false;      // 默认观察结果缩写展示（/trace 切换完整显示）
     private boolean resultStarted = false; // 结果区是否已开始输出
     private final MarkdownRenderer markdownRenderer = new MarkdownRenderer();
+    private boolean finalReplyStreamed = false; // 最终回复是否已通过流式输出完成
 
     // ANSI 风格
     private static final AttributedStyle STYLE_PROMPT = AttributedStyle.DEFAULT.foreground(AttributedStyle.CYAN).bold();
     private static final AttributedStyle STYLE_INFO = AttributedStyle.DEFAULT.foreground(AttributedStyle.WHITE);
-    private static final AttributedStyle STYLE_AI = AttributedStyle.DEFAULT.foreground(AttributedStyle.GREEN);
     private static final AttributedStyle STYLE_THOUGHT = AttributedStyle.DEFAULT.foreground(AttributedStyle.MAGENTA);
     private static final AttributedStyle STYLE_ACTION = AttributedStyle.DEFAULT.foreground(AttributedStyle.YELLOW);
     private static final AttributedStyle STYLE_OBS = AttributedStyle.DEFAULT.foreground(AttributedStyle.BLUE);
@@ -265,13 +266,59 @@ public class AgentShell implements CommandLineRunner {
 
     private void doStreamChat(ChatCmd cmd) {
         resultStarted = false;
+        finalReplyStreamed = false;
         markdownRenderer.reset();
 
         // 执行区：按顺序展示每一步轨迹（思考 / 工具调用+入参 / 观察结果）
         ProgressCallback progressCb = this::printTraceStep;
 
-        // 流式回调：最终结果不在此渲染，统一在 execute 返回后从最终回复渲染，避免遗漏
+        // 流式回调：最终回复轮实时输出（按行增量渲染 Markdown），工具调用轮内容抑制
         LlmStreamCallback streamCb = new LlmStreamCallback() {
+            private final StringBuilder lineBuf = new StringBuilder();
+            private boolean toolRound = false;
+
+            @Override
+            public void onToken(String token) {
+                if (toolRound) {
+                    return; // 工具轮：LLM 前导文本不展示，由执行区轨迹展示工具调用
+                }
+                beginResultSection();
+                lineBuf.append(token);
+                // 行缓冲按行渲染并输出，保证 Markdown（代码块等）跨行状态正确
+                int nl;
+                while ((nl = lineBuf.indexOf("\n")) >= 0) {
+                    String line = lineBuf.substring(0, nl);
+                    lineBuf.delete(0, nl + 1);
+                    terminal.writer().print(markdownRenderer.renderLine(line) + "\n");
+                    terminal.writer().flush();
+                }
+            }
+
+            @Override
+            public void onToolName(String toolName) {
+                // 检测到工具调用开始：本轮内容不再实时输出，丢弃已缓冲的未完成行
+                toolRound = true;
+                lineBuf.setLength(0);
+            }
+
+            @Override
+            public void onComplete(LlmResponse response) {
+                boolean isToolRound = response != null && response.getToolCalls() != null
+                        && !response.getToolCalls().isEmpty();
+                if (isToolRound) {
+                    // 工具调用轮：丢弃缓冲的中间思考文本，由执行区轨迹展示
+                    lineBuf.setLength(0);
+                } else {
+                    // 最终回复轮：冲刷剩余半行
+                    if (lineBuf.length() > 0) {
+                        terminal.writer().print(markdownRenderer.renderLine(lineBuf.toString()));
+                        terminal.writer().flush();
+                        lineBuf.setLength(0);
+                    }
+                    finalReplyStreamed = true;
+                }
+                toolRound = false; // 复位，供下一轮（最终回复轮）实时输出
+            }
         };
 
         println(STYLE_INFO, ""); // 换行
@@ -283,14 +330,16 @@ public class AgentShell implements CommandLineRunner {
             return;
         }
 
-        // 结果区：渲染最终回复（覆盖正常回复、达到最大步数、空回复等所有情况）
-        beginResultSection();
-        ChatResponseDTO data = resp.getData();
-        String reply = (data != null && data.getReply() != null) ? data.getReply() : "（空回复）";
-        terminal.writer().print(markdownRenderer.render(reply));
-        terminal.writer().flush();
+        // 兜底：流式回调未完成（异常/流中断等）且尚未输出任何内容时，一次性渲染最终回复，避免遗漏
+        if (!finalReplyStreamed && !resultStarted) {
+            beginResultSection();
+            ChatResponseDTO data = resp.getData();
+            String reply = (data != null && data.getReply() != null) ? data.getReply() : "（空回复）";
+            terminal.writer().print(markdownRenderer.render(reply));
+            terminal.writer().flush();
+        }
 
-        sessionId = data.getSessionId();
+        sessionId = resp.getData().getSessionId();
     }
 
     /** 按顺序展示每一步轨迹：思考 / 工具调用（含入参）/ 观察结果 */
@@ -453,12 +502,9 @@ public class AgentShell implements CommandLineRunner {
 
     // ==================== 终端输出工具 ====================
 
-    /** 打印结果区标题（首次调用时），实现结果区与执行区的视觉隔离 */
+    /** 标记结果区已开始输出（首次调用时置位），供兜底渲染判断是否已有内容输出 */
     private void beginResultSection() {
-        if (!resultStarted) {
-            println(STYLE_AI, "━━━━━━ 结果 ━━━━━━");
-            resultStarted = true;
-        }
+        resultStarted = true;
     }
 
     /** 打印工具调用（执行区）：工具名 + 缩写入参 */

@@ -43,6 +43,9 @@ public class AgentProperties {
     /** ReAct 最大推理步数 */
     private int maxSteps = 8;
 
+    /** 协作模式（决定加载哪个 {mode}-agents.json），默认 routing */
+    private String mode = "routing";
+
     /** 长期记忆目录（AGENT.md / MEMORY.md 存放位置，默认 ${user.dir}/.agent） */
     private String memoryDir = "";
 
@@ -77,6 +80,21 @@ public class AgentProperties {
 
         /** ReAct 最大推理步数（可选，为空时继承默认值） */
         private Integer maxSteps;
+
+        /** 模型标识（可选，为空则继承默认） */
+        private String model;
+
+        /** API Base URL（可选，为空则继承默认） */
+        private String baseUrl;
+
+        /** API Key（可选，为空则继承默认） */
+        private String apiKey;
+
+        /** 采样温度（可选，为空则继承默认） */
+        private Double temperature;
+
+        /** 单次最大 tokens（可选，为空则继承默认） */
+        private Integer maxTokens;
     }
 
     /**

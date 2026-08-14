@@ -1,5 +1,6 @@
 package com.mwb.ai.claw.infrastructure.core;
 
+import com.mwb.ai.claw.infrastructure.config.AgentConfigLoader;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.ModelConfig;
@@ -25,11 +26,14 @@ public class AgentGatewayImpl implements AgentGateway {
     @Resource
     private LongTermMemoryGateway longTermMemoryGateway;
 
+    @Resource
+    private AgentConfigLoader agentConfigLoader;
+
     @Override
     public Agent getAgent(String agentId) {
         // 1. 显式指定 agentId 且命中专家 Agent → 返回该 Agent
         if (agentId != null && !agentId.trim().isEmpty()) {
-            for (AgentProperties.AgentConfig config : agentProperties.getAgents()) {
+            for (AgentProperties.AgentConfig config : agentConfigLoader.loadAgents()) {
                 if (agentId.equals(config.getAgentId())) {
                     return buildAgent(config);
                 }
@@ -47,7 +51,7 @@ public class AgentGatewayImpl implements AgentGateway {
     public List<Agent> listAgents() {
         List<Agent> agents = new ArrayList<>();
         agents.add(buildDefaultAgent());
-        for (AgentProperties.AgentConfig config : agentProperties.getAgents()) {
+        for (AgentProperties.AgentConfig config : agentConfigLoader.loadAgents()) {
             agents.add(buildAgent(config));
         }
         return agents;
@@ -77,8 +81,13 @@ public class AgentGatewayImpl implements AgentGateway {
         agent.setDescription(config.getDescription());
         agent.setKeywords(config.getKeywords());
         agent.setAgentInstructions(longTermMemoryGateway.loadAgentInstructions());
-        agent.setModelConfig(buildModelConfig(agentProperties.getModel(), agentProperties.getBaseUrl(),
-                agentProperties.getApiKey(), agentProperties.getTemperature(), agentProperties.getMaxTokens()));
+        // 模型字段合并：Agent 显式配置 > 默认配置
+        agent.setModelConfig(buildModelConfig(
+                config.getModel() != null ? config.getModel() : agentProperties.getModel(),
+                config.getBaseUrl() != null ? config.getBaseUrl() : agentProperties.getBaseUrl(),
+                config.getApiKey() != null ? config.getApiKey() : agentProperties.getApiKey(),
+                config.getTemperature() != null ? config.getTemperature() : agentProperties.getTemperature(),
+                config.getMaxTokens() != null ? config.getMaxTokens() : agentProperties.getMaxTokens()));
         // 工具集：未配置则继承默认
         agent.setToolNames(config.getTools() != null && !config.getTools().isEmpty()
                 ? config.getTools() : agentProperties.getTools());

@@ -1,27 +1,22 @@
 package com.mwb.ai.claw.infrastructure.tool.mcp;
 
-import java.io.File;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
-import org.springframework.util.StreamUtils;
 
 import com.mwb.ai.claw.domain.tool.McpServerConfig;
+import com.mwb.ai.claw.infrastructure.util.ConfigFileLocator;
 import com.mwb.ai.claw.infrastructure.util.JsonUtils;
 
 /**
  * MCP Server 配置加载器：从 mcp-server.json 读取配置。
  * <p>
  * 读取优先级：
- * 1. 运行目录下的外部 mcp-server.json（便于运行时覆盖，无需重新打包）
+ * 1. 运行目录及其上级目录的外部 mcp-server.json（便于运行时覆盖，无需重新打包）
  * 2. classpath 下的 mcp-server.json（打包进 jar 的默认配置）
  * <p>
  * 文件格式与 Cursor / Claude 的 mcp.json 保持一致（顶层 mcpServers map）。
@@ -46,27 +41,7 @@ public class McpServerConfigLoader {
     }
 
     private String readConfig() {
-        // 1. 优先读取运行目录下的外部文件
-        File external = new File(FILE_NAME);
-        if (external.exists()) {
-            try {
-                return new String(Files.readAllBytes(external.toPath()), StandardCharsets.UTF_8);
-            } catch (Exception e) {
-                log.warn("读取外部 {} 失败: {}", FILE_NAME, e.getMessage());
-            }
-        }
-        // 2. 回退到 classpath
-        try {
-            ClassPathResource resource = new ClassPathResource(FILE_NAME);
-            if (resource.exists()) {
-                try (InputStream in = resource.getInputStream()) {
-                    return StreamUtils.copyToString(in, StandardCharsets.UTF_8);
-                }
-            }
-        } catch (Exception e) {
-            log.warn("读取 classpath {} 失败: {}", FILE_NAME, e.getMessage());
-        }
-        return null;
+        return ConfigFileLocator.readConfigFile(FILE_NAME);
     }
 
     private List<McpServerConfig> toServerConfigs(McpServersFile file) {

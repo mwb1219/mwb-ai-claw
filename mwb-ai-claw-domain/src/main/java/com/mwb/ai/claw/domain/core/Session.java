@@ -8,6 +8,8 @@ import java.util.List;
 
 /**
  * 会话聚合根
+ *
+ * @author mawenbin
  */
 @Data
 public class Session {
@@ -31,7 +33,7 @@ public class Session {
 
     public void addUserMessage(String content) {
         this.messages.add(Message.of("user", content));
-        touch();
+        refreshUpdateTime();
         // 自动设置标题：取第一条用户消息的前 30 个字符
         if ((title == null || title.startsWith("session-")) && messages.size() == 1) {
             String trimmed = content.trim();
@@ -41,21 +43,21 @@ public class Session {
 
     public void addAssistantMessage(String content, List<ToolCall> toolCalls) {
         this.messages.add(Message.assistant(content, toolCalls));
-        touch();
+        refreshUpdateTime();
     }
 
     public void addToolMessage(String toolCallId, String content) {
         this.messages.add(Message.tool(toolCallId, content));
-        touch();
+        refreshUpdateTime();
     }
 
     public void close() {
         this.status = SessionStatus.CLOSED;
-        touch();
+        refreshUpdateTime();
     }
 
     /** 更新最后修改时间 */
-    private void touch() {
+    private void refreshUpdateTime() {
         this.updateTime = System.currentTimeMillis();
     }
 }

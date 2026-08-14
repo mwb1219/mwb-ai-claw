@@ -11,6 +11,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * <p>
  * 封装 Jackson，统一异常处理与 ObjectMapper 配置，供各模块复用，
  * 避免业务代码直接操作 {@link JsonNode} / {@link ObjectMapper} 导致可读性下降。
+ *
+ * @author mawenbin
  */
 public final class JsonUtils {
 

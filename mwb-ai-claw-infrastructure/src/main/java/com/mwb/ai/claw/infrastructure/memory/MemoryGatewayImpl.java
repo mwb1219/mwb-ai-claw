@@ -13,6 +13,7 @@ import java.util.concurrent.ConcurrentMap;
  * <p>
  * 保留此实现供单元测试使用，不再注册为 Spring Bean。
  */
+@Deprecated
 public class MemoryGatewayImpl implements MemoryGateway {
 
     private final ConcurrentMap<String, Session> store = new ConcurrentHashMap<>();
