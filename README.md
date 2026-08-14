@@ -106,6 +106,9 @@
 - [x] 结构化长期记忆：LLM 提炼事实（key/content/importance），重要度过滤 + 同 key 合并去重，落盘 `.agent/memory/facts.jsonl`
 - [x] 关键词检索：中文 bigram 分词 BM25 简化版，`read_memory` 工具支持 `query` 参数检索事实与摘要
 - [x] `write_memory` 工具升级：`content` + `topic` + `importance` 三参数，按重要度阈值写入事实
+- [x] 换页策略可插拔：`token`（预算驱动，默认）/ `importance`（重要度驱动，低价值话题提前压缩、高价值保留）
+- [x] 事实 merge 去重深化：同 key 按重要度/信息量择优，版本号自增、时间戳保留最新，`facts.jsonl` 单条维护
+- [x] 提炼异步化：摘要/事实提炼在独立线程池串行执行，不阻塞主对话链路（`synthesis-async`）
 - [x] 优雅降级：提炼/换页失败仅记录日志，不阻塞主对话链路
 
 ### 3.6 待实施
@@ -285,6 +288,20 @@ agent:
     - shell
     - read_memory
     - write_memory
+
+  # 分层记忆（突破上下文窗口：分层存储 + 动态换页 + 检索召回）
+  memory:
+    enabled: true                  # 是否启用分层记忆
+    context-window-tokens: 65536   # 模型上下文窗口（tokens），用于预算计算
+    context-budget-ratio: 0.6      # 记忆区占模型窗口比例
+    prompt-budget-ratio: 0.25      # System 区（AGENT.md + 事实页）占记忆预算比例
+    tool-budget-ratio: 0.25        # Tools 区占记忆预算比例
+    hot-window-size: 20            # 工作记忆：Hot 原文最大条数
+    summary-block-size: 10         # 多少条消息合成一个摘要块（触发换页）
+    importance-threshold: 0.6      # 事实写入长期记忆的重要度阈值
+    top-k: 5                       # 关键词检索召回条数
+    eviction-policy: token         # 换页策略：token（预算驱动）| importance（重要度驱动）
+    synthesis-async: true          # 提炼是否异步执行（线程池串行，不阻塞主对话链路）
 
   # 工具安全沙箱
   security:

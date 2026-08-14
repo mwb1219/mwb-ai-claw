@@ -1,8 +1,8 @@
 package com.mwb.ai.claw.domain.memory;
 
-import com.mwb.ai.claw.domain.core.Message;
-
 import java.util.List;
+
+import com.mwb.ai.claw.domain.core.Message;
 
 /**
  * 记忆提炼器接口：摘要生成 / 事实提取 / 合并去重（依赖 LLM 能力）。
@@ -26,7 +26,9 @@ public interface MemorySynthesizer {
     List<MemoryPage> extractFacts(List<Message> messages);
 
     /**
-     * 合并新事实与已有事实（同 key 保留重要度更高 / 更新者）。
+     * 合并新事实与已有事实（同 key 去重 + 冲突合并）。
+     * <p>
+     * 规则：保留重要度更高者，重要度相同保留信息更全者；版本号自增，时间戳保留最新。
      *
      * @param existing 已有事实（同 key 的旧值，可为 null）
      * @param fresh    新事实

@@ -82,16 +82,24 @@ public class LlmMemorySynthesizer implements MemorySynthesizer {
     @Override
     public MemoryPage mergeFact(MemoryPage existing, MemoryPage fresh) {
         if (existing == null) {
+            fresh.setVersion(1);
             return fresh;
         }
-        // 同 key：保留重要度更高者；重要度相同保留新内容
+        // 去重 + 冲突合并：保留重要度更高者；重要度相同保留信息更全（内容更长）者
+        MemoryPage base = existing;
         if (fresh.getImportance() > existing.getImportance()) {
-            return fresh;
+            base = fresh;
+        } else if (fresh.getImportance() == existing.getImportance()
+                && fresh.getContent().length() >= existing.getContent().length()) {
+            base = fresh;
         }
-        if (fresh.getImportance() == existing.getImportance() && fresh.getCreateTime() >= existing.getCreateTime()) {
-            return fresh;
+        // 版本自增（记录更新次数），时间戳保留最新
+        base.setVersion(Math.max(existing.getVersion(), fresh.getVersion()) + 1);
+        base.setCreateTime(Math.max(existing.getCreateTime(), fresh.getCreateTime()));
+        if (base.getSessionId() == null) {
+            base.setSessionId(fresh.getSessionId());
         }
-        return existing;
+        return base;
     }
 
     // ==================== 私有方法 ====================

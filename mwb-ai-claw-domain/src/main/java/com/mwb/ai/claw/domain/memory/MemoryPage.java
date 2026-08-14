@@ -35,7 +35,11 @@ public class MemoryPage {
 
     private int blockEnd;
 
+    /** 创建时间（merge 时按此保留最新） */
     private long createTime = System.currentTimeMillis();
+
+    /** 事实更新版本号（merge 去重时自增，仅 FACT 使用） */
+    private int version = 1;
 
     public MemoryPage() {
     }
@@ -142,5 +146,13 @@ public class MemoryPage {
 
     public void setCreateTime(long createTime) {
         this.createTime = createTime;
+    }
+
+    public int getVersion() {
+        return version;
+    }
+
+    public void setVersion(int version) {
+        this.version = version;
     }
 }

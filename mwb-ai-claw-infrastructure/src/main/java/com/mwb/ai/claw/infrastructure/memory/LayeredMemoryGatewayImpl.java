@@ -3,6 +3,7 @@ package com.mwb.ai.claw.infrastructure.memory;
 import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.Message;
 import com.mwb.ai.claw.domain.core.Session;
+import com.mwb.ai.claw.domain.memory.EvictionContext;
 import com.mwb.ai.claw.domain.memory.LayeredMemoryConfig;
 import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
 import com.mwb.ai.claw.domain.memory.MemoryBudget;
@@ -10,6 +11,7 @@ import com.mwb.ai.claw.domain.memory.MemoryPage;
 import com.mwb.ai.claw.domain.memory.MemoryPageStore;
 import com.mwb.ai.claw.domain.memory.MemoryRetriever;
 import com.mwb.ai.claw.domain.memory.MemorySynthesizer;
+import com.mwb.ai.claw.domain.memory.PageEvictionPolicy;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.util.TokenEstimator;
 import org.slf4j.Logger;
@@ -21,7 +23,7 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * 分层记忆门面实现：工作记忆组装（预算内）+ 摘要换页 + 事实提炼与合并 + 检索。
+ * 分层记忆门面实现：工作记忆组装（预算内）+ 摘要换页（策略可插拔）+ 事实提炼与合并（异步）+ 检索。
  */
 @Component
 public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
@@ -32,19 +34,27 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
     private final MemoryPageStore pageStore;
     private final MemorySynthesizer synthesizer;
     private final MemoryRetriever retriever;
+    private final PageEvictionPolicy evictionPolicy;
+    private final MemorySynthesisExecutor synthesisExecutor;
 
     public LayeredMemoryGatewayImpl(AgentProperties properties,
                                     MemoryPageStore pageStore,
                                     MemorySynthesizer synthesizer,
-                                    MemoryRetriever retriever) {
+                                    MemoryRetriever retriever,
+                                    MemorySynthesisExecutor synthesisExecutor) {
         this.config = properties.getMemory();
         this.pageStore = pageStore;
         this.synthesizer = synthesizer;
         this.retriever = retriever;
-        log.info("分层记忆配置: enabled={}, window={}, budgetRatio={}, hotWindow={}, blockSize={}, threshold={}, topK={}, model={}",
+        // 换页策略可插拔：importance | token（默认）
+        this.evictionPolicy = "importance".equalsIgnoreCase(config.getEvictionPolicy())
+                ? new ImportanceEvictionPolicy() : new TokenBudgetEvictionPolicy();
+        this.synthesisExecutor = synthesisExecutor;
+        log.info("分层记忆配置: enabled={}, window={}, budgetRatio={}, hotWindow={}, blockSize={}, threshold={}, topK={}, policy={}, async={}, model={}",
                 config.isEnabled(), config.getContextWindowTokens(), config.getContextBudgetRatio(),
                 config.getHotWindowSize(), config.getSummaryBlockSize(),
-                config.getImportanceThreshold(), config.getTopK(), properties.getModel());
+                config.getImportanceThreshold(), config.getTopK(),
+                config.getEvictionPolicy(), config.isSynthesisAsync(), properties.getModel());
     }
 
     @Override
@@ -91,28 +101,35 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
         if (!isEnabled()) {
             return;
         }
-        List<Message> all = session.getMessages();
+        // 提炼（摘要生成）是 LLM 调用，异步执行不阻塞主对话链路；快照消息避免执行期数据漂移
+        final String sessionId = session.getSessionId();
+        final List<Message> snapshot = new ArrayList<>(session.getMessages());
+        Runnable task = () -> doAfterTurn(sessionId, snapshot);
+        if (config.isSynthesisAsync()) {
+            synthesisExecutor.submit("afterTurn-" + sessionId, task);
+        } else {
+            task.run();
+        }
+    }
+
+    /** 轮次内换页：按可插拔策略判断是否把最旧未摘要块压缩为摘要页 */
+    private void doAfterTurn(String sessionId, List<Message> all) {
         int blockSize = config.getSummaryBlockSize();
-        int lastSummarized = lastSummarizedIndex(session.getSessionId());
-        int unSummarized = all.size() - lastSummarized;
-        if (unSummarized < blockSize) {
+        int lastSummarized = lastSummarizedIndex(sessionId);
+        EvictionContext ctx = new EvictionContext(all, lastSummarized, TokenEstimator.estimate(all),
+                new MemoryBudget(config).getContextBudget(), blockSize, config.getImportanceThreshold());
+        if (!evictionPolicy.shouldEvict(ctx)) {
             return;
         }
-        int contextBudget = new MemoryBudget(config).getContextBudget();
-        int totalTokens = TokenEstimator.estimate(all);
-        // 预算溢出 或 未摘要消息过多 → 把最旧的未摘要块压缩为摘要页
-        if (totalTokens > contextBudget || unSummarized >= blockSize * 2) {
-            int end = Math.min(lastSummarized + blockSize, all.size());
-            List<Message> block = new ArrayList<>(all.subList(lastSummarized, end));
-            String summary = synthesizer.summarizeBlock(block);
-            if (summary != null && !summary.isEmpty()) {
-                MemoryPage page = MemoryPage.summary(
-                        "summary-" + session.getSessionId() + "-" + lastSummarized,
-                        summary, session.getSessionId(), lastSummarized, end,
-                        TokenEstimator.estimate(summary));
-                pageStore.saveSummary(page);
-                log.info("分层记忆: 会话 {} 换页生成摘要 [{}:{})", session.getSessionId(), lastSummarized, end);
-            }
+        int end = Math.min(lastSummarized + blockSize, all.size());
+        List<Message> block = new ArrayList<>(all.subList(lastSummarized, end));
+        String summary = synthesizer.summarizeBlock(block);
+        if (summary != null && !summary.isEmpty()) {
+            pageStore.saveSummary(MemoryPage.summary(
+                    "summary-" + sessionId + "-" + lastSummarized,
+                    summary, sessionId, lastSummarized, end,
+                    TokenEstimator.estimate(summary)));
+            log.info("分层记忆: 会话 {} 换页生成摘要 [{}:{})", sessionId, lastSummarized, end);
         }
     }
 
@@ -121,9 +138,20 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
         if (!isEnabled()) {
             return;
         }
-        // 1. 提取事实并合并去重（摘要换页由 afterTurn 按预算/条数触发，此处不再补摘要，
-        //    避免每轮把未摘要消息清零而架空 afterTurn 的批量换页）
-        List<MemoryPage> freshFacts = synthesizer.extractFacts(session.getMessages());
+        // 事实提炼（LLM 调用）异步执行；摘要换页由 afterTurn 负责，此处只提炼事实
+        final String sessionId = session.getSessionId();
+        final List<Message> snapshot = new ArrayList<>(session.getMessages());
+        Runnable task = () -> doAfterSession(sessionId, snapshot);
+        if (config.isSynthesisAsync()) {
+            synthesisExecutor.submit("afterSession-" + sessionId, task);
+        } else {
+            task.run();
+        }
+    }
+
+    /** 会话回合后：提取事实并合并去重（同 key 按重要度/信息量择优，版本自增，时间戳保留最新） */
+    private void doAfterSession(String sessionId, List<Message> all) {
+        List<MemoryPage> freshFacts = synthesizer.extractFacts(all);
         int saved = 0;
         for (MemoryPage fresh : freshFacts) {
             if (fresh.getImportance() < config.getImportanceThreshold()) {
@@ -138,7 +166,7 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
             pageStore.appendFact(merged);
             saved++;
         }
-        log.info("分层记忆: 会话 {} 提炼结束，新增/更新事实 {} 条", session.getSessionId(), saved);
+        log.info("分层记忆: 会话 {} 提炼结束，新增/更新事实 {} 条", sessionId, saved);
     }
 
     @Override

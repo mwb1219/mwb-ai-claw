@@ -46,6 +46,8 @@ agent:
     summary-block-size: 10         # 多少条消息合成一个摘要块（触发换页）
     importance-threshold: 0.6      # 事实写入长期记忆的重要度阈值
     top-k: 5                       # 关键词检索召回条数
+    eviction-policy: token         # 换页策略：token（预算驱动）| importance（重要度驱动）
+    synthesis-async: true          # 提炼是否异步执行（线程池串行，不阻塞主对话链路）
   # 专家 Agent 配置已独立到 {mode}-agents.json（默认 routing-agents.json）
   # 可在运行目录下新增/修改，或使用 classpath 默认模板
   # 工具安全配置

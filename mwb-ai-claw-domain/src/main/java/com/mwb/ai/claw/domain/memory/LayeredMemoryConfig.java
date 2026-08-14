@@ -35,6 +35,12 @@ public class LayeredMemoryConfig {
     /** 检索召回条数 */
     private int topK = 5;
 
+    /** 换页策略：token（预算驱动，默认）| importance（重要度驱动） */
+    private String evictionPolicy = "token";
+
+    /** 提炼是否异步执行（线程池串行，不阻塞主对话链路） */
+    private boolean synthesisAsync = true;
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -113,5 +119,21 @@ public class LayeredMemoryConfig {
 
     public void setTopK(int topK) {
         this.topK = topK;
+    }
+
+    public String getEvictionPolicy() {
+        return evictionPolicy;
+    }
+
+    public void setEvictionPolicy(String evictionPolicy) {
+        this.evictionPolicy = evictionPolicy;
+    }
+
+    public boolean isSynthesisAsync() {
+        return synthesisAsync;
+    }
+
+    public void setSynthesisAsync(boolean synthesisAsync) {
+        this.synthesisAsync = synthesisAsync;
     }
 }
