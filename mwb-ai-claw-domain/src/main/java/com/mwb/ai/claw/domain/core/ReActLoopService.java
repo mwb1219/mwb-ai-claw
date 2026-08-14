@@ -1,20 +1,15 @@
 package com.mwb.ai.claw.domain.core;
 
+import com.mwb.ai.claw.domain.context.ContextAssembler;
 import com.mwb.ai.claw.domain.llm.LlmGateway;
-import com.mwb.ai.claw.domain.tool.ToolGateway;
-import com.mwb.ai.claw.domain.llm.LlmMessage;
 import com.mwb.ai.claw.domain.llm.LlmRequest;
 import com.mwb.ai.claw.domain.llm.LlmResponse;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
 import com.mwb.ai.claw.domain.llm.ToolCall;
-import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
+import com.mwb.ai.claw.domain.tool.ToolGateway;
 import com.mwb.ai.claw.domain.tool.ToolResult;
-import com.mwb.ai.claw.domain.tool.ToolSpec;
 
-import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 /**
  * ReAct 推理循环领域服务：Agent 的核心引擎。
@@ -26,13 +21,13 @@ public class ReActLoopService {
 
     private final LlmGateway llmGateway;
     private final ToolGateway toolGateway;
-    private final LongTermMemoryGateway memoryGateway;
+    private final ContextAssembler contextAssembler;
 
     public ReActLoopService(LlmGateway llmGateway, ToolGateway toolGateway,
-                            LongTermMemoryGateway memoryGateway) {
+                            ContextAssembler contextAssembler) {
         this.llmGateway = llmGateway;
         this.toolGateway = toolGateway;
-        this.memoryGateway = memoryGateway;
+        this.contextAssembler = contextAssembler;
     }
 
     /**
@@ -60,7 +55,7 @@ public class ReActLoopService {
 
         for (int step = 1; step <= maxSteps; step++) {
             // 1. 组装 LLM 请求（system + history + tools）
-            LlmRequest request = buildRequest(session, agent);
+            LlmRequest request = contextAssembler.assemble(session, agent);
 
             // 2. 调用 LLM（依赖倒置）
             LlmResponse response = llmGateway.chat(request, agent.getModelConfig());
@@ -126,7 +121,7 @@ public class ReActLoopService {
         int maxSteps = agent.getMaxSteps();
 
         for (int step = 1; step <= maxSteps; step++) {
-            LlmRequest request = buildRequest(session, agent);
+            LlmRequest request = contextAssembler.assemble(session, agent);
 
             // 流式调用 LLM
             LlmResponse response = llmGateway.streamChat(request, agent.getModelConfig(), streamCallback);
@@ -175,63 +170,6 @@ public class ReActLoopService {
         if (callback != null) {
             callback.onProgress(step);
         }
-    }
-
-    /**
-     * 组装 LLM 请求：system prompt + AGENT.md + MEMORY.md + 历史消息 + 可用工具规格
-     */
-    private LlmRequest buildRequest(Session session, Agent agent) {
-        LlmRequest request = new LlmRequest();
-        request.setModel(agent.getModelConfig().getModel());
-        request.setTemperature(agent.getModelConfig().getTemperature());
-        request.setMaxTokens(agent.getModelConfig().getMaxTokens());
-
-        List<LlmMessage> messages = new ArrayList<>();
-
-        // 组装 system prompt：配置 systemPrompt + AGENT.md（长期指令） + MEMORY.md（长期记忆）
-        StringBuilder systemPrompt = new StringBuilder(agent.getSystemPrompt());
-        if (agent.getAgentInstructions() != null && !agent.getAgentInstructions().trim().isEmpty()) {
-            systemPrompt.append("\n\n## Agent 扩展指令\n")
-                    .append(agent.getAgentInstructions());
-        }
-        String memContent = memoryGateway.loadMemory();
-        if (memContent != null && !memContent.trim().isEmpty()) {
-            systemPrompt.append("\n\n## 长期记忆（跨会话）：\n")
-                    .append(memContent);
-        }
-        messages.add(LlmMessage.system(systemPrompt.toString()));
-
-        for (Message msg : session.getMessages()) {
-            messages.add(toLlmMessage(msg));
-        }
-        request.setMessages(messages);
-
-        List<ToolSpec> tools = new ArrayList<>();
-        Set<String> added = new HashSet<>();
-        // 1. Agent 显式配置的工具
-        for (String toolName : agent.getToolNames()) {
-            ToolSpec spec = toolGateway.getToolSpec(toolName);
-            if (spec != null && added.add(spec.getName())) {
-                tools.add(spec);
-            }
-        }
-        // 2. 全局工具（MCP 动态注册），默认对所有 Agent 可见，无需在配置中声明
-        for (ToolSpec spec : toolGateway.listTools()) {
-            if (spec.isGlobal() && added.add(spec.getName())) {
-                tools.add(spec);
-            }
-        }
-        request.setTools(tools);
-        return request;
-    }
-
-    private LlmMessage toLlmMessage(Message msg) {
-        LlmMessage m = new LlmMessage();
-        m.setRole(msg.getRole());
-        m.setContent(msg.getContent());
-        m.setToolCalls(msg.getToolCalls());
-        m.setToolCallId(msg.getToolCallId());
-        return m;
     }
 
     private String truncate(String text) {

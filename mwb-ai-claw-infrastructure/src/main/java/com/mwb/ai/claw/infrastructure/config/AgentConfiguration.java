@@ -1,5 +1,7 @@
 package com.mwb.ai.claw.infrastructure.config;
 
+import com.mwb.ai.claw.domain.context.ContextAssembler;
+import com.mwb.ai.claw.domain.context.DefaultContextAssembler;
 import com.mwb.ai.claw.domain.llm.LlmGateway;
 import com.mwb.ai.claw.domain.tool.ToolGateway;
 import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
@@ -25,9 +27,15 @@ public class AgentConfiguration {
     }
 
     @Bean
-    public ReActLoopService reActLoopService(LlmGateway llmGateway, ToolGateway toolGateway,
+    public ContextAssembler contextAssembler(ToolGateway toolGateway,
                                              LongTermMemoryGateway memoryGateway) {
-        return new ReActLoopService(llmGateway, toolGateway, memoryGateway);
+        return new DefaultContextAssembler(toolGateway, memoryGateway);
+    }
+
+    @Bean
+    public ReActLoopService reActLoopService(LlmGateway llmGateway, ToolGateway toolGateway,
+                                             ContextAssembler contextAssembler) {
+        return new ReActLoopService(llmGateway, toolGateway, contextAssembler);
     }
 
     @Bean
