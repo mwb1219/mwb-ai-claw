@@ -6,6 +6,7 @@ import com.mwb.ai.claw.domain.llm.LlmRequest;
 import com.mwb.ai.claw.domain.llm.LlmResponse;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
 import com.mwb.ai.claw.domain.llm.ToolCall;
+import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
 import com.mwb.ai.claw.domain.tool.ToolGateway;
 import com.mwb.ai.claw.domain.tool.ToolResult;
 
@@ -22,12 +23,20 @@ public class ReActLoopService {
     private final LlmGateway llmGateway;
     private final ToolGateway toolGateway;
     private final ContextAssembler contextAssembler;
+    private final LayeredMemoryGateway memoryManager;
 
     public ReActLoopService(LlmGateway llmGateway, ToolGateway toolGateway,
                             ContextAssembler contextAssembler) {
+        this(llmGateway, toolGateway, contextAssembler, null);
+    }
+
+    public ReActLoopService(LlmGateway llmGateway, ToolGateway toolGateway,
+                            ContextAssembler contextAssembler,
+                            LayeredMemoryGateway memoryManager) {
         this.llmGateway = llmGateway;
         this.toolGateway = toolGateway;
         this.contextAssembler = contextAssembler;
+        this.memoryManager = memoryManager;
     }
 
     /**
@@ -70,6 +79,7 @@ public class ReActLoopService {
                 String thought = "[Thought] " + truncate(response.getContent());
                 result.getTraceSteps().add(thought);
                 notify(callback, thought);
+                afterTurn(session, agent);
                 return result;
             }
 
@@ -96,12 +106,14 @@ public class ReActLoopService {
                 result.getTraceSteps().add(obs);
                 notify(callback, obs);
             }
+            afterTurn(session, agent);
             // 继续下一轮循环，让 LLM 根据 Observation 再次推理
         }
 
         // 达到最大步数仍未完成
         result.setMaxStepsReached(true);
         result.setReply("达到最大推理步数限制(" + maxSteps + ")，未能完成最终回复。");
+        afterTurn(session, agent);
         return result;
     }
 
@@ -135,6 +147,7 @@ public class ReActLoopService {
                 String thought = "[Thought] " + truncate(response.getContent());
                 result.getTraceSteps().add(thought);
                 notify(callback, thought);
+                afterTurn(session, agent);
                 return result;
             }
 
@@ -159,11 +172,23 @@ public class ReActLoopService {
                 result.getTraceSteps().add(obs);
                 notify(callback, obs);
             }
+            afterTurn(session, agent);
         }
 
         result.setMaxStepsReached(true);
         result.setReply("达到最大推理步数限制(" + maxSteps + ")，未能完成最终回复。");
+        afterTurn(session, agent);
         return result;
+    }
+
+    private void afterTurn(Session session, Agent agent) {
+        if (memoryManager != null) {
+            try {
+                memoryManager.afterTurn(session, agent);
+            } catch (Exception e) {
+                // 换页/提炼失败不影响主对话链路
+            }
+        }
     }
 
     private void notify(ProgressCallback callback, String step) {

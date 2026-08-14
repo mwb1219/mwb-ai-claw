@@ -97,7 +97,18 @@
 - [x] Agent 配置按协作模式分文件：`{mode}-agents.json`（运行目录优先），`--agent.mode` 启动参数切换
 - [x] 多 Agent 独立模型：每个 Agent 可配置自己的 `model` / `api-key`（缺省继承默认）
 
-### 3.5 待实施
+### 3.5 Phase 5：分层记忆（Layered Memory）✅
+
+- [x] 五层记忆模型：指令层 → 工作记忆（Hot）→ 短期（会话全量）→ 中期（摘要页）→ 长期（事实页）
+- [x] Token 预算模型：`contextWindow × 60%` 预算，System / Tools / Memory 按 25/25/50 分配，预算内组装上下文
+- [x] 动态换页（Paging）：每轮检查，预算溢出或未摘要消息达到阈值时，将最旧块压缩为摘要页落盘 `.agent/memory/pages/{sessionId}/summary-{blockStart}.json`
+- [x] 历史摘要注入 System 提示：换页后早期信息不丢失，LLM 仍可回答早期对话内容
+- [x] 结构化长期记忆：LLM 提炼事实（key/content/importance），重要度过滤 + 同 key 合并去重，落盘 `.agent/memory/facts.jsonl`
+- [x] 关键词检索：中文 bigram 分词 BM25 简化版，`read_memory` 工具支持 `query` 参数检索事实与摘要
+- [x] `write_memory` 工具升级：`content` + `topic` + `importance` 三参数，按重要度阈值写入事实
+- [x] 优雅降级：提炼/换页失败仅记录日志，不阻塞主对话链路
+
+### 3.6 待实施
 
 - [ ] IM 渠道接入：飞书、钉钉、Telegram
 - [ ] 多 Agent 协作模式：编排（orchestration）/ 流水线（pipeline）编排服务
@@ -181,14 +192,14 @@ infrastructure/
 
 ### 5.1 REST API
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| `POST` | `/agent/chat` | 同步对话 |
-| `GET` | `/agent/chat/stream` | SSE 流式对话（实时 token 推送） |
-| `POST` | `/agent/session` | 创建会话 |
-| `GET` | `/agent/session/{id}` | 查询会话详情 |
-| `GET` | `/agent/sessions` | 列出所有会话 |
-| `DELETE` | `/agent/session/{id}` | 删除会话 |
+| 方法       | 路径                    | 说明                    |
+| -------- | --------------------- | --------------------- |
+| `POST`   | `/agent/chat`         | 同步对话                  |
+| `GET`    | `/agent/chat/stream`  | SSE 流式对话（实时 token 推送） |
+| `POST`   | `/agent/session`      | 创建会话                  |
+| `GET`    | `/agent/session/{id}` | 查询会话详情                |
+| `GET`    | `/agent/sessions`     | 列出所有会话                |
+| `DELETE` | `/agent/session/{id}` | 删除会话                  |
 
 ### 5.2 WebSocket
 
@@ -197,6 +208,7 @@ ws://localhost:8080/ws/agent
 ```
 
 客户端发送 JSON：
+
 ```json
 {"type":"chat","message":"你好","sessionId":"xxx","agentId":"default"}
 ```
@@ -215,17 +227,17 @@ java -jar start/target/start-*.jar --spring.profiles.active=shell
 
 **支持的命令**：
 
-| 命令 | 功能 |
-|------|------|
-| 自由文本 | 发送给 Agent 对话 |
-| `/mode` | 切换 流式/同步 模式 |
-| `/session` | 查看当前会话 |
-| `/session new` | 创建新会话 |
-| `/session list` | 列出所有会话 |
+| 命令                     | 功能           |
+| ---------------------- | ------------ |
+| 自由文本                   | 发送给 Agent 对话 |
+| `/mode`                | 切换 流式/同步 模式  |
+| `/session`             | 查看当前会话       |
+| `/session new`         | 创建新会话        |
+| `/session list`        | 列出所有会话       |
 | `/session switch <id>` | 切换会话（支持前缀匹配） |
-| `/session delete <id>` | 删除会话 |
-| `/clear` | 清屏 |
-| `/exit` / `/quit` | 退出 |
+| `/session delete <id>` | 删除会话         |
+| `/clear`               | 清屏           |
+| `/exit` / `/quit`      | 退出           |
 
 流式模式下 AI 回复逐 token 绿色打印，Thought 紫色、Action 黄色、Observation 蓝色。命令历史自动保存至 `~/.mwb-ai-claw-history`。
 
@@ -317,17 +329,17 @@ unzip -p start/target/start-*.jar routing-agents.json > routing-agents.json
 
 字段说明：
 
-| 字段 | 必填 | 说明 |
-|------|------|------|
-| `agentId` | 是 | Agent 标识（路由目标） |
-| `name` | 是 | 显示名称 |
-| `description` | 否 | 能力描述，供 LLM 语义路由判断意图 |
-| `keywords` | 否 | 规则路由关键词 |
-| `systemPrompt` | 否 | 系统提示词，缺省继承默认 |
-| `tools` | 否 | 可用工具列表，缺省继承默认 |
-| `maxSteps` | 否 | 最大推理步数，缺省继承默认 |
-| `model` / `baseUrl` / `apiKey` | 否 | 独立模型配置，缺省继承默认，支持 `${VAR:default}` 占位符 |
-| `temperature` / `maxTokens` | 否 | 采样温度 / 单次最大 tokens，缺省继承默认 |
+| 字段                             | 必填 | 说明                                    |
+| ------------------------------ | -- | ------------------------------------- |
+| `agentId`                      | 是  | Agent 标识（路由目标）                        |
+| `name`                         | 是  | 显示名称                                  |
+| `description`                  | 否  | 能力描述，供 LLM 语义路由判断意图                   |
+| `keywords`                     | 否  | 规则路由关键词                               |
+| `systemPrompt`                 | 否  | 系统提示词，缺省继承默认                          |
+| `tools`                        | 否  | 可用工具列表，缺省继承默认                         |
+| `maxSteps`                     | 否  | 最大推理步数，缺省继承默认                         |
+| `model` / `baseUrl` / `apiKey` | 否  | 独立模型配置，缺省继承默认，支持 `${VAR:default}` 占位符 |
+| `temperature` / `maxTokens`    | 否  | 采样温度 / 单次最大 tokens，缺省继承默认             |
 
 ### 6.4 协作模式切换与多模型
 
@@ -357,20 +369,27 @@ RESEARCHER_MODEL=deepseek-chat
 RESEARCHER_API_KEY=sk-researcher-xxx
 ```
 
-### 6.5 长期记忆文件
+### 6.5 记忆文件
 
 ```
 .agent/
-├── AGENT.md            # Agent 扩展指令（追加到 system prompt）
-├── MEMORY.md           # 长期记忆（Agent 可通过工具读写）
-└── sessions/
-    ├── a1b2c3d4.json   # 会话文件（JSON 持久化）
-    └── e5f6g7h8.json
+├── AGENT.md                # Agent 扩展指令（追加到 system prompt）
+├── MEMORY.md               # 长期记忆（非分层模式使用，Agent 可通过工具读写）
+├── sessions/
+│   ├── a1b2c3d4.json       # 会话文件（JSON 持久化）
+│   └── e5f6g7h8.json
+└── memory/                 # 分层记忆（enabled=true 时启用）
+    ├── facts.jsonl         # 长期事实（JSONL，重要度过滤 + 同 key 合并去重）
+    └── pages/
+        └── {sessionId}/
+            ├── summary-0.json   # 摘要页：历史消息压缩（blockStart 标记）
+            ├── summary-10.json
+            └── ...
 ```
 
 ### 6.6 MCP Server 配置（mcp-server.json）
 
-MCP Server 配置独立在 `mcp-server.json`（与 Cursor / Claude 的 mcp.json 格式一致），**加载优先级：运行目录下的 `mcp-server.json` > classpath 默认模板**。支持 stdio 与 streamable_http 两种传输：
+MCP Server 配置独立在 `mcp-server.json`（与 Cursor / Claude 的 mcp.json 格式一致），**加载优先级：运行目录下的** **`mcp-server.json`** **> classpath 默认模板**。支持 stdio 与 streamable\_http 两种传输：
 
 ```json
 {
@@ -388,33 +407,33 @@ MCP Server 配置独立在 `mcp-server.json`（与 Cursor / Claude 的 mcp.json 
 ```
 
 - **stdio**：`command` + `args`，可加 `env` 传入密钥（如 `TAVILY_API_KEY`）。
-- **streamable_http**：`type: streamable_http` + `url`（单端点 HTTP 传输，自动兼容 SSE 响应与 `Mcp-Session-Id`）。
+- **streamable\_http**：`type: streamable_http` + `url`（单端点 HTTP 传输，自动兼容 SSE 响应与 `Mcp-Session-Id`）。
 
 ## 七、安全机制
 
-| 机制 | 说明 |
-|------|------|
-| 命令白名单 | 65 个允许的 Shell 命令，涵盖文件操作、文本处理、构建工具、包管理等 |
-| 命令黑名单 | 21 个危险模式：`rm -rf /`、`sudo`、`mkfs`、fork bomb、`chmod 777` 等 |
-| 路径限制 | `FileTool` 和 `ShellTool` 仅允许在配置的 `workspace-dir` 内操作 |
-| 超时控制 | 工具执行 30 秒超时，超时后强制终止进程 |
-| 输出截断 | 工具输出限制 10000 字符，防止撑爆上下文 |
-| HTTP 限制 | 可配置允许的 host 列表，阻止 SSRF |
+| 机制      | 说明                                                        |
+| ------- | --------------------------------------------------------- |
+| 命令白名单   | 65 个允许的 Shell 命令，涵盖文件操作、文本处理、构建工具、包管理等                    |
+| 命令黑名单   | 21 个危险模式：`rm -rf /`、`sudo`、`mkfs`、fork bomb、`chmod 777` 等 |
+| 路径限制    | `FileTool` 和 `ShellTool` 仅允许在配置的 `workspace-dir` 内操作      |
+| 超时控制    | 工具执行 30 秒超时，超时后强制终止进程                                     |
+| 输出截断    | 工具输出限制 10000 字符，防止撑爆上下文                                   |
+| HTTP 限制 | 可配置允许的 host 列表，阻止 SSRF                                    |
 
 所有安全违规均捕获为 `SecurityException`，返回 `ToolResult.error("安全拦截: ...")`，不会中断 ReAct 循环。
 
 ## 八、技术选型
 
-| 维度 | 选型 | 说明 |
-|------|------|------|
-| 框架 | Spring Boot 2.7 + COLA 5.0 | DDD 分层架构 |
-| LLM 调用 | OkHttp + OpenAI 兼容 API | 统一 Chat Completions 接口 |
-| 流式输出 | SSE (SseEmitter) + WebSocket (TextWebSocketHandler) | Token 级实时推送 |
-| 工具协议 | MCP (Model Context Protocol) | stdio / streamable_http（SSE 兼容） |
-| Shell 终端 | JLine 3.20 | ANSI 着色、命令历史、行编辑 |
-| 序列化 | Jackson | Session JSON 持久化 |
-| 持久化 | 本地文件 (.agent/ 目录) | 会话文件 + 长期记忆文件 |
-| 前端 | 原生 HTML/CSS/JS | 无框架依赖，可直接打开 |
+| 维度       | 选型                                                  | 说明                               |
+| -------- | --------------------------------------------------- | -------------------------------- |
+| 框架       | Spring Boot 2.7 + COLA 5.0                          | DDD 分层架构                         |
+| LLM 调用   | OkHttp + OpenAI 兼容 API                              | 统一 Chat Completions 接口           |
+| 流式输出     | SSE (SseEmitter) + WebSocket (TextWebSocketHandler) | Token 级实时推送                      |
+| 工具协议     | MCP (Model Context Protocol)                        | stdio / streamable\_http（SSE 兼容） |
+| Shell 终端 | JLine 3.20                                          | ANSI 着色、命令历史、行编辑                 |
+| 序列化      | Jackson                                             | Session JSON 持久化                 |
+| 持久化      | 本地文件 (.agent/ 目录)                                   | 会话文件 + 长期记忆文件                    |
+| 前端       | 原生 HTML/CSS/JS                                      | 无框架依赖，可直接打开                      |
 
 ## 九、开发指南
 
@@ -443,3 +462,4 @@ public class MyTool implements ToolExecutor {
 # 运行长期记忆测试
 mvn test -pl mwb-ai-claw-infrastructure -Dtest=MemoryFilePersistenceTest
 ```
+

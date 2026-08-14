@@ -33,6 +33,19 @@ agent:
     - shell
     - read_memory
     - write_memory
+  # 分层记忆（突破上下文窗口：分层存储 + 动态换页 + 检索召回）
+  # 直接对应 AgentProperties.memory（LayeredMemoryConfig），命令行覆盖示例：
+  #   --agent.memory.summary-block-size=2 --agent.memory.hot-window-size=4
+  memory:
+    enabled: true                  # 是否启用分层记忆
+    context-window-tokens: 65536   # 模型上下文窗口（tokens），用于预算计算
+    context-budget-ratio: 0.6      # 记忆区占模型窗口比例
+    prompt-budget-ratio: 0.25      # System 区（AGENT.md + 事实页）占记忆预算比例
+    tool-budget-ratio: 0.25        # Tools 区占记忆预算比例
+    hot-window-size: 20            # 工作记忆：Hot 原文最大条数
+    summary-block-size: 10         # 多少条消息合成一个摘要块（触发换页）
+    importance-threshold: 0.6      # 事实写入长期记忆的重要度阈值
+    top-k: 5                       # 关键词检索召回条数
   # 专家 Agent 配置已独立到 {mode}-agents.json（默认 routing-agents.json）
   # 可在运行目录下新增/修改，或使用 classpath 默认模板
   # 工具安全配置

@@ -1,5 +1,6 @@
 package com.mwb.ai.claw.infrastructure.config;
 
+import com.mwb.ai.claw.domain.memory.LayeredMemoryConfig;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
@@ -54,6 +55,9 @@ public class AgentProperties {
 
     /** 专家 Agent 定义列表（多 Agent 路由） */
     private List<AgentConfig> agents = new ArrayList<>();
+
+    /** 分层记忆配置（agent.memory.*） */
+    private LayeredMemoryConfig memory = new LayeredMemoryConfig();
 
     /**
      * 专家 Agent 配置（可覆盖默认 Agent 的部分字段）

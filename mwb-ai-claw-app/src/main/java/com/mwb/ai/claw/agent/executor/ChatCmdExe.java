@@ -11,6 +11,8 @@ import com.mwb.ai.claw.domain.core.ReActLoopService;
 import com.mwb.ai.claw.domain.core.ReActResult;
 import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
+import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
+import com.mwb.ai.claw.domain.memory.MemoryGateway;
 import com.mwb.ai.claw.dto.ChatCmd;
 import com.mwb.ai.claw.dto.data.AgentErrorCode;
 import com.mwb.ai.claw.dto.data.ChatResponseDTO;
@@ -33,6 +35,9 @@ public class ChatCmdExe {
 
     @Resource
     private MemoryGateway memoryGateway;
+
+    @Resource
+    private LayeredMemoryGateway layeredMemoryGateway;
 
     @Resource
     private ReActLoopService reActLoopService;
@@ -77,7 +82,14 @@ public class ChatCmdExe {
         // 5. 持久化会话
         memoryGateway.saveSession(session);
 
-        // 6. 组装响应
+        // 6. 分层记忆：会话结束提炼（剩余摘要 + 事实提取合并，失败不影响响应）
+        try {
+            layeredMemoryGateway.afterSession(session, agent);
+        } catch (Exception e) {
+            // 提炼失败仅记录，不阻塞主链路
+        }
+
+        // 7. 组装响应
         ChatResponseDTO dto = new ChatResponseDTO();
         dto.setSessionId(session.getSessionId());
         dto.setAgentId(agent.getAgentId());

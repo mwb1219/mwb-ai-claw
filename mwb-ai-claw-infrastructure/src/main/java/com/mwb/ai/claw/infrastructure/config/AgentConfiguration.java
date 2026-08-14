@@ -15,6 +15,7 @@ import com.mwb.ai.claw.domain.core.LlmBasedAgentRouter;
 import com.mwb.ai.claw.domain.core.ReActLoopService;
 import com.mwb.ai.claw.domain.core.RuleBasedAgentRouter;
 import com.mwb.ai.claw.domain.llm.LlmGateway;
+import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
 import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
 import com.mwb.ai.claw.domain.tool.ToolGateway;
 
@@ -33,14 +34,16 @@ public class AgentConfiguration {
 
     @Bean
     public ContextAssembler contextAssembler(ToolGateway toolGateway,
-                                             LongTermMemoryGateway memoryGateway) {
-        return new DefaultContextAssembler(toolGateway, memoryGateway);
+                                             LongTermMemoryGateway memoryGateway,
+                                             LayeredMemoryGateway layeredMemoryGateway) {
+        return new DefaultContextAssembler(toolGateway, memoryGateway, layeredMemoryGateway);
     }
 
     @Bean
     public ReActLoopService reActLoopService(LlmGateway llmGateway, ToolGateway toolGateway,
-                                             ContextAssembler contextAssembler) {
-        return new ReActLoopService(llmGateway, toolGateway, contextAssembler);
+                                             ContextAssembler contextAssembler,
+                                             LayeredMemoryGateway layeredMemoryGateway) {
+        return new ReActLoopService(llmGateway, toolGateway, contextAssembler, layeredMemoryGateway);
     }
 
     @Bean
