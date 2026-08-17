@@ -34,6 +34,7 @@ public class FileMemoryPageStore implements MemoryPageStore {
     private final Path memoryDir;
     private final Path pagesDir;
     private final Path factsFile;
+    private final Path archiveDir;
 
     public FileMemoryPageStore(AgentProperties properties) {
         String dir = properties.getMemoryDir();
@@ -44,12 +45,14 @@ public class FileMemoryPageStore implements MemoryPageStore {
         this.memoryDir = agentDir.resolve("memory");
         this.pagesDir = memoryDir.resolve("pages");
         this.factsFile = memoryDir.resolve("facts.jsonl");
+        this.archiveDir = memoryDir.resolve("archive");
     }
 
     @PostConstruct
     public void init() {
         try {
             Files.createDirectories(pagesDir);
+            Files.createDirectories(archiveDir);
             if (!Files.exists(factsFile)) {
                 Files.createFile(factsFile);
             }
@@ -171,6 +174,79 @@ public class FileMemoryPageStore implements MemoryPageStore {
             }
         } catch (IOException e) {
             log.warn("删除会话页失败: {}", sessionId, e);
+        }
+    }
+
+    @Override
+    public void saveArchive(MemoryPage page) {
+        try {
+            Path dir = archiveDir.resolve(page.getSessionId());
+            Files.createDirectories(dir);
+            Path file = dir.resolve("archive-" + page.getBlockStart() + ".json");
+            Files.write(file, JsonUtils.toJson(page).getBytes(StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            log.error("保存归档块失败: {} {}", page.getSessionId(), page.getBlockStart(), e);
+        }
+    }
+
+    @Override
+    public List<MemoryPage> loadArchive(String sessionId) {
+        Path dir = archiveDir.resolve(sessionId);
+        if (!Files.exists(dir)) {
+            return new ArrayList<>();
+        }
+        try (java.util.stream.Stream<Path> files = Files.list(dir)) {
+            return files.filter(p -> p.getFileName().toString().startsWith("archive-"))
+                    .filter(p -> p.toString().endsWith(".json"))
+                    .map(p -> {
+                        try {
+                            String json = new String(Files.readAllBytes(p), StandardCharsets.UTF_8);
+                            return JsonUtils.fromJson(json, MemoryPage.class);
+                        } catch (Exception e) {
+                            log.warn("加载归档块失败: {}", p.getFileName(), e);
+                            return null;
+                        }
+                    })
+                    .filter(page -> page != null)
+                    .sorted(Comparator.comparingInt(MemoryPage::getBlockStart))
+                    .collect(Collectors.toList());
+        } catch (IOException e) {
+            log.warn("列出归档块失败: {}", sessionId, e);
+            return new ArrayList<>();
+        }
+    }
+
+    @Override
+    public List<MemoryPage> listAllArchive() {
+        if (!Files.exists(archiveDir)) {
+            return new ArrayList<>();
+        }
+        List<MemoryPage> all = new ArrayList<>();
+        try (java.util.stream.Stream<Path> dirs = Files.list(archiveDir)) {
+            for (Path dir : dirs.collect(Collectors.toList())) {
+                if (!Files.isDirectory(dir)) {
+                    continue;
+                }
+                all.addAll(loadArchive(dir.getFileName().toString()));
+            }
+        } catch (IOException e) {
+            log.warn("列出全部归档块失败", e);
+        }
+        return all;
+    }
+
+    @Override
+    public void deleteSessionArchive(String sessionId) {
+        Path dir = archiveDir.resolve(sessionId);
+        if (!Files.exists(dir)) {
+            return;
+        }
+        try (java.util.stream.Stream<Path> files = Files.list(dir)) {
+            for (Path p : files.collect(Collectors.toList())) {
+                Files.deleteIfExists(p);
+            }
+        } catch (IOException e) {
+            log.warn("删除会话归档失败: {}", sessionId, e);
         }
     }
 

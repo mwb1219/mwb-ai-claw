@@ -1,9 +1,5 @@
 {
   "mcpServers": {
-    "fetch": {
-      "type": "streamable_http",
-      "url": "https://mcp.api-inference.modelscope.net/1986d43488d248/mcp"
-    },
     "tavily-mcp": {
       "command": "npx",
       "args": ["-y", "tavily-mcp@0.1.2"],

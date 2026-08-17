@@ -27,4 +27,18 @@ public interface MemoryPageStore {
 
     /** 删除某会话的全部页（摘要等） */
     void deleteSessionPages(String sessionId);
+
+    // ==================== 档案知识（跨会话 RAG） ====================
+
+    /** 保存会话原文归档块（ARCHIVE 页，全文可检索） */
+    void saveArchive(MemoryPage page);
+
+    /** 加载某会话的归档块 */
+    List<MemoryPage> loadArchive(String sessionId);
+
+    /** 加载全部会话的归档块（跨会话检索用） */
+    List<MemoryPage> listAllArchive();
+
+    /** 删除某会话的归档 */
+    void deleteSessionArchive(String sessionId);
 }

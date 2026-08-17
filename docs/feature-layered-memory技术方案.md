@@ -81,8 +81,10 @@ state "中期记忆 SUMMARY\n多级摘要页（磁盘 pages/summaries/）" as SU
 note right of SUMMARY : 旧块 LLM 压缩，多级叠加\n（block → section → session）
 state "长期记忆 FACT\nfacts.jsonl（跨会话，磁盘）" as FACT #pink
 note right of FACT : 结构化事实，带 key/重要度/\n版本/时间戳，同 key 去重合并
+state "档案知识 ARCHIVE\n会话原文归档（磁盘 archive/）" as ARCHIVE #lightyellow
+note right of ARCHIVE : 会话结束增量归档全文\n（按 summaryBlockSize 分块，幂等）\n跨会话检索的数据源
 state "检索页 RETRIEVED\n（临时召回，不落盘）" as RETRIEVED #lightgray
-note right of RETRIEVED : 仅 read_memory / search\n工具触发；当前版本\n不自动注入 readContext
+note right of RETRIEVED : read_memory / search 工具\n或 readContext 共享检索自动换入\n（shared-retrieve 开关）
 state "LLM 上下文" as LLM
 
 [*] --> SHORT : 用户输入 / LLM 回复 / 工具结果
@@ -92,17 +94,19 @@ HOT --> SUMMARY : afterTurn 换页\n（Token / Importance 策略可插拔）\nLL
 SUMMARY --> LLM : 历史摘要（System 区）
 HOT --> FACT : afterSession 提炼\nextractFacts（重要度评分）
 SHORT --> FACT : afterSession\n整会话提取
+SHORT --> ARCHIVE : afterSession 增量归档\n（archive-enabled）
 FACT --> FACT : merge 去重\n（同 key：重要度高者胜，\n版本自增，时间戳保留最新）
 note bottom: write_memory(topic,content,importance)\n工具 → saveFact → 同 key merge → FACT\n（重要度 < 阈值则丢弃）
-SUMMARY --> RETRIEVED : search 关键词召回\n（命中计数 + key 加权）
-FACT --> RETRIEVED : search 关键词召回
-RETRIEVED --> LLM : 工具结果（当前不自动注入）
+SUMMARY --> RETRIEVED : search 关键词/向量召回\n（命中计数 + key 加权 / 余弦相似度）
+FACT --> RETRIEVED : search 关键词/向量召回
+ARCHIVE --> RETRIEVED : search 关键词/向量召回\n（跨会话档案 RAG）
+RETRIEVED --> LLM : 工具结果 / readContext\n自动注入（shared-retrieve）
 FACT --> LLM : 长期记忆（System 区\n重要度降序，System 预算截取）
 LLM --> SHORT : 回复 / tool_calls 写回 Session
 @enduml
 ```
 
-> 说明：RETRIEVED 目前不自动注入上下文（`readContext` 中 `retrievedPages` 恒为空），只有 `read_memory` 工具显式触发召回；SUMMARY 目前只有一级（`afterTurn` 生成 block 级摘要），多级 Summary Tree 尚未实现。
+> 说明：Phase 3 起 RETRIEVED 会自动注入上下文（`readContext` 第 4 步共享检索，`shared-retrieve` 开关控制）；检索数据源包含 FACT + SUMMARY + ARCHIVE（跨会话、多 Agent 共享）。SUMMARY 目前只有一级（`afterTurn` 生成 block 级摘要），多级 Summary Tree 尚未实现。
 
 ## 四、核心机制一：动态换页（Paging）
 
@@ -351,10 +355,10 @@ agent:
 
 ## 十、实施阶段（Roadmap）
 
-- **Phase 1（本期落地）**：页结构与 token 预算 → 多级摘要换页 → 轮次/预算触发提炼 → `facts.jsonl` 结构化长期记忆 → 关键词检索 → `write_memory` 工具升级；
-- **Phase 2**：重要度换页策略可插拔、事实 merge 去重、提炼异步化（线程池/事件）；
-- **Phase 3**：向量检索、跨会话档案 RAG、多 Agent 共享记忆；
-- **Phase 4**：成本优化（提炼调度与缓存、小模型提炼）、记忆可视化面板（`/memory` 查看分层内容）。
+- **Phase 1（✅ 已实施）**：页结构与 token 预算 → 多级摘要换页 → 轮次/预算触发提炼 → `facts.jsonl` 结构化长期记忆 → 关键词检索 → `write_memory` 工具升级；
+- **Phase 2（✅ 已实施）**：重要度换页策略可插拔、事实 merge 去重、提炼异步化（线程池/事件）；
+- **Phase 3（✅ 已实施）**：向量检索（EmbeddingGateway + VectorMemoryRetriever + Hybrid RRF）、跨会话档案 RAG（ARCHIVE 页 + afterSession 增量归档 + 检索纳入）、多 Agent 共享记忆（readContext 自动检索换入 + 跨会话候选）；
+- **Phase 4（待实施）**：成本优化（提炼调度与缓存、小模型提炼）、记忆可视化面板（`/memory` 查看分层内容）。
 
 ## 十一、风险与权衡
 

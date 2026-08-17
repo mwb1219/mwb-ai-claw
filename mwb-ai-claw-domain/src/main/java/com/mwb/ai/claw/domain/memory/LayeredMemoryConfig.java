@@ -41,6 +41,30 @@ public class LayeredMemoryConfig {
     /** 提炼是否异步执行（线程池串行，不阻塞主对话链路） */
     private boolean synthesisAsync = true;
 
+    /** 检索器类型：keyword（关键词，默认）| vector（向量）| hybrid（关键词+向量 RRF 融合） */
+    private String retriever = "keyword";
+
+    /** 向量检索：是否启用向量索引（embedding 未配置时自动降级为关键词检索） */
+    private boolean vectorEnabled = false;
+
+    /** 向量检索：Embedding 模型名（OpenAI 兼容，如 text-embedding-3-small；留空则尝试用主模型 baseUrl） */
+    private String embeddingModel = "";
+
+    /** 向量检索：Embedding Base URL（留空则继承 agent.base-url） */
+    private String embeddingBaseUrl = "";
+
+    /** 向量检索：Embedding API Key（留空则继承 agent.api-key） */
+    private String embeddingApiKey = "";
+
+    /** 向量检索：本地降级向量维度（无 embedding 服务时用确定性哈希向量兜底） */
+    private int vectorDimensions = 256;
+
+    /** 档案 RAG：会话结束后是否把会话原文归档为 ARCHIVE 页（跨会话可检索） */
+    private boolean archiveEnabled = true;
+
+    /** 多 Agent 共享：readContext 时是否自动检索其他会话的档案/摘要/事实并换入（共享记忆） */
+    private boolean sharedRetrieve = true;
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -135,5 +159,69 @@ public class LayeredMemoryConfig {
 
     public void setSynthesisAsync(boolean synthesisAsync) {
         this.synthesisAsync = synthesisAsync;
+    }
+
+    public String getRetriever() {
+        return retriever;
+    }
+
+    public void setRetriever(String retriever) {
+        this.retriever = retriever;
+    }
+
+    public boolean isVectorEnabled() {
+        return vectorEnabled;
+    }
+
+    public void setVectorEnabled(boolean vectorEnabled) {
+        this.vectorEnabled = vectorEnabled;
+    }
+
+    public String getEmbeddingModel() {
+        return embeddingModel;
+    }
+
+    public void setEmbeddingModel(String embeddingModel) {
+        this.embeddingModel = embeddingModel;
+    }
+
+    public String getEmbeddingBaseUrl() {
+        return embeddingBaseUrl;
+    }
+
+    public void setEmbeddingBaseUrl(String embeddingBaseUrl) {
+        this.embeddingBaseUrl = embeddingBaseUrl;
+    }
+
+    public String getEmbeddingApiKey() {
+        return embeddingApiKey;
+    }
+
+    public void setEmbeddingApiKey(String embeddingApiKey) {
+        this.embeddingApiKey = embeddingApiKey;
+    }
+
+    public int getVectorDimensions() {
+        return vectorDimensions;
+    }
+
+    public void setVectorDimensions(int vectorDimensions) {
+        this.vectorDimensions = vectorDimensions;
+    }
+
+    public boolean isArchiveEnabled() {
+        return archiveEnabled;
+    }
+
+    public void setArchiveEnabled(boolean archiveEnabled) {
+        this.archiveEnabled = archiveEnabled;
+    }
+
+    public boolean isSharedRetrieve() {
+        return sharedRetrieve;
+    }
+
+    public void setSharedRetrieve(boolean sharedRetrieve) {
+        this.sharedRetrieve = sharedRetrieve;
     }
 }

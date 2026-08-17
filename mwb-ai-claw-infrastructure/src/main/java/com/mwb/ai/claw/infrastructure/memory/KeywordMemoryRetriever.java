@@ -14,9 +14,10 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 关键词记忆检索器（Phase 1）：对事实 + 摘要按查询词命中打分召回。
+ * 关键词记忆检索器（Phase 1）：对事实 + 摘要 + 档案按查询词命中打分召回。
  * <p>
  * 简化 BM25：分词（英文按空格 / 中文按字符 bigram）→ 命中计数加权（标题/内容匹配加分）。
+ * 候选范围跨会话（多 Agent 共享）：facts.jsonl + 全部会话摘要 + 全部会话归档。
  */
 @Component
 public class KeywordMemoryRetriever implements MemoryRetriever {
@@ -42,6 +43,7 @@ public class KeywordMemoryRetriever implements MemoryRetriever {
         List<MemoryPage> candidates = new ArrayList<>();
         candidates.addAll(pageStore.loadFacts());
         candidates.addAll(pageStore.listAllSummaries());
+        candidates.addAll(pageStore.listAllArchive());
 
         List<ScoredPage> scored = new ArrayList<>();
         for (MemoryPage page : candidates) {

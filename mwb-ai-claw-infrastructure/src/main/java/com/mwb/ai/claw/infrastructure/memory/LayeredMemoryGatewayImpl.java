@@ -55,11 +55,14 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
         this.evictionPolicy = "importance".equalsIgnoreCase(config.getEvictionPolicy())
                 ? new ImportanceEvictionPolicy() : new TokenBudgetEvictionPolicy();
         this.synthesisExecutor = synthesisExecutor;
-        log.info("分层记忆配置: enabled={}, window={}, budgetRatio={}, hotWindow={}, blockSize={}, threshold={}, topK={}, policy={}, async={}, model={}",
+        log.info("分层记忆配置: enabled={}, window={}, budgetRatio={}, hotWindow={}, blockSize={}, threshold={}, topK={}, policy={}, async={}, retriever={}, vector={}, archive={}, sharedRetrieve={}, model={}",
                 config.isEnabled(), config.getContextWindowTokens(), config.getContextBudgetRatio(),
                 config.getHotWindowSize(), config.getSummaryBlockSize(),
                 config.getImportanceThreshold(), config.getTopK(),
-                config.getEvictionPolicy(), config.isSynthesisAsync(), properties.getModel());
+                config.getEvictionPolicy(), config.isSynthesisAsync(),
+                config.getRetriever(), config.isVectorEnabled(),
+                config.isArchiveEnabled(), config.isSharedRetrieve(),
+                properties.getModel());
     }
 
     @Override
@@ -94,10 +97,24 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
         int hotTokens = Math.max(budget.getMemoryBudget() - summaryTokens, 0);
         List<Message> hot = takeRecentMessages(all, hotTokens, config.getHotWindowSize());
 
+        // 4. 共享记忆自动检索换入（多 Agent 共享 + 跨会话档案 RAG）：
+        //    以最新 user 消息为查询，跨会话检索事实/摘要/档案并注入，占用 Memory 预算的一小部分
+        List<MemoryPage> retrieved = new ArrayList<>();
+        if (config.isSharedRetrieve()) {
+            String query = latestUserText(all);
+            if (query != null && !query.trim().isEmpty()) {
+                int retrievedBudget = Math.max(256, budget.getMemoryBudget() / 5);
+                retrieved = trimByTokens(retriever.search(query.trim(), config.getTopK()), retrievedBudget);
+                if (!retrieved.isEmpty()) {
+                    log.debug("分层记忆: 共享检索换入 {} 条（查询 '{}'）", retrieved.size(), query.trim());
+                }
+            }
+        }
+
         view.setWorkingMessages(hot);
         view.setSummaryPages(summaries);
         view.setFactPages(facts);
-        view.setRetrievedPages(new ArrayList<>());
+        view.setRetrievedPages(retrieved);
         return view;
     }
 
@@ -154,8 +171,13 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
         }
     }
 
-    /** 会话回合后：提取事实并合并去重（同 key 按重要度/信息量择优，版本自增，时间戳保留最新） */
+    /** 会话回合后：归档原文（档案 RAG）+ 提取事实并合并去重（同 key 按重要度/信息量择优，版本自增，时间戳保留最新） */
     private void doAfterSession(String sessionId, List<Message> all) {
+        // 1. 会话原文增量归档（跨会话档案 RAG 数据源，多 Agent 共享）
+        if (config.isArchiveEnabled() && !all.isEmpty()) {
+            archiveMessages(sessionId, all);
+        }
+        // 2. 事实提炼 + merge
         List<MemoryPage> freshFacts = synthesizer.extractFacts(all);
         int saved = 0;
         for (MemoryPage fresh : freshFacts) {
@@ -172,6 +194,46 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
             saved++;
         }
         log.info("分层记忆: 会话 {} 提炼结束，新增/更新事实 {} 条", sessionId, saved);
+    }
+
+    /** 把会话原文按块归档为 ARCHIVE 页（只归档上次之后的新消息，幂等） */
+    private void archiveMessages(String sessionId, List<Message> all) {
+        int blockSize = config.getSummaryBlockSize();
+        int archived = lastArchivedIndex(sessionId);
+        int count = 0;
+        int end;
+        for (int start = archived; start < all.size(); start += blockSize) {
+            end = Math.min(start + blockSize, all.size());
+            List<Message> block = new ArrayList<>(all.subList(start, end));
+            String content = messagesToText(block);
+            MemoryPage page = MemoryPage.archive(
+                    "archive-" + sessionId + "-" + start,
+                    content, sessionId, start, end, TokenEstimator.estimate(content));
+            pageStore.saveArchive(page);
+            count++;
+        }
+        if (count > 0) {
+            log.info("分层记忆: 会话 {} 归档 {} 块（历史原文，可跨会话检索）", sessionId, count);
+        }
+    }
+
+    /** 已归档的消息边界 = 所有 ARCHIVE 页 blockEnd 的最大值 */
+    private int lastArchivedIndex(String sessionId) {
+        return pageStore.loadArchive(sessionId).stream()
+                .mapToInt(MemoryPage::getBlockEnd)
+                .max().orElse(0);
+    }
+
+    private String messagesToText(List<Message> block) {
+        StringBuilder sb = new StringBuilder();
+        for (Message m : block) {
+            if (sb.length() > 0) {
+                sb.append("\n");
+            }
+            sb.append("[").append(m.getRole()).append("] ")
+                    .append(m.getContent() == null ? "" : m.getContent());
+        }
+        return sb.toString();
     }
 
     @Override
@@ -359,5 +421,15 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
             tokens += TokenEstimator.estimate(m);
         }
         return tokens;
+    }
+
+    /** 最新 user 消息内容（用作共享检索查询词） */
+    private String latestUserText(List<Message> all) {
+        for (int i = all.size() - 1; i >= 0; i--) {
+            if ("user".equals(all.get(i).getRole())) {
+                return all.get(i).getContent();
+            }
+        }
+        return null;
     }
 }

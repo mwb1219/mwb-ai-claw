@@ -3,12 +3,12 @@ package com.mwb.ai.claw.domain.memory;
 /**
  * 记忆页：分层记忆的最小存储单元。
  * <p>
- * 类型：HOT（工作记忆原文）/ SUMMARY（历史块摘要）/ FACT（结构化事实，跨会话）/ RETRIEVED（检索召回页）。
+ * 类型：HOT（工作记忆原文）/ SUMMARY（历史块摘要）/ FACT（结构化事实，跨会话）/ RETRIEVED（检索召回页）/ ARCHIVE（会话原文归档，跨会话 RAG 数据源）。
  */
 public class MemoryPage {
 
     public enum PageType {
-        HOT, SUMMARY, FACT, RETRIEVED
+        HOT, SUMMARY, FACT, RETRIEVED, ARCHIVE
     }
 
     private String pageId;
@@ -65,6 +65,20 @@ public class MemoryPage {
         page.content = content;
         page.importance = importance;
         page.sessionId = sessionId;
+        return page;
+    }
+
+    /** 会话原文归档页（跨会话档案 RAG 数据源） */
+    public static MemoryPage archive(String pageId, String content, String sessionId,
+                                     int blockStart, int blockEnd, int tokenCount) {
+        MemoryPage page = new MemoryPage();
+        page.pageId = pageId;
+        page.type = PageType.ARCHIVE;
+        page.content = content;
+        page.sessionId = sessionId;
+        page.blockStart = blockStart;
+        page.blockEnd = blockEnd;
+        page.tokenCount = tokenCount;
         return page;
     }
 
