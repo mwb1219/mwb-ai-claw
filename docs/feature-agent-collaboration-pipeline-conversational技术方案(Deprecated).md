@@ -2,7 +2,7 @@
 
 > 迭代目标：在现有「专家路由（Routing）」基础上，新增两种 Agent 协作模式 —— 流水线编排与对话式协作
 > 文档编号：feature-agent-collaboration-pipeline-conversational
-> 关联文档：`feature-multi-agent-routing技术方案.md`（路由模式基线）
+> 关联文档：`feature-multi-agent-routing技术方案(SUBMIT).md`（路由模式基线）
 
 ## 1. 背景与目标
 

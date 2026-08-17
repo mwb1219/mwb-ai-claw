@@ -2,7 +2,7 @@
 
 > 迭代目标：彻底重构多 Agent 协作机制 —— Agent 配置与编排解耦、编排插件化、按用户意图动态选择编排
 > 文档编号：feature-config-orchestration-separation
-> 关联文档：`feature-multi-agent-routing技术方案.md`（路由基线）、`feature-agent-collaboration-pipeline-conversational技术方案.md`（协作模式设计基线）
+> 关联文档：`feature-multi-agent-routing技术方案(SUBMIT).md`（路由基线）、`feature-agent-collaboration-pipeline-conversational技术方案(Deprecated).md`（协作模式设计基线）
 
 > **实施状态（2026-08-17）：已实施 ✅**（除标注「可选二期」项）
 > - 已完成：配置与编排分离（agents.json / orchestrations.json）、编排插件化（AgentOrchestrator SPI + OrchestratorRegistry）、意图驱动选择（RuleBasedOrchestrationSelector + 显式指定 + 默认兜底）、Routing/Pipeline 内置编排、旧配置彻底废弃
