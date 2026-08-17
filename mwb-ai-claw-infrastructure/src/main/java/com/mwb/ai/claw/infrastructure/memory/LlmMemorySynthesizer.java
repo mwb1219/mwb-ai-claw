@@ -7,6 +7,7 @@ import com.mwb.ai.claw.domain.llm.LlmGateway;
 import com.mwb.ai.claw.domain.llm.LlmMessage;
 import com.mwb.ai.claw.domain.llm.LlmRequest;
 import com.mwb.ai.claw.domain.llm.LlmResponse;
+import com.mwb.ai.claw.domain.memory.LayeredMemoryConfig;
 import com.mwb.ai.claw.domain.memory.MemoryPage;
 import com.mwb.ai.claw.domain.memory.MemorySynthesizer;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
@@ -24,6 +25,10 @@ import java.util.UUID;
  * 基于 LLM 的记忆提炼器：调用 LLM 生成历史摘要 / 提取事实 / 合并去重。
  * <p>
  * 提炼失败时优雅降级（返回 null / 空列表），不阻塞主对话链路。
+ * <p>
+ * Phase 4 成本优化：
+ * - 小模型提炼：使用独立配置的提炼模型（synthesizer-model，留空继承主模型）；
+ * - 提炼缓存：按输入内容哈希缓存 summarize/extract 结果，同一输入不重复调 LLM。
  */
 @Component
 public class LlmMemorySynthesizer implements MemorySynthesizer {
@@ -32,10 +37,12 @@ public class LlmMemorySynthesizer implements MemorySynthesizer {
 
     private final LlmGateway llmGateway;
     private final AgentProperties properties;
+    private final SynthesisCache cache;
 
-    public LlmMemorySynthesizer(LlmGateway llmGateway, AgentProperties properties) {
+    public LlmMemorySynthesizer(LlmGateway llmGateway, AgentProperties properties, SynthesisCache cache) {
         this.llmGateway = llmGateway;
         this.properties = properties;
+        this.cache = cache;
     }
 
     @Override
@@ -47,10 +54,20 @@ public class LlmMemorySynthesizer implements MemorySynthesizer {
             sb.append(i + 1).append(".[").append(m.getRole()).append("] ")
                     .append(truncate(m.getContent(), 500)).append("\n");
         }
+        String cacheKey = "summary:" + digest(sb.toString());
+        String cached = cache.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
         try {
-            LlmResponse resp = llmGateway.chat(simpleRequest(sb.toString()), defaultModelConfig());
+            LlmResponse resp = llmGateway.chat(simpleRequest(sb.toString()), synthesisModelConfig());
             String content = resp.getContent();
-            return content == null ? null : content.trim();
+            if (content != null) {
+                content = content.trim();
+                cache.put(cacheKey, content);
+                return content;
+            }
+            return null;
         } catch (Exception e) {
             log.warn("生成对话摘要失败，已降级跳过: {}", e.getMessage());
             return null;
@@ -70,9 +87,16 @@ public class LlmMemorySynthesizer implements MemorySynthesizer {
         for (Message m : messages) {
             sb.append("[").append(m.getRole()).append("] ").append(truncate(m.getContent(), 400)).append("\n");
         }
+        String cacheKey = "facts:" + digest(sb.toString());
+        List<MemoryPage> cached = cache.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
         try {
-            LlmResponse resp = llmGateway.chat(simpleRequest(sb.toString()), defaultModelConfig());
-            return parseFacts(resp.getContent());
+            LlmResponse resp = llmGateway.chat(simpleRequest(sb.toString()), synthesisModelConfig());
+            List<MemoryPage> facts = parseFacts(resp.getContent());
+            cache.put(cacheKey, facts);
+            return facts;
         } catch (Exception e) {
             log.warn("提取事实失败，已降级跳过: {}", e.getMessage());
             return new ArrayList<>();
@@ -114,14 +138,35 @@ public class LlmMemorySynthesizer implements MemorySynthesizer {
         return request;
     }
 
-    private ModelConfig defaultModelConfig() {
+    /** 提炼模型配置：优先 synthesizer 独立配置（小模型提炼），留空继承主模型 */
+    private ModelConfig synthesisModelConfig() {
+        LayeredMemoryConfig memory = properties.getMemory();
         ModelConfig config = new ModelConfig();
-        config.setModel(properties.getModel());
-        config.setBaseUrl(properties.getBaseUrl());
-        config.setApiKey(properties.getApiKey());
+        config.setModel(nonBlank(memory.getSynthesizerModel()) ? memory.getSynthesizerModel() : properties.getModel());
+        config.setBaseUrl(nonBlank(memory.getSynthesizerBaseUrl()) ? memory.getSynthesizerBaseUrl() : properties.getBaseUrl());
+        config.setApiKey(nonBlank(memory.getSynthesizerApiKey()) ? memory.getSynthesizerApiKey() : properties.getApiKey());
         config.setTemperature(0.3);
         config.setMaxTokens(1024);
         return config;
+    }
+
+    private boolean nonBlank(String s) {
+        return s != null && !s.trim().isEmpty();
+    }
+
+    /** 输入内容摘要（缓存键）：MD5 十六进制，避免长文本做 Map 键 */
+    private String digest(String text) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
+            byte[] bytes = md.digest(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : bytes) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return Integer.toHexString(text.hashCode());
+        }
     }
 
     private List<MemoryPage> parseFacts(String content) {

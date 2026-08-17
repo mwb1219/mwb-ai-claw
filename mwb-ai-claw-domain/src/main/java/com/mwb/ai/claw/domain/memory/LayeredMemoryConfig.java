@@ -65,6 +65,20 @@ public class LayeredMemoryConfig {
     /** 多 Agent 共享：readContext 时是否自动检索其他会话的档案/摘要/事实并换入（共享记忆） */
     private boolean sharedRetrieve = true;
 
+    // ==================== Phase 4：成本优化 ====================
+
+    /** 小模型提炼：提炼（摘要/事实提取）专用模型名（留空继承主模型，可用更便宜的模型降低成本） */
+    private String synthesizerModel = "";
+
+    /** 小模型提炼：Base URL（留空继承 agent.base-url） */
+    private String synthesizerBaseUrl = "";
+
+    /** 小模型提炼：API Key（留空继承 agent.api-key） */
+    private String synthesizerApiKey = "";
+
+    /** 提炼缓存容量：按输入内容哈希缓存 summarize/extract 结果，避免重复调 LLM（<=0 关闭缓存） */
+    private int synthesisCacheSize = 50;
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -223,5 +237,37 @@ public class LayeredMemoryConfig {
 
     public void setSharedRetrieve(boolean sharedRetrieve) {
         this.sharedRetrieve = sharedRetrieve;
+    }
+
+    public String getSynthesizerModel() {
+        return synthesizerModel;
+    }
+
+    public void setSynthesizerModel(String synthesizerModel) {
+        this.synthesizerModel = synthesizerModel;
+    }
+
+    public String getSynthesizerBaseUrl() {
+        return synthesizerBaseUrl;
+    }
+
+    public void setSynthesizerBaseUrl(String synthesizerBaseUrl) {
+        this.synthesizerBaseUrl = synthesizerBaseUrl;
+    }
+
+    public String getSynthesizerApiKey() {
+        return synthesizerApiKey;
+    }
+
+    public void setSynthesizerApiKey(String synthesizerApiKey) {
+        this.synthesizerApiKey = synthesizerApiKey;
+    }
+
+    public int getSynthesisCacheSize() {
+        return synthesisCacheSize;
+    }
+
+    public void setSynthesisCacheSize(int synthesisCacheSize) {
+        this.synthesisCacheSize = synthesisCacheSize;
     }
 }

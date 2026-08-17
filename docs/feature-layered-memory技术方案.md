@@ -345,12 +345,26 @@ agent:
       prompt-budget-ratio: 0.25        # System 区（AGENT.md + Facts）
       tool-budget-ratio: 0.25          # Tools 区
       hot-window-size: 20              # Hot 原文条数
-      summary-block-size: 10           # 多少条消息合成一个摘要块
-      max-summary-depth: 3             # 摘要树深度
+      summary-block-size: 10           # 多少条消息合成一个摘要块 / 一个归档块
+      max-summary-depth: 3             # 摘要树深度（预留，当前单级）
       synthesize-trigger-rounds: 10    # 每 N 轮提炼检查
       importance-threshold: 0.6        # 事实写入阈值
-      retriever: keyword               # keyword | vector
+      eviction-policy: token           # 换页策略：token | importance（Phase 2 可插拔）
+      synthesis-async: true            # 提炼异步化（线程池，Phase 2）
+      retriever: hybrid                # 检索器：keyword | vector | hybrid（RRF 融合，默认，Phase 3）
       top-k: 5                         # 检索召回条数
+      vector-enabled: true             # 启用向量索引（embedding 不可用时自动降级，Phase 3）
+      embedding-model: ${EMBEDDING_MODEL:}     # Embedding 模型（留空继承主模型）
+      embedding-base-url: ${EMBEDDING_BASE_URL:}   # Embedding Base URL（留空继承）
+      embedding-api-key: ${EMBEDDING_API_KEY:}     # Embedding API Key（留空继承）
+      vector-dimensions: 256           # 向量维度（本地哈希降级，预留）
+      archive-enabled: true            # 会话结束归档原文为 ARCHIVE 页（Phase 3）
+      shared-retrieve: true            # 多 Agent 共享：readContext 自动检索换入（Phase 3）
+      # ---- Phase 4：成本优化 ----
+      synthesizer-model: ${SYNTHESIS_MODEL:}     # 小模型提炼：提炼专用模型（留空继承主模型）
+      synthesizer-base-url: ${SYNTHESIS_BASE_URL:}   # 小模型提炼：Base URL（留空继承）
+      synthesizer-api-key: ${SYNTHESIS_API_KEY:}     # 小模型提炼：API Key（留空继承）
+      synthesis-cache-size: 50         # 提炼缓存容量（按输入内容哈希去重，<=0 关闭）
 ```
 
 ## 十、实施阶段（Roadmap）
@@ -358,9 +372,24 @@ agent:
 - **Phase 1（✅ 已实施）**：页结构与 token 预算 → 多级摘要换页 → 轮次/预算触发提炼 → `facts.jsonl` 结构化长期记忆 → 关键词检索 → `write_memory` 工具升级；
 - **Phase 2（✅ 已实施）**：重要度换页策略可插拔、事实 merge 去重、提炼异步化（线程池/事件）；
 - **Phase 3（✅ 已实施）**：向量检索（EmbeddingGateway + VectorMemoryRetriever + Hybrid RRF）、跨会话档案 RAG（ARCHIVE 页 + afterSession 增量归档 + 检索纳入）、多 Agent 共享记忆（readContext 自动检索换入 + 跨会话候选）；
-- **Phase 4（待实施）**：成本优化（提炼调度与缓存、小模型提炼）、记忆可视化面板（`/memory` 查看分层内容）。
+- **Phase 4（✅ 已实施）**：成本优化（小模型提炼 `synthesizer-model` + 提炼缓存 `SynthesisCache` + 提炼任务去重调度）、记忆可视化面板（`/memory` 查看分层内容）；
+- **Phase 5（待规划）**：更多 Agent 协作模式、记忆编辑/删除工具、跨会话记忆归档可视化。
 
-## 十一、风险与权衡
+## 十一、记忆可视化面板（/memory）
+
+Web 模式（`--spring.profiles.active=web`）下提供只读 REST 面板，展示分层记忆各层内容与运行状态：
+
+| 端点 | 说明 |
+| ---- | ---- |
+| `GET /memory` | 总览：分层记忆配置快照 + 各层统计（FACT/SUMMARY/ARCHIVE 数量与 token）+ 提炼缓存命中率 + 提炼队列待办数 |
+| `GET /memory/facts` | 长期记忆事实列表（重要度降序，含版本/时间戳） |
+| `GET /memory/summaries?sessionId=` | 中期摘要页（可按会话过滤，空=全部会话） |
+| `GET /memory/archive?sessionId=` | 档案归档块（可按会话过滤，空=全部会话） |
+| `GET /memory/search?q=&topK=5` | 检索召回调试：按当前检索器（keyword/vector/hybrid）执行检索 |
+
+实现：`MemoryController`（adapter 层，`@Profile("web")`）只读注入 `MemoryPageStore` / `LayeredMemoryGateway`，不修改记忆数据。
+
+## 十二、风险与权衡
 
 | 风险        | 缓解                             |
 | --------- | ------------------------------ |

@@ -3,7 +3,9 @@ package com.mwb.ai.claw.shell;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 
 import javax.annotation.Resource;
 
@@ -27,10 +29,18 @@ import com.mwb.ai.claw.api.AgentServiceI;
 import com.mwb.ai.claw.domain.core.ProgressCallback;
 import com.mwb.ai.claw.domain.llm.LlmResponse;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
+import com.mwb.ai.claw.domain.memory.LayeredMemoryConfig;
+import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
+import com.mwb.ai.claw.domain.memory.MemoryPage;
+import com.mwb.ai.claw.domain.memory.MemoryPageStore;
 import com.mwb.ai.claw.dto.ChatCmd;
 import com.mwb.ai.claw.dto.CreateSessionCmd;
 import com.mwb.ai.claw.dto.data.ChatResponseDTO;
 import com.mwb.ai.claw.dto.data.SessionDTO;
+import com.mwb.ai.claw.infrastructure.config.AgentProperties;
+import com.mwb.ai.claw.infrastructure.memory.MemorySynthesisExecutor;
+import com.mwb.ai.claw.infrastructure.memory.SynthesisCache;
+import com.mwb.ai.claw.infrastructure.util.TokenEstimator;
 
 /**
  * Agent Shell：终端 REPL 交互模式。
@@ -54,6 +64,21 @@ public class AgentShell implements CommandLineRunner {
 
     @Resource
     private ChatCmdExe chatCmdExe;
+
+    @Resource
+    private MemoryPageStore pageStore;
+
+    @Resource
+    private LayeredMemoryGateway layeredMemoryGateway;
+
+    @Resource
+    private AgentProperties agentProperties;
+
+    @Resource
+    private SynthesisCache synthesisCache;
+
+    @Resource
+    private MemorySynthesisExecutor synthesisExecutor;
 
     private Terminal terminal;
     private LineReader reader;
@@ -172,6 +197,9 @@ public class AgentShell implements CommandLineRunner {
             case "/session":
                 handleSessionCommand(arg1, arg2);
                 break;
+            case "/memory":
+                handleMemoryCommand(arg1, arg2);
+                break;
             case "/clear":
                 terminal.puts(org.jline.utils.InfoCmp.Capability.clear_screen);
                 terminal.flush();
@@ -219,6 +247,116 @@ public class AgentShell implements CommandLineRunner {
             default:
                 println(STYLE_WARN, "未知子命令: " + sub + "，支持: new, list, switch, delete");
         }
+    }
+
+    // ==================== 记忆可视化查询 ====================
+
+    private void handleMemoryCommand(String sub, String arg) {
+        if (!agentProperties.getMemory().isEnabled()) {
+            println(STYLE_WARN, "分层记忆未启用（agent.memory.layered.enabled=false）");
+            return;
+        }
+        if (sub == null || sub.equalsIgnoreCase("stats") || sub.equalsIgnoreCase("overview")) {
+            showMemoryStats();
+            return;
+        }
+        switch (sub.toLowerCase()) {
+            case "facts":
+                showMemoryFacts();
+                break;
+            case "summaries":
+                showMemoryPages(pageStore.listAllSummaries(), "SUMMARY");
+                break;
+            case "archive":
+                showMemoryPages(pageStore.listAllArchive(), "ARCHIVE");
+                break;
+            case "search":
+                if (arg == null) {
+                    println(STYLE_WARN, "用法: /memory search <关键词> [topK]");
+                } else {
+                    showMemorySearch(arg);
+                }
+                break;
+            default:
+                println(STYLE_WARN, "未知子命令: " + sub + "，支持: stats, facts, summaries, archive, search");
+        }
+    }
+
+    /** 分层记忆总览：配置 + 各层统计 + 提炼缓存/队列状态 */
+    private void showMemoryStats() {
+        LayeredMemoryConfig cfg = agentProperties.getMemory();
+        List<MemoryPage> facts = pageStore.loadFacts();
+        List<MemoryPage> summaries = pageStore.listAllSummaries();
+        List<MemoryPage> archives = pageStore.listAllArchive();
+        println(STYLE_PROMPT, "◈ 分层记忆总览 ◈");
+        println(STYLE_INFO, String.format("  启用: %s | 检索器: %s | 向量: %s | 档案: %s | 共享: %s | topK: %d",
+                cfg.isEnabled(), cfg.getRetriever(), cfg.isVectorEnabled(),
+                cfg.isArchiveEnabled(), cfg.isSharedRetrieve(), cfg.getTopK()));
+        println(STYLE_INFO, String.format("  FACT    : %d 条 / %d tokens", facts.size(), sumTokens(facts)));
+        println(STYLE_INFO, String.format("  SUMMARY : %d 页 / %d tokens", summaries.size(), sumTokens(summaries)));
+        println(STYLE_INFO, String.format("  ARCHIVE : %d 块 / %d tokens", archives.size(), sumTokens(archives)));
+        Map<String, Object> cache = synthesisCache.stats();
+        println(STYLE_INFO, String.format("  提炼缓存: 容量=%s 已用=%s 命中=%s 未中=%s 命中率=%s%% | 提炼队列待办=%d",
+                cache.get("capacity"), cache.get("size"), cache.get("hits"),
+                cache.get("misses"), cache.get("hitRate"), synthesisExecutor.pendingCount()));
+    }
+
+    /** 长期记忆事实列表（重要度降序，含版本/时间戳） */
+    private void showMemoryFacts() {
+        List<MemoryPage> facts = pageStore.loadFacts();
+        facts.sort(Comparator.comparingDouble(MemoryPage::getImportance).reversed());
+        if (facts.isEmpty()) {
+            println(STYLE_INFO, "暂无长期记忆事实");
+            return;
+        }
+        println(STYLE_PROMPT, "◈ 长期记忆事实（重要度降序，共 " + facts.size() + " 条）◈");
+        for (MemoryPage f : facts) {
+            String key = f.getKey() != null ? f.getKey() : "";
+            String meta = String.format("v%d · %s", f.getVersion(), formatTime(f.getCreateTime()));
+            println(STYLE_INFO, String.format("  [%.2f] %s: %s %s",
+                    f.getImportance(), key, abbreviate(f.getContent(), 140), meta));
+        }
+    }
+
+    /** 摘要页 / 档案块列表 */
+    private void showMemoryPages(List<MemoryPage> pages, String label) {
+        if (pages == null || pages.isEmpty()) {
+            println(STYLE_INFO, "暂无 " + label + " 内容");
+            return;
+        }
+        println(STYLE_PROMPT, "◈ " + label + "（共 " + pages.size() + " 页）◈");
+        for (MemoryPage p : pages) {
+            String sid = p.getSessionId() != null
+                    ? p.getSessionId().substring(0, Math.min(8, p.getSessionId().length())) : "?";
+            String range = p.getBlockStart() >= 0 ? " [" + p.getBlockStart() + "-" + p.getBlockEnd() + "]" : "";
+            println(STYLE_INFO, String.format("  %s %s%s %s tokens: %s",
+                    label, sid, range, p.getTokenCount(), abbreviate(p.getContent(), 180)));
+        }
+    }
+
+    /** 检索召回调试：按当前检索器（keyword/vector/hybrid）执行检索 */
+    private void showMemorySearch(String query) {
+        List<MemoryPage> hits = layeredMemoryGateway.search(query, 5);
+        if (hits == null || hits.isEmpty()) {
+            println(STYLE_INFO, "未检索到相关记忆: " + query);
+            return;
+        }
+        println(STYLE_PROMPT, "◈ 检索召回（" + agentProperties.getMemory().getRetriever() + "，top " + hits.size() + "）：" + query + " ◈");
+        for (MemoryPage p : hits) {
+            String sid = p.getSessionId() != null
+                    ? p.getSessionId().substring(0, Math.min(8, p.getSessionId().length())) : "?";
+            println(STYLE_INFO, String.format("  [%s] %s: %s",
+                    p.getType(), sid, abbreviate(p.getContent(), 160)));
+        }
+    }
+
+    private int sumTokens(List<MemoryPage> pages) {
+        return pages.stream().mapToInt(p -> p.getTokenCount() > 0 ? p.getTokenCount() : TokenEstimator.estimate(p)).sum();
+    }
+
+    /** 毫秒时间戳 → "MM-dd HH:mm" 终端展示 */
+    private String formatTime(long millis) {
+        return new java.text.SimpleDateFormat("MM-dd HH:mm").format(new java.util.Date(millis));
     }
 
     // ==================== 对话处理 ====================
@@ -506,6 +644,11 @@ public class AgentShell implements CommandLineRunner {
         println(STYLE_INFO, "  /session list          列出所有会话");
         println(STYLE_INFO, "  /session switch <id>   切换会话");
         println(STYLE_INFO, "  /session delete <id>   删除会话");
+        println(STYLE_INFO, "  /memory                分层记忆总览（配置/统计/缓存）");
+        println(STYLE_INFO, "  /memory facts          查看长期记忆事实");
+        println(STYLE_INFO, "  /memory summaries      查看中期摘要页");
+        println(STYLE_INFO, "  /memory archive        查看跨会话档案块");
+        println(STYLE_INFO, "  /memory search <q>     检索记忆召回调试");
         println(STYLE_INFO, "  /clear                 清屏");
         println(STYLE_INFO, "  /exit, /quit           退出");
         println(STYLE_INFO, "");
