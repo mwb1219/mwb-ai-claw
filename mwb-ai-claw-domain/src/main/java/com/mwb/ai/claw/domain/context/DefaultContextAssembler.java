@@ -52,6 +52,7 @@ public class DefaultContextAssembler implements ContextAssembler {
         request.setModel(agent.getModelConfig().getModel());
         request.setTemperature(agent.getModelConfig().getTemperature());
         request.setMaxTokens(agent.getModelConfig().getMaxTokens());
+        request.setThinking(agent.getModelConfig().getThinking());
         request.setMessages(buildMessages(session, agent));
         request.setTools(buildTools(agent));
         return request;

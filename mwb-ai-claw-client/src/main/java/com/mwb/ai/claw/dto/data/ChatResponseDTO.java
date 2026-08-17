@@ -17,6 +17,9 @@ public class ChatResponseDTO {
     /** 实际处理本次对话的 Agent ID */
     private String agentId;
 
+    /** 实际使用的编排 id（routing | pipeline | ...） */
+    private String orchestrationId;
+
     /** 最终回复内容 */
     private String reply;
 

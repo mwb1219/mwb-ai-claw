@@ -23,4 +23,13 @@ public class ChatCompletionRequest {
     private List<ChatMessage> messages;
 
     private List<ChatTool> tools;
+
+    /** 思考模式开关（如 DeepSeek：{"thinking":{"type":"disabled"}}） */
+    private ThinkingConfig thinking;
+
+    @Data
+    public static class ThinkingConfig {
+        /** enabled / disabled */
+        private String type;
+    }
 }

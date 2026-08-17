@@ -2,27 +2,30 @@ package com.mwb.ai.claw.agent.executor;
 
 import com.alibaba.cola.dto.SingleResponse;
 import com.alibaba.cola.exception.BizException;
-import com.mwb.ai.claw.domain.core.Agent;
+import com.mwb.ai.claw.domain.collaboration.AgentOrchestrator;
+import com.mwb.ai.claw.domain.collaboration.CollaborationResult;
+import com.mwb.ai.claw.domain.collaboration.ExecutionUnit;
+import com.mwb.ai.claw.domain.collaboration.OrchestrationContext;
+import com.mwb.ai.claw.domain.collaboration.OrchestrationDefinition;
+import com.mwb.ai.claw.domain.collaboration.OrchestrationSelector;
 import com.mwb.ai.claw.domain.core.AgentGateway;
-import com.mwb.ai.claw.domain.core.AgentRouter;
-import com.mwb.ai.claw.domain.memory.MemoryGateway;
 import com.mwb.ai.claw.domain.core.ProgressCallback;
-import com.mwb.ai.claw.domain.core.ReActLoopService;
-import com.mwb.ai.claw.domain.core.ReActResult;
-import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
-import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
-import com.mwb.ai.claw.domain.memory.MemoryGateway;
 import com.mwb.ai.claw.dto.ChatCmd;
 import com.mwb.ai.claw.dto.data.AgentErrorCode;
 import com.mwb.ai.claw.dto.data.ChatResponseDTO;
+import com.mwb.ai.claw.infrastructure.collaboration.OrchestratorRegistry;
+import com.mwb.ai.claw.infrastructure.config.AgentProperties;
+import com.mwb.ai.claw.infrastructure.config.OrchestrationConfigLoader;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
-import java.util.UUID;
 
 /**
- * 对话执行器：编排「路由选 Agent → 加载会话 → 追加用户消息 → ReAct 循环 → 持久化 → 组装响应」用例。
+ * 对话执行器（编排分发器）：选择编排 → 装配上下文 → 委托编排插件执行。
+ * <p>
+ * 编排选择优先级：显式指定（ChatCmd.orchestrationId） > 意图选择（OrchestrationSelector） > 默认编排（agent.orchestration）。
+ * 具体编排逻辑（路由 / 流水线 / 对话式）由 AgentOrchestrator 插件实现。
  */
 @Component
 public class ChatCmdExe {
@@ -31,16 +34,19 @@ public class ChatCmdExe {
     private AgentGateway agentGateway;
 
     @Resource
-    private AgentRouter agentRouter;
+    private OrchestrationConfigLoader orchestrationLoader;
 
     @Resource
-    private MemoryGateway memoryGateway;
+    private OrchestrationSelector orchestrationSelector;
 
     @Resource
-    private LayeredMemoryGateway layeredMemoryGateway;
+    private OrchestratorRegistry orchestratorRegistry;
 
     @Resource
-    private ReActLoopService reActLoopService;
+    private ExecutionUnit executionUnit;
+
+    @Resource
+    private AgentProperties agentProperties;
 
     public SingleResponse<ChatResponseDTO> execute(ChatCmd cmd) {
         return execute(cmd, null);
@@ -62,68 +68,47 @@ public class ChatCmdExe {
             throw new BizException(AgentErrorCode.B_AGENT_CONFIG_ERROR.getErrCode(), "消息内容不能为空");
         }
 
-        // 1. 解析目标 Agent（显式指定优先，否则走路由）
-        Agent agent = resolveAgent(cmd);
+        // 1. 选择编排：显式指定 > 意图选择 > 默认
+        String orchestrationId = resolveOrchestrationId(cmd);
+        OrchestrationDefinition definition = orchestrationLoader.get(orchestrationId);
 
-        // 2. 获取或创建会话
-        Session session = getOrCreateSession(cmd.getSessionId(), agent);
+        // 2. 装配编排上下文
+        OrchestrationContext ctx = new OrchestrationContext();
+        ctx.setMessage(cmd.getMessage());
+        ctx.setSessionId(cmd.getSessionId());
+        ctx.setExplicitAgentId(cmd.getAgentId());
+        ctx.setExplicitOrchestrationId(cmd.getOrchestrationId());
+        ctx.setDefinition(definition);
+        ctx.setAgentGateway(agentGateway);
+        ctx.setExecutionUnit(executionUnit);
+        ctx.setCallback(callback);
+        ctx.setStreamCallback(streamCallback);
 
-        // 3. 追加用户消息
-        session.addUserMessage(cmd.getMessage());
+        // 3. 委托编排插件执行
+        AgentOrchestrator orchestrator = orchestratorRegistry.resolve(definition);
+        CollaborationResult result = orchestrator.orchestrate(ctx);
 
-        // 4. 执行 ReAct 推理循环（根据是否有流式回调选择调用方式）
-        ReActResult result;
-        if (streamCallback != null) {
-            result = reActLoopService.streamRun(session, agent, callback, streamCallback);
-        } else {
-            result = reActLoopService.run(session, agent, callback);
-        }
-
-        // 5. 持久化会话
-        memoryGateway.saveSession(session);
-
-        // 6. 分层记忆：会话结束提炼（剩余摘要 + 事实提取合并，失败不影响响应）
-        try {
-            layeredMemoryGateway.afterSession(session, agent);
-        } catch (Exception e) {
-            // 提炼失败仅记录，不阻塞主链路
-        }
-
-        // 7. 组装响应
+        // 4. 组装响应
         ChatResponseDTO dto = new ChatResponseDTO();
-        dto.setSessionId(session.getSessionId());
-        dto.setAgentId(agent.getAgentId());
+        dto.setSessionId(result.getSessionId());
+        dto.setAgentId(result.getAgentId());
+        dto.setOrchestrationId(result.getOrchestrationId());
         dto.setReply(result.getReply());
         dto.setTraceSteps(result.getTraceSteps());
         return SingleResponse.of(dto);
     }
 
     /**
-     * 解析目标 Agent：显式指定 agentId 优先，否则通过路由决策，路由未命中回退默认 Agent。
+     * 编排选择：显式指定优先，其次意图匹配（未命中返回 null），最后回退默认编排。
      */
-    private Agent resolveAgent(ChatCmd cmd) {
-        if (cmd.getAgentId() != null && !cmd.getAgentId().trim().isEmpty()) {
-            return agentGateway.getAgent(cmd.getAgentId());
+    private String resolveOrchestrationId(ChatCmd cmd) {
+        if (cmd.getOrchestrationId() != null && !cmd.getOrchestrationId().trim().isEmpty()) {
+            return cmd.getOrchestrationId().trim();
         }
-        String routedAgentId = agentRouter.route(cmd.getMessage());
-        if (routedAgentId != null && !routedAgentId.trim().isEmpty()) {
-            return agentGateway.getAgent(routedAgentId);
+        String matched = orchestrationSelector.select(cmd.getMessage(), orchestrationLoader.loadDefinitions());
+        if (matched != null && !matched.trim().isEmpty()) {
+            return matched;
         }
-        return agentGateway.getAgent(null);
-    }
-
-    private Session getOrCreateSession(String sessionId, Agent agent) {
-        if (sessionId != null && !sessionId.trim().isEmpty()) {
-            Session session = memoryGateway.getSession(sessionId);
-            if (session == null) {
-                throw new BizException(AgentErrorCode.B_AGENT_SESSION_NOT_FOUND.getErrCode(), "会话不存在: " + sessionId);
-            }
-            return session;
-        }
-        Session session = new Session();
-        session.setSessionId(UUID.randomUUID().toString().replace("-", ""));
-        session.setAgentId(agent.getAgentId());
-        session.setTitle("session-" + System.currentTimeMillis());
-        return session;
+        return agentProperties.getOrchestration();
     }
 }

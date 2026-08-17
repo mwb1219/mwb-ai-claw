@@ -22,4 +22,10 @@ public class ModelConfig {
 
     /** 单次最大 tokens */
     private int maxTokens = 2048;
+
+    /**
+     * 思考模式开关（null=不传，由模型提供方默认；false=关闭思考直接输出，如 DeepSeek
+     * 的 {"thinking":{"type":"disabled"}}；true=显式开启思考）。
+     */
+    private Boolean thinking;
 }

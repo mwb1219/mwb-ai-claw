@@ -1,5 +1,4 @@
 {
-  "mode": "routing",
   "agents": [
     {
       "agentId": "coder",
@@ -9,6 +8,7 @@
       "systemPrompt": "你是资深软件工程师，擅长编码、调试与问题排查，代码示例清晰规范。",
       "tools": ["file", "shell", "http", "read_memory", "write_memory"],
       "maxSteps": 10,
+      "maxTokens": 16384,
       "model": "${CODER_MODEL:${DEFAULT_MODEL:deepseek-chat}}",
       "apiKey": "${CODER_API_KEY:${DEFAULT_API_KEY:}}"
     },
@@ -22,6 +22,28 @@
       "maxSteps": 5,
       "model": "${RESEARCHER_MODEL:${DEFAULT_MODEL:deepseek-chat}}",
       "apiKey": "${RESEARCHER_API_KEY:${DEFAULT_API_KEY:}}"
+    },
+    {
+      "agentId": "architect",
+      "name": "架构师",
+      "description": "擅长需求分析、系统架构设计与模块拆解",
+      "keywords": ["架构", "设计", "拆解", "模块", "方案"],
+      "systemPrompt": "你是资深系统架构师，擅长需求拆解、技术选型与架构设计。",
+      "tools": ["read_memory", "write_memory"],
+      "maxSteps": 5,
+      "model": "${ARCHITECT_MODEL:${DEFAULT_MODEL:deepseek-chat}}",
+      "apiKey": "${ARCHITECT_API_KEY:${DEFAULT_API_KEY:}}"
+    },
+    {
+      "agentId": "reviewer",
+      "name": "审查专家",
+      "description": "擅长代码审查、质量评估与风险识别",
+      "keywords": ["审查", "评审", "检查", "质量", "风险"],
+      "systemPrompt": "你是严谨的代码审查专家，关注正确性、安全与可维护性。",
+      "tools": ["read_memory", "write_memory"],
+      "maxSteps": 5,
+      "model": "${REVIEWER_MODEL:${DEFAULT_MODEL:deepseek-chat}}",
+      "apiKey": "${REVIEWER_API_KEY:${DEFAULT_API_KEY:}}"
     }
   ]
 }

@@ -1,0 +1,79 @@
+package com.mwb.ai.claw.infrastructure.collaboration;
+
+import com.mwb.ai.claw.domain.collaboration.AgentOrchestrator;
+import com.mwb.ai.claw.domain.collaboration.CollaborationResult;
+import com.mwb.ai.claw.domain.collaboration.OrchestrationContext;
+import com.mwb.ai.claw.domain.core.Agent;
+import com.mwb.ai.claw.domain.core.AgentGateway;
+import com.mwb.ai.claw.domain.core.AgentRouter;
+import com.mwb.ai.claw.domain.core.ReActResult;
+import com.mwb.ai.claw.domain.core.Session;
+import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
+import org.springframework.stereotype.Component;
+
+import javax.annotation.Resource;
+
+/**
+ * 专家路由编排（内置插件，type=routing）：
+ * 迁入原 ChatCmdExe 的「路由选 Agent → 会话 → ReAct → 持久化 → 分层记忆提炼」逻辑，行为保持不变。
+ */
+@Component
+public class RoutingOrchestrator implements AgentOrchestrator {
+
+    @Resource
+    private AgentRouter agentRouter;
+
+    @Resource
+    private LayeredMemoryGateway layeredMemoryGateway;
+
+    @Override
+    public String type() {
+        return "routing";
+    }
+
+    @Override
+    public CollaborationResult orchestrate(OrchestrationContext ctx) {
+        Agent agent = resolveAgent(ctx);
+
+        // 获取或创建会话
+        Session session = ctx.getExecutionUnit().getOrCreateSession(ctx.getSessionId(), agent);
+
+        // 追加用户消息并执行 ReAct
+        session.addUserMessage(ctx.getMessage());
+        ReActResult result = ctx.getExecutionUnit()
+                .runSession(session, agent, ctx.getCallback(), ctx.getStreamCallback());
+
+        // 持久化会话
+        ctx.getExecutionUnit().saveSession(session);
+
+        // 分层记忆：会话结束提炼（失败不影响响应）
+        try {
+            layeredMemoryGateway.afterSession(session, agent);
+        } catch (Exception e) {
+            // 提炼失败仅记录，不阻塞主链路
+        }
+
+        CollaborationResult cr = new CollaborationResult();
+        cr.setReply(result.getReply());
+        cr.setAgentId(agent.getAgentId());
+        cr.setSessionId(session.getSessionId());
+        cr.setOrchestrationId(ctx.getDefinition().getId());
+        cr.setTraceSteps(result.getTraceSteps());
+        return cr;
+    }
+
+    /**
+     * 解析目标 Agent：显式指定 agentId 优先，否则通过路由决策，路由未命中回退默认 Agent。
+     */
+    private Agent resolveAgent(OrchestrationContext ctx) {
+        AgentGateway agentGateway = ctx.getAgentGateway();
+        if (ctx.getExplicitAgentId() != null && !ctx.getExplicitAgentId().trim().isEmpty()) {
+            return agentGateway.getAgent(ctx.getExplicitAgentId());
+        }
+        String routedAgentId = agentRouter.route(ctx.getMessage());
+        if (routedAgentId != null && !routedAgentId.trim().isEmpty()) {
+            return agentGateway.getAgent(routedAgentId);
+        }
+        return agentGateway.getAgent(null);
+    }
+}

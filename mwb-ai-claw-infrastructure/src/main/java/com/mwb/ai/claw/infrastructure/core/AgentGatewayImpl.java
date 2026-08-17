@@ -1,6 +1,6 @@
 package com.mwb.ai.claw.infrastructure.core;
 
-import com.mwb.ai.claw.infrastructure.config.AgentConfigLoader;
+import com.mwb.ai.claw.infrastructure.config.AgentRegistryLoader;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.ModelConfig;
@@ -27,13 +27,13 @@ public class AgentGatewayImpl implements AgentGateway {
     private LongTermMemoryGateway longTermMemoryGateway;
 
     @Resource
-    private AgentConfigLoader agentConfigLoader;
+    private AgentRegistryLoader agentRegistryLoader;
 
     @Override
     public Agent getAgent(String agentId) {
         // 1. 显式指定 agentId 且命中专家 Agent → 返回该 Agent
         if (agentId != null && !agentId.trim().isEmpty()) {
-            for (AgentProperties.AgentConfig config : agentConfigLoader.loadAgents()) {
+            for (AgentProperties.AgentConfig config : agentRegistryLoader.loadAgents()) {
                 if (agentId.equals(config.getAgentId())) {
                     return buildAgent(config);
                 }
@@ -51,7 +51,7 @@ public class AgentGatewayImpl implements AgentGateway {
     public List<Agent> listAgents() {
         List<Agent> agents = new ArrayList<>();
         agents.add(buildDefaultAgent());
-        for (AgentProperties.AgentConfig config : agentConfigLoader.loadAgents()) {
+        for (AgentProperties.AgentConfig config : agentRegistryLoader.loadAgents()) {
             agents.add(buildAgent(config));
         }
         return agents;

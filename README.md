@@ -33,9 +33,9 @@
 ┌───────────────────────┬────────────────────────────────────┐
 │ client（客户端 SDK）    │          app（应用层）             │
 │ - AgentServiceI 接口   │ - AgentServiceImpl                 │
-│ - ChatCmd / DTO        │ - ChatCmdExe（对话编排）            │
-│ - SessionDTO           │ - SessionListQryExe               │
-│                        │ - SessionDeleteCmdExe              │
+│ - ChatCmd / DTO        │ - ChatCmdExe（编排选择 + 分发）      │
+│   （含 orchestrationId）│ - SessionListQryExe               │
+│ - SessionDTO           │ - SessionDeleteCmdExe              │
 │                        │ - SessionAssembler                 │
 └───────────────────────┴────────────────────────────────────┘
                            ▲
@@ -45,6 +45,9 @@
 │   领域服务：ReActLoopService                                 │
 │   Gateway 接口：LlmGateway / ToolGateway / MemoryGateway    │
 │                 LongTermMemoryGateway / AgentGateway        │
+│   collaboration：OrchestrationDefinition / OrchestrationContext│
+│                 OrchestrationSelector / AgentOrchestrator   │
+│                 CollaborationResult / ExecutionUnit         │
 │   值对象：ToolSpec / ToolResult / ToolCall / LlmMessage      │
 │   回调接口：ProgressCallback / LlmStreamCallback            │
 └─────────────────────────────────────────────────────────────┘
@@ -55,7 +58,11 @@
 │   tool：ToolGatewayImpl + 内置工具 + MCP 适配                │
 │   memory：FileBasedSessionGateway + FileBasedMemoryGateway  │
 │   llm：LlmGatewayImpl（OpenAI 兼容流式/非流式）              │
-│   config：AgentConfiguration / AgentProperties / AgentConfigLoader│
+│   config：AgentProperties / AgentRegistryLoader             │
+│           / OrchestrationConfigLoader                       │
+│   collaboration：OrchestratorRegistry / ExecutionUnitImpl   │
+│           / RoutingOrchestrator / PipelineOrchestrator      │
+│           / RuleBasedOrchestrationSelector / PipelineStage  │
 │   security：ToolSecurity（命令白名单/路径限制/超时控制）       │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -94,7 +101,7 @@
 - [x] 多 Agent 专家路由：规则路由（关键词）+ LLM 语义路由（LLM 决策）+ 组合路由（规则优先、LLM 兜底）
 - [x] Context Engineering 领域抽象：`ContextAssembler`（system prompt + 历史 + 工具统一组装）
 - [x] 敏感配置抽象到 `.env`：`application.yml` 通过 `${VAR:default}` 占位符引用，避免密钥泄露
-- [x] Agent 配置按协作模式分文件：`{mode}-agents.json`（运行目录优先），`--agent.mode` 启动参数切换
+- [x] Agent 注册表：`agents.json` 定义可复用的专家 Agent（跨编排共享，运行目录优先，支持 `${VAR}` 占位符）
 - [x] 多 Agent 独立模型：每个 Agent 可配置自己的 `model` / `api-key`（缺省继承默认）
 
 ### 3.5 Phase 5：分层记忆（Layered Memory）✅
@@ -111,16 +118,32 @@
 - [x] 提炼异步化：摘要/事实提炼在独立线程池串行执行，不阻塞主对话链路（`synthesis-async`）
 - [x] 优雅降级：提炼/换页失败仅记录日志，不阻塞主对话链路
 
-### 3.6 待实施
+### 3.6 Phase 6：检索增强与成本优化 ✅
+
+- [x] 向量检索：`EmbeddingGateway` + `VectorMemoryRetriever`（余弦相似度），页向量三级缓存（内存 → `.agent/memory/vectors/` 磁盘 → 惰性计算）
+- [x] 混合检索（RRF 融合）：`HybridMemoryRetriever`，`keyword | vector | hybrid` 三模式，embedding 失败自动降级回退关键词
+- [x] 跨会话档案 RAG：会话结束原文增量归档为 ARCHIVE 页（幂等），检索候选纳入跨会话档案
+- [x] 多 Agent 共享记忆：`readContext` 以最新用户消息自动检索跨会话记忆并注入 System prompt（`shared-retrieve`）
+- [x] 检索增强注入：检索召回页通过「相关记忆（检索）」标题注入上下文（Context Engineering RAG 闭环）
+- [x] 提炼成本优化：小模型提炼（`synthesizer-model` 独立配置）+ 提炼结果缓存（按内容哈希去重，LRU）+ 同会话提炼任务去重调度
+- [x] 记忆可视化：shell `/memory` 命令（`stats/facts/summaries/archive/search`）+ REST `/memory` 面板接口（各层统计/配置快照/缓存命中率/检索调试）
+
+### 3.7 Phase 7：配置与编排分离 ✅
+
+- [x] 配置与编排分离：`agents.json`（Agent 注册表，跨编排复用）+ `orchestrations.json`（编排注册表 + 意图元数据），彻底废弃旧 `{mode}-agents.json` 与 `agent.mode`
+- [x] 编排插件化（SPI）：`AgentOrchestrator` 接口（`type`/`validate`/`orchestrate`），`OrchestratorRegistry` 自动收集注册，新增编排零主链路改动
+- [x] 意图驱动选择：`OrchestrationSelector` 选编排 → 编排内部选 Agent（三层决策分离）；优先级：显式指定 > 规则意图匹配 > 默认兜底
+- [x] 内置编排：`RoutingOrchestrator`（单专家独立处理，默认兜底）+ `PipelineOrchestrator`（多阶段流水线 analyze→implement→review，产物 text/file 传递，失败 abort/continue）
+- [x] 流水线阶段类型化：`PipelineStage` 实体类解析 stages（`thinking` 开关 / `pass` / `onFailure` / 空回复重试）
+- [x] 思考模式控制：阶段级 `thinking: false` 关闭推理（DeepSeek 思考模式会吃满输出预算导致正文为空）
+- [x] 启动校验：编排 id 唯一、type 已注册、引用的 agentId 存在于注册表
+
+### 3.8 待实施
 
 - [ ] IM 渠道接入：飞书、钉钉、Telegram
-- [ ] 多 Agent 协作模式：编排（orchestration）/ 流水线（pipeline）编排服务
+- [ ] 对话式编排（ConversationalOrchestrator）：多 Agent 对话协作（二期）
 - [ ] 浏览器控制工具（CDP）
 - [ ] 本地 Ollama 离线部署支持
-- [ ] Context Engineering：上下文压缩/裁剪（token 预算、历史裁剪、摘要）
-- [ ] Context Engineering：检索增强（RAG/向量库相关内容注入）
-- [ ] Context Engineering：上下文策略（优先级排序、多策略实现）
-- [ ] Context Engineering：成本优化（token 用量统计与控制）
 
 ## 四、领域模型
 
@@ -139,6 +162,13 @@ domain/
 │   ├── ReActLoopService   # 领域服务：ReAct 推理循环
 │   ├── ReActResult.java   # 值对象：推理结果
 │   └── ProgressCallback   # 回调：进度推送
+├── collaboration/         # 编排协作域
+│   ├── OrchestrationDefinition.java # 编排定义（id/type/keywords/config/agents）
+│   ├── OrchestrationContext.java    # 编排上下文（消息/会话/网关/执行单元/回调）
+│   ├── AgentOrchestrator.java       # 编排插件 SPI（type/validate/orchestrate）
+│   ├── OrchestrationSelector.java   # 编排选择 SPI（意图 → 编排 id）
+│   ├── CollaborationResult.java     # 编排结果（reply/agentId/traceSteps）
+│   └── ExecutionUnit.java           # 执行原语接口（会话复用/运行/产物落盘）
 ├── context/               # 上下文工程域
 │   ├── ContextAssembler.java        # 接口：上下文组装（Context Engineering 核心入口）
 │   └── DefaultContextAssembler.java # 默认实现：system prompt + 历史 + 工具
@@ -186,9 +216,18 @@ infrastructure/
 │   ├── FileBasedSessionGateway   # 会话文件持久化
 │   ├── FileBasedMemoryGateway    # 长期记忆文件读写
 │   └── MemoryGatewayImpl         # 纯内存版（测试用）
+├── collaboration/
+│   ├── OrchestratorRegistry      # 编排插件注册中心（SPI 自动收集）
+│   ├── RoutingOrchestrator       # 路由编排（单专家独立处理，默认兜底）
+│   ├── PipelineOrchestrator      # 流水线编排（阶段接力）
+│   ├── PipelineStage             # 流水线阶段实体（类型化解析 stages）
+│   ├── ExecutionUnitImpl         # 执行原语实现（临时会话/产物落盘）
+│   └── RuleBasedOrchestrationSelector # 关键词意图选择器
 └── config/
-    ├── AgentProperties            # YAML 配置映射
-    └── AgentConfiguration         # Spring Bean 装配
+    ├── AgentProperties            # YAML 配置映射（orchestration/selector）
+    ├── AgentConfiguration         # Spring Bean 装配
+    ├── AgentRegistryLoader        # agents.json 加载（${VAR} 解析）
+    └── OrchestrationConfigLoader  # orchestrations.json 加载 + 启动校验
 ```
 
 ## 五、交互方式
@@ -203,6 +242,8 @@ infrastructure/
 | `GET`    | `/agent/session/{id}` | 查询会话详情                |
 | `GET`    | `/agent/sessions`     | 列出所有会话                |
 | `DELETE` | `/agent/session/{id}` | 删除会话                  |
+
+> `/agent/chat` 请求体支持可选字段 `orchestrationId`（显式指定编排，跳过意图选择），响应返回实际使用的 `orchestrationId`。
 
 ### 5.2 WebSocket
 
@@ -224,7 +265,7 @@ ws://localhost:8080/ws/agent
 # 构建
 mvn package -pl start -am -DskipTests
 
-# 启动 Shell 模式（可追加 --agent.mode=xxx 切换协作模式）
+# 启动 Shell 模式（编排按意图自动选择，默认 routing）
 java -jar start/target/start-*.jar --spring.profiles.active=shell
 ```
 
@@ -273,12 +314,13 @@ agent:
   agent-id: default
   name: mwb-ai-claw
   system-prompt: "你是 mwb-ai-claw 智能助手..."
-  mode: routing                      # 协作模式，决定加载哪个 {mode}-agents.json
+  orchestration: routing             # 默认编排 id（意图未命中时的兜底，引用 orchestrations.json 中的 id）
+  orchestration-selector: rule       # 编排选择器：rule（关键词，默认）| llm（预留）
   model: ${DEFAULT_MODEL:deepseek-chat}            # 通过环境变量引用，避免硬编码
   base-url: ${DEFAULT_BASE_URL:https://api.deepseek.com}
   api-key: ${DEFAULT_API_KEY:}
   temperature: 0.7
-  max-tokens: 2048
+  max-tokens: 8192                   # 思考模型 reasoning 计入 max_tokens，需预留足够空间（默认 2048）
   max-steps: 8
   memory-dir: ""                      # 长期记忆目录，默认 ${user.dir}/.agent
   tools:
@@ -314,20 +356,16 @@ agent:
     http-allowed-hosts: []
 ```
 
-### 6.3 多 Agent 配置（{mode}-agents.json）
+### 6.3 Agent 注册表（agents.json）与编排注册表（orchestrations.json）
 
-专家 Agent 定义按协作模式分文件存放，命名 `{mode}-agents.json`（如 `routing-agents.json`）。**加载优先级：运行目录下的同名文件 > jar 内置 classpath 默认模板**。使用者可在运行目录放置自己的 `routing-agents.json`，自由增删、调整 Agent，无需重新打包。
+Agent 配置与编排定义完全解耦，分两个独立文件存放（`start/src/main/resources/` 内置默认模板）。**加载优先级：运行目录下的同名文件 > jar 内置 classpath 默认模板**，支持 `${VAR:default}` 占位符。使用者可在运行目录放置同名文件覆盖，自由增删 Agent / 编排，无需重新打包。
 
-```bash
-# 从 jar 内置模板导出后按需修改（或直接参照下方格式在运行目录新建）
-unzip -p start/target/start-*.jar routing-agents.json > routing-agents.json
-```
+#### 6.3.1 Agent 注册表（agents.json）
 
-文件格式：
+定义可复用的专家 Agent（跨编排共享，不再按协作模式分文件）：
 
 ```json
 {
-  "mode": "routing",
   "agents": [
     {
       "agentId": "coder",
@@ -337,6 +375,7 @@ unzip -p start/target/start-*.jar routing-agents.json > routing-agents.json
       "systemPrompt": "你是资深软件工程师，擅长编码、调试与问题排查，代码示例清晰规范。",
       "tools": ["file", "shell", "http", "read_memory", "write_memory"],
       "maxSteps": 10,
+      "maxTokens": 16384,
       "model": "${CODER_MODEL:${DEFAULT_MODEL:deepseek-chat}}",
       "apiKey": "${CODER_API_KEY:${DEFAULT_API_KEY:}}"
     }
@@ -348,29 +387,86 @@ unzip -p start/target/start-*.jar routing-agents.json > routing-agents.json
 
 | 字段                             | 必填 | 说明                                    |
 | ------------------------------ | -- | ------------------------------------- |
-| `agentId`                      | 是  | Agent 标识（路由目标）                        |
+| `agentId`                      | 是  | Agent 标识（编排引用的目标）                    |
 | `name`                         | 是  | 显示名称                                  |
 | `description`                  | 否  | 能力描述，供 LLM 语义路由判断意图                   |
-| `keywords`                     | 否  | 规则路由关键词                               |
+| `keywords`                     | 否  | 规则路由关键词（路由编排内部选择 Agent 使用）           |
 | `systemPrompt`                 | 否  | 系统提示词，缺省继承默认                          |
 | `tools`                        | 否  | 可用工具列表，缺省继承默认                         |
 | `maxSteps`                     | 否  | 最大推理步数，缺省继承默认                         |
 | `model` / `baseUrl` / `apiKey` | 否  | 独立模型配置，缺省继承默认，支持 `${VAR:default}` 占位符 |
 | `temperature` / `maxTokens`    | 否  | 采样温度 / 单次最大 tokens，缺省继承默认             |
 
-### 6.4 协作模式切换与多模型
+#### 6.3.2 编排注册表（orchestrations.json）
 
-启动时通过 `--agent.mode=xxx` 指定加载哪个 `{mode}-agents.json`：
+编排定义 + 意图元数据（`keywords`），供「意图驱动选择编排」使用：
 
-```bash
-# 专家路由模式（默认，内置 coder / researcher 两个专家）
-java -jar start/target/start-*.jar --agent.mode=routing
-
-# 未来编排 / 流水线模式（需在运行目录提供对应 agents 文件）
-java -jar start/target/start-*.jar --agent.mode=orchestration
+```json
+{
+  "orchestrations": [
+    {
+      "id": "code-review-pipeline",
+      "type": "pipeline",
+      "description": "完整开发流水线：架构师需求拆解 → 编码实现 → 代码审查",
+      "keywords": ["设计并实现", "完整实现", "从零开发", "并做代码审查"],
+      "agents": ["architect", "coder", "reviewer"],
+      "config": {
+        "workdir": "orchestration-artifacts",
+        "stages": [
+          {
+            "stageId": "implement",
+            "agentId": "coder",
+            "promptTemplate": "基于以下需求分析进行编码实现。不要调用任何工具，直接输出完整可运行的代码文本：\n\n{input}",
+            "thinking": false,
+            "pass": "text",
+            "onFailure": "abort"
+          }
+        ]
+      }
+    }
+  ]
+}
 ```
 
-每个 Agent 的模型独立配置：在 `{mode}-agents.json` 中为 Agent 指定 `model` / `apiKey`（用 `${VAR}` 引用 `.env` 变量），未配置的字段自动继承默认值。`.env` 示例：
+编排字段说明：
+
+| 字段           | 必填 | 说明                                        |
+| ------------ | -- | ----------------------------------------- |
+| `id`         | 是  | 编排标识（意图命中 / 显式指定 / 默认兜底均引用此 id）        |
+| `type`       | 是  | 编排插件类型：`routing` / `pipeline`（已注册 SPI，可扩展） |
+| `description` | 否 | 编排能力描述                                  |
+| `keywords`   | 否  | 意图关键词（命中数最多者胜出；**兜底编排不设 keywords 不参与竞争**） |
+| `agents`     | 否  | 该编排涉及 Agent 列表（启动校验引用存在性）               |
+| `config`     | 否  | 编排自定义配置（结构由插件自行解释，如 pipeline 的 stages）   |
+
+流水线阶段（`pipeline.config.stages`）字段：
+
+| 字段             | 必填 | 说明                                          |
+| -------------- | -- | ------------------------------------------- |
+| `stageId`      | 是  | 阶段标识（trace / 产物文件名使用）                     |
+| `agentId`      | 是  | 执行阶段使用的 Agent（引用 agents.json）               |
+| `promptTemplate` | 是 | 提示词模板，支持 `{input}` 占位符（上一阶段产物）            |
+| `thinking`     | 否  | 思考模式开关；`false` 关闭推理直接输出（DeepSeek 思考模式会吃满 `max_tokens` 导致正文为空） |
+| `pass`         | 否  | 产物传递：`text`（默认，直接作为下阶段输入）\| `file`（落盘传路径） |
+| `onFailure`    | 否  | 失败策略：`abort`（默认，终止流水线）\| `continue`（跳过继续） |
+
+### 6.4 编排选择与多模型
+
+对话请求的编排选择优先级（三层决策分离：选择器选「编排」→ 编排内部选「Agent」）：
+
+1. **显式指定**：请求体携带 `orchestrationId`（REST / WebSocket / Shell 均支持）
+2. **规则意图匹配**：`orchestrations.json` 中各编排的 `keywords` 与用户消息做命中计数，命中最多者胜出
+3. **默认兜底**：`agent.orchestration`（默认 `routing`），未命中任何关键词时使用
+
+```bash
+# 默认编排 routing（单专家独立处理）
+java -jar start/target/start-*.jar --spring.profiles.active=shell
+
+# 修改默认兜底编排 / 选择器
+java -jar start/target/start-*.jar --agent.orchestration=code-review-pipeline --agent.orchestration-selector=rule
+```
+
+每个 Agent 的模型独立配置：在 `agents.json` 中为 Agent 指定 `model` / `apiKey`（用 `${VAR}` 引用 `.env` 变量），未配置的字段自动继承默认值。`.env` 示例：
 
 ```bash
 # 默认模型
@@ -385,6 +481,8 @@ CODER_API_KEY=
 RESEARCHER_MODEL=deepseek-chat
 RESEARCHER_API_KEY=sk-researcher-xxx
 ```
+
+> 注：旧 `{mode}-agents.json` 与 `--agent.mode` 参数已废弃，不再生效。
 
 ### 6.5 记忆文件
 

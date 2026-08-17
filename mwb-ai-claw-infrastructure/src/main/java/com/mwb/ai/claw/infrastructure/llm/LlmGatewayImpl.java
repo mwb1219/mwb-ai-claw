@@ -258,6 +258,11 @@ public class LlmGatewayImpl implements LlmGateway {
         body.setModel(modelConfig.getModel());
         body.setTemperature(modelConfig.getTemperature());
         body.setMaxTokens(modelConfig.getMaxTokens());
+        if (request.getThinking() != null) {
+            ChatCompletionRequest.ThinkingConfig thinking = new ChatCompletionRequest.ThinkingConfig();
+            thinking.setType(request.getThinking() ? "enabled" : "disabled");
+            body.setThinking(thinking);
+        }
         if (stream) {
             body.setStream(true);
         }

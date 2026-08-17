@@ -11,28 +11,28 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Agent 配置加载器：根据协作模式（agent.mode）加载对应的 {mode}-agents.json。
+ * Agent 注册表加载器：加载 agents.json（Agent 定义与编排模式解耦，跨编排复用）。
  * <p>
- * 读取优先级：运行目录及其上级目录 ./{mode}-agents.json 优先，回退 classpath 默认模板。
+ * 读取优先级：运行目录及其上级目录 ./agents.json 优先，回退 classpath 默认模板。
  * 文件中的 ${VAR:default} 占位符通过 Spring Environment 解析（.env / 系统环境变量）。
  */
 @Component
-public class AgentConfigLoader {
+public class AgentRegistryLoader {
 
-    private static final Logger log = LoggerFactory.getLogger(AgentConfigLoader.class);
+    private static final Logger log = LoggerFactory.getLogger(AgentRegistryLoader.class);
 
-    private final AgentProperties agentProperties;
+    private static final String FILE_NAME = "agents.json";
+
     private final Environment environment;
 
     private volatile List<AgentProperties.AgentConfig> cached;
 
-    public AgentConfigLoader(AgentProperties agentProperties, Environment environment) {
-        this.agentProperties = agentProperties;
+    public AgentRegistryLoader(Environment environment) {
         this.environment = environment;
     }
 
     /**
-     * 加载当前协作模式下的 Agent 定义（懒加载并缓存）。
+     * 加载 Agent 注册表（懒加载并缓存）。
      */
     public List<AgentProperties.AgentConfig> loadAgents() {
         if (cached == null) {
@@ -46,32 +46,23 @@ public class AgentConfigLoader {
     }
 
     private List<AgentProperties.AgentConfig> doLoad() {
-        String mode = agentProperties.getMode();
-        if (mode == null || mode.trim().isEmpty()) {
-            mode = "routing";
-        }
-        String fileName = mode + "-agents.json";
-        String json = readConfig(fileName);
+        String json = ConfigFileLocator.readConfigFile(FILE_NAME);
         if (json == null || json.trim().isEmpty()) {
-            log.warn("未找到 {}，Agent 列表为空", fileName);
+            log.warn("未找到 {}，Agent 注册表为空", FILE_NAME);
             return new ArrayList<>();
         }
 
-        AgentsFile file = JsonUtils.fromJson(json, AgentsFile.class);
+        AgentRegistryFile file = JsonUtils.fromJson(json, AgentRegistryFile.class);
         if (file == null || file.getAgents() == null) {
-            log.warn("{} 内容为空或格式错误", fileName);
+            log.warn("{} 内容为空或格式错误", FILE_NAME);
             return new ArrayList<>();
         }
 
         for (AgentProperties.AgentConfig config : file.getAgents()) {
             resolvePlaceholders(config);
         }
-        log.info("已加载协作模式 '{}' 的 {} 个 Agent", file.getMode() != null ? file.getMode() : mode, file.getAgents().size());
+        log.info("已加载 Agent 注册表（agents.json）：{} 个 Agent", file.getAgents().size());
         return file.getAgents();
-    }
-
-    private String readConfig(String fileName) {
-        return ConfigFileLocator.readConfigFile(fileName);
     }
 
     private void resolvePlaceholders(AgentProperties.AgentConfig config) {

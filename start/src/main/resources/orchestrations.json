@@ -1,0 +1,46 @@
+{
+  "orchestrations": [
+    {
+      "id": "routing",
+      "type": "routing",
+      "description": "单专家独立处理：适用于单一领域问题（写代码、查资料、答疑、修复等），由路由按意图选择最合适的 Agent。作为默认兜底编排，不参与关键词竞争（未命中其他编排时回退到此）",
+      "agents": ["coder", "researcher", "architect", "reviewer"]
+    },
+    {
+      "id": "code-review-pipeline",
+      "type": "pipeline",
+      "description": "完整开发流水线：架构师需求拆解 → 编码实现 → 代码审查，适用于从零设计并实现的开发任务",
+      "keywords": ["设计并实现", "完整实现", "从零开发", "开发流程", "设计一个", "实现一个", "做一个", "搭建", "并做代码审查", "需求拆解"],
+      "agents": ["architect", "coder", "reviewer"],
+      "config": {
+        "workdir": "orchestration-artifacts",
+        "stages": [
+          {
+            "stageId": "analyze",
+            "agentId": "architect",
+            "promptTemplate": "你是系统架构师。请分析以下需求，输出需求拆解、模块划分与实现要点。不要调用任何工具，直接输出分析文本，不要写代码：\n\n{input}",
+            "thinking": false,
+            "pass": "text",
+            "onFailure": "abort"
+          },
+          {
+            "stageId": "implement",
+            "agentId": "coder",
+            "promptTemplate": "基于以下需求分析进行编码实现。不要调用任何工具，直接输出完整可运行的代码文本：\n\n{input}",
+            "thinking": false,
+            "pass": "text",
+            "onFailure": "abort"
+          },
+          {
+            "stageId": "review",
+            "agentId": "reviewer",
+            "promptTemplate": "请审查以下代码实现，指出潜在问题、改进建议与风险点。不要调用任何工具，直接输出审查结论：\n\n{input}",
+            "thinking": false,
+            "pass": "text",
+            "onFailure": "continue"
+          }
+        ]
+      }
+    }
+  ]
+}

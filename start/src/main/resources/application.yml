@@ -14,8 +14,10 @@ agent:
   agent-id: default
   name: mwb-ai-claw
   system-prompt: 你是 mwb-ai-claw 智能助手。当需要时可以调用工具来完成任务，完成后给出简洁回复。
-  # 协作模式（决定加载哪个 {mode}-agents.json），默认 routing
-  mode: routing
+  # 默认编排 id（意图未命中时的兜底，引用 orchestrations.json 中的 id）
+  orchestration: routing
+  # 编排选择器：rule（关键词匹配，默认）| llm（预留）
+  orchestration-selector: rule
   # 模型配置通过环境变量（.env / 系统环境变量）注入，避免密钥泄露
   model: ${DEFAULT_MODEL:deepseek-chat}
   base-url: ${DEFAULT_BASE_URL:https://api.deepseek.com}
@@ -58,8 +60,13 @@ agent:
     embedding-api-key: ${EMBEDDING_API_KEY:}      # Embedding API Key（留空继承 agent.api-key）
     archive-enabled: true          # 会话结束后归档原文为 ARCHIVE 页（跨会话档案 RAG 数据源）
     shared-retrieve: true          # 多 Agent 共享：readContext 时自动检索其他会话的档案/摘要/事实并换入
-  # 专家 Agent 配置已独立到 {mode}-agents.json（默认 routing-agents.json）
-  # 可在运行目录下新增/修改，或使用 classpath 默认模板
+    # ===== Phase 4：成本优化 =====
+    synthesizer-model: ${SYNTHESIS_MODEL:}          # 小模型提炼：提炼专用模型（留空继承主模型，可用更便宜的模型降低成本）
+    synthesizer-base-url: ${SYNTHESIS_BASE_URL:}    # 小模型提炼：Base URL（留空继承 agent.base-url）
+    synthesizer-api-key: ${SYNTHESIS_API_KEY:}      # 小模型提炼：API Key（留空继承 agent.api-key）
+    synthesis-cache-size: 50        # 提炼缓存容量（按输入内容哈希去重，避免重复调 LLM；<=0 关闭）
+  # Agent 注册表（agents.json）与编排注册表（orchestrations.json）已独立到 start/src/main/resources 下
+  # 可在运行目录放置同名文件覆盖（支持 ${VAR:default} 占位符），或使用 classpath 默认模板
   # 工具安全配置
   security:
     enabled: true

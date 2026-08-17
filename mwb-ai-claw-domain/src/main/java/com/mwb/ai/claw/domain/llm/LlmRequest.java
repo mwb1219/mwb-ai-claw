@@ -25,4 +25,7 @@ public class LlmRequest {
 
     /** 最大 tokens */
     private int maxTokens;
+
+    /** 思考模式开关（null=不传，由模型提供方默认） */
+    private Boolean thinking;
 }

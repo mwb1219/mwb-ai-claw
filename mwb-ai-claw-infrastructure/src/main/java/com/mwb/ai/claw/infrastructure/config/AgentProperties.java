@@ -44,8 +44,11 @@ public class AgentProperties {
     /** ReAct 最大推理步数 */
     private int maxSteps = 8;
 
-    /** 协作模式（决定加载哪个 {mode}-agents.json），默认 routing */
-    private String mode = "routing";
+    /** 默认编排 id（意图未命中时的兜底，引用 orchestrations.json 中的 id），默认 routing */
+    private String orchestration = "routing";
+
+    /** 编排选择器：rule（关键词，默认）| llm（预留） */
+    private String orchestrationSelector = "rule";
 
     /** 长期记忆目录（AGENT.md / MEMORY.md 存放位置，默认 ${user.dir}/.agent） */
     private String memoryDir = "";
