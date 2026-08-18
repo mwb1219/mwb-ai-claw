@@ -37,6 +37,7 @@ public class OrchestrationContext {
     /** 进度回调（可空） */
     private ProgressCallback callback;
 
-    /** LLM 流式回调（routing 支持；pipeline / conversational 首期为 null） */
+    /** LLM 流式回调（routing 全链路支持；pipeline 阶段 / conversational 串行轮与收敛支持；
+     *  conversational 并行首轮传 null，避免多线程交错输出终端） */
     private LlmStreamCallback streamCallback;
 }

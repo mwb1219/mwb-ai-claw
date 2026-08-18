@@ -11,7 +11,8 @@
 #   ./install.sh --help
 #
 # 环境变量（可选）:
-#   MWB_AI_CLAW_HOME   安装根目录，默认 ~/.mwb-ai-claw
+#   MWB_AI_CLAW_HOME            安装根目录，默认 ~/.mwb-ai-claw
+#   MWB_AI_CLAW_APPROVAL_MODE   Shell 审批模式覆盖（auto/ask/read-only），默认 ask
 # ============================================================
 set -euo pipefail
 
@@ -208,9 +209,10 @@ install_files() {
 #!/usr/bin/env bash
 # mwb-ai-claw launcher —— 任意目录执行进入 Agent Shell
 # 设计要点:
-#   - 全局密钥来自 $MWBC_HOME/.env（作为真实环境变量注入，优先级高于 .env 文件加载）
+#   - 全局密钥来自 $MWBC_HOME/.env（作为环境变量注入，仅作兜底；项目 .env 优先）
 #   - 不切换工作目录: .agent/ 会话与记忆落在当前目录（按项目隔离）
-#   - 透传所有参数, 可覆盖 Spring 配置, 如 --agent.orchestration=xxx
+#   - 支持常用参数: --help / --version / --approval-mode / --model / --orchestration / --session
+#     其余参数透传 Java（--prompt/--resume/--mode/--bg/--agent/--verbose 及 Spring 配置覆盖）
 set -euo pipefail
 
 MWBC_HOME="${MWB_AI_CLAW_HOME:-$HOME/.mwb-ai-claw}"
@@ -222,12 +224,118 @@ if [[ ! -f "$JAR_PATH" ]]; then
     exit 1
 fi
 
+# 版本号来自 jar 内 pom.properties（META-INF/maven/com.mwb.ai.claw/start/pom.properties）
+print_version() {
+    local v
+    v="$(unzip -p "$JAR_PATH" META-INF/maven/com.mwb.ai.claw/start/pom.properties 2>/dev/null \
+        | sed -n 's/^version=//p' | tr -d '\r')"
+    echo "mwb-ai-claw ${v:-1.0.0-SNAPSHOT}"
+}
+
+print_cli_help() {
+    cat <<'HELP_EOF'
+mwb-ai-claw — Agent Shell 命令行客户端
+
+用法:
+    mwb-ai-claw [参数]
+    mwb-ai-claw --prompt "问题"          # 单轮非交互问答
+    echo "问题" | mwb-ai-claw           # 管道输入（非交互）
+
+参数:
+    -h, --help                 显示本帮助并退出
+    -V, --version              显示版本号并退出
+        --approval-mode <模式>    审批模式: auto | ask(默认) | read-only
+        --model <模型名>          覆盖默认模型（等价 --agent.model=xxx）
+        --orchestration <id>     覆盖默认编排（routing | code-review-pipeline | team-discussion 等）
+        --session <会话id>        恢复指定会话进入交互（等价 --resume）
+        --prompt <文本>           单轮非交互问答（等价 -p）
+        --resume <会话id>         恢复指定会话进入交互
+        --mode stream|sync       回复输出模式（默认 stream）
+        --bg "任务描述"           启动后台 Agent 任务后进入交互
+        --agent <专家id>          默认使用指定专家 Agent（如 coder / architect）
+        --verbose                观察结果完整显示（默认缩写）
+    其余参数透传 Spring 配置，如 --agent.tools=echo,shell
+
+环境变量:
+    MWB_AI_CLAW_HOME            安装根目录（默认 ~/.mwb-ai-claw）
+    MWB_AI_CLAW_APPROVAL_MODE   审批模式覆盖（auto/ask/read-only，命令行 --approval-mode 优先）
+    DEFAULT_API_KEY             在 $MWBC_HOME/.env 中配置
+
+示例:
+    mwb-ai-claw                                     # 进入交互模式
+    mwb-ai-claw --approval-mode=read-only           # 只读模式（命中审批规则拒绝执行）
+    mwb-ai-claw --model deepseek-chat               # 指定模型
+    mwb-ai-claw --agent coder                       # 默认使用编码专家
+    mwb-ai-claw --prompt "总结当前目录"              # 单轮问答
+HELP_EOF
+}
+
 # 加载全局 .env（API Key 等敏感配置）；set -a 自动 export 所有变量
 if [[ -f "$MWBC_HOME/.env" ]]; then
     set -a
     # shellcheck disable=SC1090,SC1091
     source "$MWBC_HOME/.env" 2>/dev/null || true
     set +a
+fi
+
+# ---------------- 参数解析 ----------------
+# 解析并转换已知参数，其余参数透传 Java。
+# 注意: bash 3.2 在 set -u 下空数组展开会报 unbound variable，
+#       故透传参数用 ${arr[@]+"${arr[@]}"} 保护展开。
+user_args=("$@")
+approval_mode=""
+model=""
+orchestration=""
+session_id=""
+pass=()
+i=0
+while [[ $i -lt ${#user_args[@]} ]]; do
+    a="${user_args[$i]}"
+    case "$a" in
+        --help|-h)
+            print_cli_help
+            exit 0
+            ;;
+        --version|-V)
+            print_version
+            exit 0
+            ;;
+        --approval-mode)
+            approval_mode="${user_args[$((i+1))]:-}"; i=$((i+2)) ;;
+        --approval-mode=*)
+            approval_mode="${a#*=}"; i=$((i+1)) ;;
+        --model)
+            model="${user_args[$((i+1))]:-}"; i=$((i+2)) ;;
+        --model=*)
+            model="${a#*=}"; i=$((i+1)) ;;
+        --orchestration)
+            orchestration="${user_args[$((i+1))]:-}"; i=$((i+2)) ;;
+        --orchestration=*)
+            orchestration="${a#*=}"; i=$((i+1)) ;;
+        --session)
+            session_id="${user_args[$((i+1))]:-}"; i=$((i+2)) ;;
+        --session=*)
+            session_id="${a#*=}"; i=$((i+1)) ;;
+        *)
+            pass+=("$a"); i=$((i+1)) ;;
+    esac
+done
+
+# 组装最终参数：命令行参数优先，其次环境变量 MWB_AI_CLAW_APPROVAL_MODE
+set -- ${pass[@]+"${pass[@]}"}
+if [[ -n "$session_id" ]]; then
+    set -- --resume "$session_id" "$@"
+fi
+if [[ -n "$orchestration" ]]; then
+    set -- --agent.orchestration="$orchestration" "$@"
+fi
+if [[ -n "$model" ]]; then
+    set -- --agent.model="$model" "$@"
+fi
+if [[ -n "$approval_mode" ]]; then
+    set -- --agent.security.shell-approval-mode="$approval_mode" "$@"
+elif [[ -n "${MWB_AI_CLAW_APPROVAL_MODE:-}" ]]; then
+    set -- --agent.security.shell-approval-mode="$MWB_AI_CLAW_APPROVAL_MODE" "$@"
 fi
 
 # 透传用户参数；默认激活 shell profile
@@ -335,7 +443,8 @@ main() {
     ok "安装完成!"
     echo
     printf "  ${C_BOLD}用法${C_NC}: 在任意目录执行 ${C_CYAN}${COMMAND_NAME}${C_NC} 进入 Agent Shell\n"
-    printf "  ${C_BOLD}帮助${C_NC}: 进入后输入 ${C_YELLOW}/help${C_NC} 查看命令\n"
+    printf "  ${C_BOLD}帮助${C_NC}: ${C_YELLOW}${COMMAND_NAME} --help${C_NC} 查看启动参数 | 进入后输入 ${C_YELLOW}/help${C_NC} 查看命令\n"
+    printf "  ${C_BOLD}审批${C_NC}: 默认 ${C_YELLOW}ask${C_NC}（高风险命令询问 y/N）；改为自动可在 ${ENV_FILE} 中设 ${C_CYAN}MWB_AI_CLAW_APPROVAL_MODE=auto${C_NC}\n"
     [[ -f "$ENV_FILE" && -z "$(grep -E '^DEFAULT_API_KEY=\S' "$ENV_FILE" 2>/dev/null || true)" ]] && {
         warn "提醒: $ENV_FILE 中 DEFAULT_API_KEY 仍为空, 请先填入再使用"
     }

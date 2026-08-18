@@ -64,12 +64,16 @@ public class ExecutionUnitImpl implements ExecutionUnit {
     }
 
     @Override
-    public String runAgent(String prompt, Agent agent, ProgressCallback callback) {
+    public String runAgent(String prompt, Agent agent, ProgressCallback callback,
+                           LlmStreamCallback streamCallback) {
         // 临时会话：不入库，仅作为 ReAct 执行载体（阶段/参与者之间上下文隔离）
         Session session = new Session();
         session.setSessionId(UUID.randomUUID().toString().replace("-", ""));
         session.setAgentId(agent.getAgentId());
         session.addUserMessage(prompt);
+        if (streamCallback != null) {
+            return reActLoopService.streamRun(session, agent, callback, streamCallback).getReply();
+        }
         return reActLoopService.run(session, agent, callback).getReply();
     }
 

@@ -49,6 +49,18 @@ public class McpToolRegistrar {
     }
 
     /**
+     * 注销一个 MCP 工具适配器（断开服务器时移除其工具）
+     */
+    public void unregister(String toolName) {
+        if (toolGateway instanceof DynamicToolRegistry) {
+            ((DynamicToolRegistry) toolGateway).unregisterExecutor(toolName);
+            log.debug("动态注销工具: {}", toolName);
+        } else {
+            log.warn("ToolGateway 不支持动态注销，工具 {} 仍将保留", toolName);
+        }
+    }
+
+    /**
      * 获取当前已注册的所有工具列表
      */
     public List<ToolSpec> listRegisteredTools() {

@@ -1709,7 +1709,7 @@ deactivate TG
 - Shell 语义：经 `bash -lc`（Windows 为 `cmd /c`）执行，完整支持管道 / 重定向 / 通配符 / `&&` / 环境变量。
 - 命令白名单：允许的 Shell 命令，**按命令段逐段校验**（`splitShellSegments` 引号感知切分，防 `ls; rm -rf` / `&&` 拼接绕过）。
 - 命令黑名单：21 个危险模式（`rm -rf /`、`sudo`、`mkfs`、fork bomb 等），优先级高于白名单。
-- 审批模式：`shell-approval-mode` 三档（`auto` 自动执行 / `ask` 命中规则弹 Y/N 确认（默认）/ `read-only` 拒绝），`shell-approval-patterns` 配置 30+ 高风险规则（`git push`、`rm`、`npm install`、`curl -X` 等）；`ToolApproval` 领域接口由 Shell REPL 实现，headless / 无审批器场景安全默认拒绝。
+- 审批模式：`shell-approval-mode` 三档（`auto` 自动执行 / `ask` 命中规则弹 Y/N 确认（默认）/ `read-only` 拒绝），`shell-approval-patterns` 配置 50+ 高风险规则（`git push`、`rm`、`npm install`、`npm cache`、`find -delete`、`curl -X` 等）；`ToolApproval` 领域接口由 Shell REPL 实现，headless / 无审批器场景安全默认拒绝。
 - 长时任务：前台超时**不再强杀**，转为后台任务（`ShellProcessManager`）返回 taskId，`shell_status` 工具（status/output/kill）查询 / 终止；`shell` 支持 `background=true` 参数。
 - 路径限制：File/Shell 工具仅允许在配置的 `workspace-dir` 内操作。
 - 输出截断：工具输出限制 10000 字符（截断前先脱敏）。

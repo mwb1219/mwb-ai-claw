@@ -195,6 +195,27 @@ public class AgentProperties {
                 ":(){ :|:"
         ));
 
+        /** Shell 审批模式：auto（白名单内自动执行）| ask（命中审批规则时向用户确认，默认）| read-only（命中审批规则时拒绝执行） */
+        private String shellApprovalMode = "ask";
+
+        /** Shell 审批规则（子串匹配，不区分大小写）：ask 模式下命中即请求用户确认，read-only 模式下命中即拒绝 */
+        private List<String> shellApprovalPatterns = new ArrayList<>(Arrays.asList(
+                // Git 不可逆 / 变更操作
+                "git push", "git reset", "git revert", "git clean", "git commit", "git rm", "git mv",
+                // 文件系统变更
+                "rm ", "mv ", "cp ", "chmod", "chown", "tee ", "dd ",
+                // 进程管理
+                "kill ",
+                // 包管理（安装/卸载会改动系统或项目）
+                "npm install", "npm uninstall", "npm remove",
+                "pip install", "pip uninstall", "pip3 install",
+                "brew install", "brew uninstall", "gem install",
+                // 网络写操作
+                "ssh ", "scp ", "curl -X", "curl --data", "curl --upload", "curl -F", "wget ",
+                // 压缩 / 格式化 / 磁盘
+                "tar ", "gzip", "gunzip", "zip ", "unzip", "mkfs", "fdisk", "> "
+        ));
+
         /** 单个工具执行超时（秒） */
         private int toolTimeoutSeconds = 30;
 

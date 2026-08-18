@@ -10,7 +10,8 @@
 #   .\install.ps1 -Help          # 显示帮助
 #
 # 环境变量（可选）:
-#   $env:MWB_AI_CLAW_HOME   安装根目录，默认 $HOME\.mwb-ai-claw
+#   $env:MWB_AI_CLAW_HOME            安装根目录，默认 $HOME\.mwb-ai-claw
+#   $env:MWB_AI_CLAW_APPROVAL_MODE   Shell 审批模式覆盖（auto/ask/read-only），默认 ask
 #
 # 注意: 若遇到执行策略限制，先执行:
 #   powershell -ExecutionPolicy Bypass -File .\install.ps1
@@ -77,6 +78,10 @@ mwb-ai-claw 本地安装脚本 (Windows PowerShell)
 
 PATH 配置:
     将 $env:LOCALAPPDATA\mwb-ai-claw-bin 加入用户 PATH（若尚未包含）。
+
+Shell 审批模式（默认 ask）:
+    默认高风险命令（git push、rm 等）会询问 y/N 确认；
+    改为自动执行可在 .env 中设置 $env:MWB_AI_CLAW_APPROVAL_MODE=auto。
 
 安装后任意目录执行 {1} 即可进入 Agent Shell。
 '@ -f $InstallDir, $CommandName | Write-Host
@@ -206,7 +211,7 @@ setlocal
 
 REM mwb-ai-claw launcher —— 任意目录执行进入 Agent Shell
 REM 设计要点:
-REM   - 全局密钥来自 %MWB_AI_CLAW_HOME%\.env（作为真实环境变量注入）
+REM   - 全局密钥来自 %MWB_AI_CLAW_HOME%\.env（作为环境变量注入，仅作兜底；项目 .env 优先）
 REM   - 不切换工作目录: .agent\ 会话与记忆落在当前目录（按项目隔离）
 REM   - 透传所有参数, 可覆盖 Spring 配置
 
@@ -239,7 +244,7 @@ endlocal
 setlocal enabledelayedexpansion
 
 REM mwb-ai-claw launcher —— 任意目录执行进入 Agent Shell
-REM   - 全局密钥来自 %MWB_AI_CLAW_HOME%\.env（作为真实环境变量注入）
+REM   - 全局密钥来自 %MWB_AI_CLAW_HOME%\.env（作为环境变量注入，仅作兜底；项目 .env 优先）
 REM   - 不切换工作目录: .agent\ 会话与记忆落在当前目录（按项目隔离）
 REM   - 透传所有参数, 可覆盖 Spring 配置
 
@@ -259,7 +264,13 @@ if exist "%MWB_AI_CLAW_HOME%\.env" (
     )
 )
 
-java -jar "%JAR_PATH%" --spring.profiles.active=shell %*
+REM Shell 审批模式：默认 ask（application.yml 内置，命中审批规则时询问用户 y/N）；
+REM 可用 MWB_AI_CLAW_APPROVAL_MODE 环境变量覆盖（如 .env 中写 MWB_AI_CLAW_APPROVAL_MODE=auto）
+if not "%MWB_AI_CLAW_APPROVAL_MODE%"=="" (
+    java -jar "%JAR_PATH%" --spring.profiles.active=shell --agent.security.shell-approval-mode=%MWB_AI_CLAW_APPROVAL_MODE% %*
+) else (
+    java -jar "%JAR_PATH%" --spring.profiles.active=shell %*
+)
 endlocal
 '@
     Set-Content -Path $cmdPath -Value $cmdContent -Encoding ASCII
@@ -296,8 +307,15 @@ if (Test-Path $envFile) {
     }
 }
 
+# Shell 审批模式：默认 ask（application.yml 内置，命中审批规则时询问用户 y/N）；
+# 可用 MWB_AI_CLAW_APPROVAL_MODE 环境变量覆盖（如 .env 中写 MWB_AI_CLAW_APPROVAL_MODE=auto）
+$allArgs = @("--spring.profiles.active=shell")
+if ($env:MWB_AI_CLAW_APPROVAL_MODE) {
+    $allArgs += "--agent.security.shell-approval-mode=$env:MWB_AI_CLAW_APPROVAL_MODE"
+}
+
 # 透传用户参数；默认激活 shell profile
-$allArgs = @("--spring.profiles.active=shell") + $Args
+$allArgs += $Args
 & java -jar $jarPath @allArgs
 '@
     Set-Content -Path $ps1Path -Value $ps1Content -Encoding UTF8
@@ -362,6 +380,7 @@ Write-OK "安装完成!"
 Write-Host ""
 Write-Host "  用法: 在任意目录执行 $CommandName 进入 Agent Shell" -ForegroundColor White
 Write-Host "  帮助: 进入后输入 /help 查看命令" -ForegroundColor White
+Write-Host "  审批: 默认 ask（高风险命令询问 y/N）；改为自动可在 $EnvFile 中设 MWB_AI_CLAW_APPROVAL_MODE=auto" -ForegroundColor White
 Write-Host ""
 
 # 检查 .env 中 DEFAULT_API_KEY 是否为空

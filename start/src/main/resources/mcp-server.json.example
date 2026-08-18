@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "tavily-mcp": {
+      "command": "npx",
+      "args": ["-y", "tavily-mcp@0.1.2"],
+      "env": {
+        "TAVILY_API_KEY": "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"
+      }
+    },
+    "amap-maps": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@amap/amap-maps-mcp-server"
+      ],
+      "env": {
+        "AMAP_MAPS_API_KEY": "3704cec8b3f6515b9477abb860791251"
+      }
+    }
+  }
+}

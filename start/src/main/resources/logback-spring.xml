@@ -28,15 +28,23 @@
         </encoder>
     </appender>
 
-    <!--rootLogger是默认的logger-->
-    <root level="INFO">
-        <!--定义了两个appender，日志会通过往这两个appender里面写-->
-        <appender-ref ref="CONSOLE" />
-        <appender-ref ref="APPLICATION" />
-    </root>
+    <!--rootLogger：默认 INFO；shell 交互模式下仅输出 ERROR（避免 warn/info 日志干扰终端，
+        分层记忆等业务日志已提升为 WARN，在 shell 模式一并被抑制，web 模式仍可见）-->
+    <springProfile name="!shell">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE" />
+            <appender-ref ref="APPLICATION" />
+        </root>
+    </springProfile>
+    <springProfile name="shell">
+        <root level="ERROR">
+            <appender-ref ref="CONSOLE" />
+            <appender-ref ref="APPLICATION" />
+        </root>
+    </springProfile>
 
-    <!--应用日志：继承 INFO 级别（如需调试可临时改为 DEBUG）-->
-    <logger name="com.mwb.ai.claw" level="INFO"/>
+    <!--应用日志：继承 root 级别（shell 模式下 root=ERROR 不打印 warn/info；如需调试可临时加
+        <logger name="com.mwb.ai.claw" level="DEBUG"/>）-->
 
     <!--数据库日志-->
     <!--由于这个logger自动继承了root的appender，root中已经有stdout的appender了，自己这边又引入了stdout的appender-->

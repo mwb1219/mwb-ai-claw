@@ -148,7 +148,24 @@
 - [x] 启动校验：技能 name / description 缺失、name 与目录不一致、name 重复 → 启动报错
 - [x] 内置 12 个技能（classpath 模板）：`code-review`、`project-structure-analysis`、`unit-test-writing`、`git-workflow`、`ddd-modeling`、`tech-design-doc`、`web-research`、`database-design`、`doc-writing-guide`、`markdown-diagramming`、`doc-review`、`example-skill`（详见 `docs/feature-skill-support技术方案(SUBMIT).md` §6.2）
 
-### 3.9 待实施
+### 3.9 Phase 9：Shell 模式增强 ✅
+
+- [x] **完整 shell 语义**：`ShellTool` 经 `bash -lc`（Windows 为 `cmd /c`）执行，支持管道 / 重定向 / 通配符 / `&&` / 变量；白名单升级为按命令段逐段校验（引号感知切分，防 `ls; rm -rf` 绕过）
+- [x] **审批模式三档**：`shell-approval-mode`（`auto` 自动执行 / `ask` 命中规则弹 Y/N 确认（默认）/ `read-only` 拒绝）+ 30+ 高风险审批规则（`git push`、`rm`、`npm install`、`curl -X` 等）；headless / Web 场景无审批器时安全默认拒绝
+- [x] **长时任务不超时强杀**：前台超时转为后台任务返回 taskId；新增 `shell_status` 工具（status/output/kill）；`shell` 支持 `background=true` 参数
+- [x] **命令流式回显**：`ToolExecutor`/`ToolGateway` 回调版 execute，Shell 输出经 `ProgressCallback` 逐行实时绿色回显
+- [x] **headless 模式**：`--prompt/-p` 单轮非交互 + stdin 管道自动进入（`echo "问题" | mwb-ai-claw`）；`--resume` / `--mode` / `--bg` 启动参数
+- [x] **上下文管理**：`/clear` 语义修正为「清屏 + 重置上下文」；`/compact` 将历史消息 LLM 摘要压缩（保留最近 10 条）
+- [x] **交互体验**：多行输入（``` ``` ``` / 引号 / 花括号未闭合自动续行）、Tab 补全（斜杠命令 / 会话 ID / 文件路径）、`!` 快捷执行（复用 Shell 沙箱 + 审批）、会话自动标题 + `/session rename`、`/cost` token 用量统计
+- [x] **敏感信息脱敏**：shell 输出与工具入参中的密钥（`sk-` / `api_key=` / `token:` / `password=` / `Bearer` / `AKIA`）自动打码后再进上下文
+- [x] **计划模式**：`/plan` 先让 Agent 输出方案（不执行工具），用户 y/N 确认后再执行
+- [x] **自定义斜杠命令**：`~/.claw/commands/*.md`（frontmatter `name`/`description` + 模板占位符 `{args}`/`{1}`…），启动加载注册、Tab 补全、/help 展示
+- [x] **MCP 管理**：`/mcp` 查看列表 / `/mcp connect`（重连）/ `/mcp disconnect`（断开并自动注销工具）
+- [x] **会话导出 / 分叉**：`/session export <id>`（JSON 落盘 `~/.claw/exports/`）、`/fork [id]`（复制为独立新会话）
+- [x] **后台 agent**：`--bg "任务"` 启动 + `/agent list` / `/agent attach <id>`（独立线程新会话执行）
+- [x] **状态栏**：prompt 行显示会话 ID + 上下文估算 token（`≈Ntk`）+ plan 模式标记
+
+### 3.10 待实施
 
 - [ ] IM 渠道接入：飞书、钉钉、Telegram
 - [ ] 浏览器控制工具（CDP）
@@ -315,7 +332,7 @@ ws://localhost:8080/ws/agent
 
 **设计要点**：
 
-- **密钥全局**：`~/.mwb-ai-claw/.env` 中的变量作为真实环境变量注入（优先级高于 `.env` 文件加载），任意目录执行都能读取到 API Key。
+- **密钥全局兜底**：`~/.mwb-ai-claw/.env` 中的变量作为环境变量注入（优先级低于项目 `.env`），任意目录执行都能读取到 API Key；项目内 `.env` 可覆盖全局配置。
 - **会话/记忆按项目隔离**：启动器不切换工作目录，`.agent/` 落在当前目录，不同项目互不干扰。
 - **参数透传**：可覆盖任意 Spring 配置，如 `mwb-ai-claw --agent.orchestration=code-review-pipeline`。
 
@@ -455,16 +472,40 @@ java -jar start/target/start-*.jar --spring.profiles.active=shell
 | 命令                     | 功能           |
 | ---------------------- | ------------ |
 | 自由文本                   | 发送给 Agent 对话 |
+| `!<命令>`                | 本地执行 shell 命令并把输出交给 Agent 分析（如 `!npm test`） |
 | `/mode`                | 切换 流式/同步 模式  |
+| `/trace`               | 切换 观察结果 完整/缩写 |
+| `/plan`                | 切换计划模式（先出方案，用户确认后执行） |
+| `/compact`             | 压缩当前会话历史上下文（保留最近 10 条 + 摘要） |
+| `/cost [id]`           | 当前会话（或指定会话）Token 用量估算 |
 | `/session`             | 查看当前会话       |
 | `/session new`         | 创建新会话        |
 | `/session list`        | 列出所有会话       |
 | `/session switch <id>` | 切换会话（支持前缀匹配） |
+| `/session rename <id> <标题>` | 重命名会话 |
+| `/session export <id> [path]` | 导出会话为 JSON（默认 `~/.claw/exports/`） |
 | `/session delete <id>` | 删除会话         |
-| `/clear`               | 清屏           |
+| `/fork [id]`           | 分叉当前（或指定）会话为新会话 |
+| `/mcp`                 | 查看 MCP Server 列表 |
+| `/mcp connect <name>`  | 连接（重连）MCP Server |
+| `/mcp disconnect <name>` | 断开 MCP Server（自动注销其工具） |
+| `/agent`               | 查看后台 agent 任务 |
+| `/agent attach <id>`   | 查看后台 agent 结果 |
+| `/memory`              | 分层记忆总览 / `stats` / `facts` / `summaries` / `archive` / `search <q>` |
+| `/clear`               | 清屏并重置上下文（新建会话） |
 | `/exit` / `/quit`      | 退出           |
 
-流式模式下 AI 回复逐 token 绿色打印，Thought 紫色、Action 黄色、Observation 蓝色。命令历史自动保存至 `~/.mwb-ai-claw-history`。
+流式模式下 AI 回复逐 token 绿色打印，Thought 紫色、Action 黄色、Observation 蓝色、Shell 输出绿色。命令历史自动保存至 `~/.mwb-ai-claw-history`。
+
+**启动参数**（`mwb-ai-claw --prompt "问题"` 等）：
+
+| 参数 | 功能 |
+| --- | --- |
+| `--prompt "问题"` / `-p` | headless 单轮非交互执行，纯文本输出（stdin 为管道时自动进入） |
+| `--resume <sessionId>` | 恢复指定会话 |
+| `--mode stream\|sync` | 指定流式 / 同步模式 |
+| `--bg "任务"` | 启动后台 agent（独立新会话，`/agent attach` 查看结果） |
+| `--agent.*=...` | 覆盖任意 Spring 配置（如审批模式 `--agent.security.shell-approval-mode=auto`） |
 
 ### 5.4 前端测试控制台
 
@@ -485,7 +526,7 @@ DEFAULT_API_KEY=sk-xxx
 ```
 
 - `.env` 已被 `.gitignore` 排除，不会提交；`.env.example`（key 留空）作为模板提交供团队参考。
-- **环境变量优先级**（由高到低）：命令行参数 > 系统环境变量 > `.env` 文件 > 配置文件默认值。生产环境可直接注入系统环境变量覆盖 `.env`。
+- **配置优先级**（由高到低）：命令行参数 > 项目 `.env` 文件 > 系统环境变量 > 配置文件默认值。生产环境可通过命令行参数或 `-D` 系统属性覆盖 `.env`。
 - 支持 `KEY=value` 格式（忽略 `#` 注释、去除引号），Spring 配置中用 `${VAR:default}` 引用，`default` 为兜底值。
 
 ### 6.2 核心配置（application.yml）
@@ -533,16 +574,18 @@ agent:
   security:
     enabled: true
     workspace-dir: ""                        # 文件操作根目录
-    shell-whitelist: [ls, cat, grep, ...]    # 65 个命令
+    shell-whitelist: [ls, cat, grep, ...]    # 允许的 Shell 命令（按命令段逐段校验）
     shell-blacklist: ["rm -rf /", sudo, ...]  # 21 个危险模式
-    tool-timeout-seconds: 30
+    shell-approval-mode: ask                 # 审批模式：auto（自动执行）| ask（命中规则弹确认，默认）| read-only（拒绝）
+    shell-approval-patterns: [git push, rm , npm install, npm cache, curl -X, ...]  # 50+ 高风险命令，命中即需审批
+    tool-timeout-seconds: 30                 # 超时后转为后台任务（shell_status 查询 / 终止）
     max-output-length: 10000
     http-allowed-hosts: []
 ```
 
 ### 6.3 Agent 注册表（agents.json）与编排注册表（orchestrations.json）
 
-Agent 配置与编排定义完全解耦，分两个独立文件存放（`start/src/main/resources/` 内置默认模板）。**加载优先级：运行目录下的同名文件 > jar 内置 classpath 默认模板**，支持 `${VAR:default}` 占位符。使用者可在运行目录放置同名文件覆盖，自由增删 Agent / 编排，无需重新打包。
+Agent 配置与编排定义完全解耦，分两个独立文件存放（`start/src/main/resources/` 内置默认模板）。**加载优先级：运行目录（user.dir）下的同名文件（命中即用，不再读取内置）> jar 内置 classpath 默认模板**，支持 `${VAR:default}` 占位符。使用者可在运行目录放置同名文件覆盖，自由增删 Agent / 编排，无需重新打包。
 
 #### 6.3.1 Agent 注册表（agents.json）
 
@@ -693,7 +736,7 @@ RESEARCHER_API_KEY=sk-researcher-xxx
 
 ### 6.6 MCP Server 配置（mcp-server.json）
 
-MCP Server 配置独立在 `mcp-server.json`（与 Cursor / Claude 的 mcp.json 格式一致），**加载优先级：运行目录下的** **`mcp-server.json`** **> classpath 默认模板**。支持 stdio 与 streamable\_http 两种传输：
+MCP Server 配置独立在 `mcp-server.json`（与 Cursor / Claude 的 mcp.json 格式一致），**加载优先级：运行目录（user.dir）下的 `mcp-server.json`（命中即用，不再读取内置）> classpath 默认模板**。支持 stdio 与 streamable_http 两种传输：
 
 ```json
 {
@@ -717,11 +760,14 @@ MCP Server 配置独立在 `mcp-server.json`（与 Cursor / Claude 的 mcp.json 
 
 | 机制      | 说明                                                        |
 | ------- | --------------------------------------------------------- |
-| 命令白名单   | 65 个允许的 Shell 命令，涵盖文件操作、文本处理、构建工具、包管理等                    |
+| 命令白名单   | 允许的 Shell 命令，**按命令段逐段校验**（引号感知切分，防 `ls; rm -rf` / `&&` 拼接绕过）    |
 | 命令黑名单   | 21 个危险模式：`rm -rf /`、`sudo`、`mkfs`、fork bomb、`chmod 777` 等 |
+| 审批模式    | 三档：`auto`（自动执行）/ `ask`（命中规则弹 Y/N 确认，默认）/ `read-only`（拒绝）；50+ 高风险规则（`git push`、`rm`、`npm install`、`npm cache`、`curl -X` 等）；headless / 无审批器时安全拒绝 |
+| 长时任务    | 前台超时**不再强杀**，转为后台任务返回 taskId；`shell_status` 工具可查询状态 / 取输出 / 终止 |
 | 路径限制    | `FileTool` 和 `ShellTool` 仅允许在配置的 `workspace-dir` 内操作      |
-| 超时控制    | 工具执行 30 秒超时，超时后强制终止进程                                     |
-| 输出截断    | 工具输出限制 10000 字符，防止撑爆上下文                                   |
+| 超时控制    | 工具执行 30 秒超时，超时后转后台续跑                                   |
+| 输出截断    | 工具输出限制 10000 字符，防止撑爆上下文（截断前先脱敏）                 |
+| 敏感信息脱敏 | shell 输出与工具入参中的密钥（`sk-` / `api_key=` / `token:` / `Bearer` / `AKIA`）自动打码 |
 | HTTP 限制 | 可配置允许的 host 列表，阻止 SSRF                                    |
 
 所有安全违规均捕获为 `SecurityException`，返回 `ToolResult.error("安全拦截: ...")`，不会中断 ReAct 循环。
@@ -734,7 +780,7 @@ MCP Server 配置独立在 `mcp-server.json`（与 Cursor / Claude 的 mcp.json 
 | LLM 调用   | OkHttp + OpenAI 兼容 API                              | 统一 Chat Completions 接口           |
 | 流式输出     | SSE (SseEmitter) + WebSocket (TextWebSocketHandler) | Token 级实时推送                      |
 | 工具协议     | MCP (Model Context Protocol)                        | stdio / streamable\_http（SSE 兼容） |
-| Shell 终端 | JLine 3.20                                          | ANSI 着色、命令历史、行编辑                 |
+| Shell 终端 | JLine 3.20                                          | ANSI 着色、命令历史、行编辑、多行输入、Tab 补全                 |
 | 序列化      | Jackson                                             | Session JSON 持久化                 |
 | 持久化      | 本地文件 (.agent/ 目录)                                   | 会话文件 + 长期记忆文件                    |
 | 前端       | 原生 HTML/CSS/JS                                      | 无框架依赖，可直接打开                      |

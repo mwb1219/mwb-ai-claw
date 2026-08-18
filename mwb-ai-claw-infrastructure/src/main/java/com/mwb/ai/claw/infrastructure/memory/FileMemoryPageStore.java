@@ -56,7 +56,7 @@ public class FileMemoryPageStore implements MemoryPageStore {
             if (!Files.exists(factsFile)) {
                 Files.createFile(factsFile);
             }
-            log.info("分层记忆存储目录: {}", memoryDir.toAbsolutePath());
+            log.warn("分层记忆存储目录: {}", memoryDir.toAbsolutePath());
         } catch (IOException e) {
             log.error("初始化分层记忆目录失败", e);
         }

@@ -37,7 +37,7 @@ public class SynthesisCache {
         } else {
             this.map = null;
         }
-        log.info("提炼缓存: 容量={}", this.capacity > 0 ? this.capacity : "关闭");
+        log.warn("提炼缓存: 容量={}", this.capacity > 0 ? this.capacity : "关闭");
     }
 
     public boolean isEnabled() {

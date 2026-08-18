@@ -162,7 +162,7 @@ public class PipelineOrchestrator implements AgentOrchestrator {
      */
     private String runStage(OrchestrationContext ctx, String prompt, Agent agent, String stageId) {
         try {
-            return ctx.getExecutionUnit().runAgent(prompt, agent, ctx.getCallback());
+            return ctx.getExecutionUnit().runAgent(prompt, agent, ctx.getCallback(), ctx.getStreamCallback());
         } catch (Exception e) {
             log.warn("流水线阶段 {} 执行失败: {}", stageId, e.getMessage());
             return null;

@@ -26,6 +26,8 @@ public class McpClientManager implements SmartInitializingSingleton {
     private static final Logger log = LoggerFactory.getLogger(McpClientManager.class);
 
     private final Map<String, McpClient> clients = new ConcurrentHashMap<>();
+    /** Server 名 → 已注册的工具名列表（用于断开时注销） */
+    private final Map<String, List<String>> serverTools = new ConcurrentHashMap<>();
     private final List<McpServerConfig> serverConfigs = new ArrayList<>();
     private final McpToolRegistrar toolRegistrar;
 
@@ -66,15 +68,91 @@ public class McpClientManager implements SmartInitializingSingleton {
         client.initialize();
         clients.put(config.getName(), client);
 
-        // 列出工具并注册
+        // 列出工具并注册（同时记录工具名，供断开时注销）
         List<McpToolDef> tools = client.listTools();
+        List<String> toolNames = new ArrayList<>();
         for (McpToolDef toolDef : tools) {
             McpToolAdapter adapter = new McpToolAdapter(client, toolDef);
             toolRegistrar.register(adapter);
+            toolNames.add(adapter.getName());
             log.info("  注册工具: {}", adapter.getName());
         }
+        serverTools.put(config.getName(), toolNames);
 
         log.info("MCP Server '{}' 已就绪，共注册 {} 个工具", config.getName(), tools.size());
+    }
+
+    /**
+     * 断开指定 MCP Server：关闭连接并注销其注册的工具。
+     *
+     * @return 是否存在并成功断开
+     */
+    public boolean disconnectServer(String serverName) {
+        McpClient client = clients.remove(serverName);
+        if (client == null) {
+            return false;
+        }
+        try {
+            client.close();
+        } catch (Exception e) {
+            log.warn("关闭 MCP 客户端异常: {}", serverName, e);
+        }
+        List<String> toolNames = serverTools.remove(serverName);
+        if (toolNames != null) {
+            for (String toolName : toolNames) {
+                toolRegistrar.unregister(toolName);
+            }
+            log.info("已断开 MCP Server '{}'，注销 {} 个工具", serverName, toolNames.size());
+        } else {
+            log.info("已断开 MCP Server '{}'", serverName);
+        }
+        return true;
+    }
+
+    /**
+     * 重连指定 MCP Server（先断开，再按配置重新初始化）
+     */
+    public boolean reconnectServer(String serverName) {
+        McpServerConfig config = null;
+        for (McpServerConfig c : serverConfigs) {
+            if (c.getName().equals(serverName)) {
+                config = c;
+                break;
+            }
+        }
+        if (config == null) {
+            return false;
+        }
+        disconnectServer(serverName);
+        try {
+            initializeServer(config);
+            return true;
+        } catch (Exception e) {
+            log.error("MCP Server '{}' 重连失败", serverName, e);
+            return false;
+        }
+    }
+
+    /**
+     * 是否已连接指定 MCP Server
+     */
+    public boolean isConnected(String serverName) {
+        return clients.containsKey(serverName);
+    }
+
+    /**
+     * 指定 MCP Server 已注册的工具名列表（未连接返回空列表）
+     */
+    public List<String> getServerToolNames(String serverName) {
+        List<String> names = serverTools.get(serverName);
+        return names == null ? java.util.Collections.emptyList() : names;
+    }
+
+    /**
+     * 全部已配置的 MCP Server 配置列表（含未连接的）
+     */
+    public List<McpServerConfig> getServerConfigs() {
+        return serverConfigs;
     }
 
     /**

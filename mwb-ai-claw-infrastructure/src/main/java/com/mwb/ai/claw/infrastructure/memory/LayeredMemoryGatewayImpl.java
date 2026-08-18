@@ -57,7 +57,7 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
         this.evictionPolicy = "importance".equalsIgnoreCase(config.getEvictionPolicy())
                 ? new ImportanceEvictionPolicy() : new TokenBudgetEvictionPolicy();
         this.synthesisExecutor = synthesisExecutor;
-        log.info("分层记忆配置: enabled={}, window={}, budgetRatio={}, hotWindow={}, blockSize={}, threshold={}, topK={}, policy={}, async={}, retriever={}, vector={}, archive={}, sharedRetrieve={}, model={}",
+        log.warn("分层记忆配置: enabled={}, window={}, budgetRatio={}, hotWindow={}, blockSize={}, threshold={}, topK={}, policy={}, async={}, retriever={}, vector={}, archive={}, sharedRetrieve={}, model={}",
                 config.isEnabled(), config.getContextWindowTokens(), config.getContextBudgetRatio(),
                 config.getHotWindowSize(), config.getSummaryBlockSize(),
                 config.getImportanceThreshold(), config.getTopK(),
@@ -153,7 +153,7 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
                     "summary-" + sessionId + "-" + lastSummarized,
                     summary, sessionId, lastSummarized, end,
                     TokenEstimator.estimate(summary)));
-            log.info("分层记忆: 会话 {} 换页生成摘要 [{}:{})", sessionId, lastSummarized, end);
+            log.warn("分层记忆: 会话 {} 换页生成摘要 [{}:{})", sessionId, lastSummarized, end);
         }
     }
 
@@ -195,7 +195,7 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
             pageStore.appendFact(merged);
             saved++;
         }
-        log.info("分层记忆: 会话 {} 提炼结束，新增/更新事实 {} 条", sessionId, saved);
+        log.warn("分层记忆: 会话 {} 提炼结束，新增/更新事实 {} 条", sessionId, saved);
     }
 
     /** 把会话原文按块归档为 ARCHIVE 页（只归档上次之后的新消息，幂等） */
@@ -215,7 +215,7 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
             count++;
         }
         if (count > 0) {
-            log.info("分层记忆: 会话 {} 归档 {} 块（历史原文，可跨会话检索）", sessionId, count);
+            log.warn("分层记忆: 会话 {} 归档 {} 块（历史原文，可跨会话检索）", sessionId, count);
         }
     }
 
@@ -256,7 +256,7 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
             pageStore.deleteFact(existing.getKey());
         }
         pageStore.appendFact(merged);
-        log.info("分层记忆: 保存事实 '{}'（重要度 {}）", topic, merged.getImportance());
+        log.warn("分层记忆: 保存事实 '{}'（重要度 {}）", topic, merged.getImportance());
     }
 
     @Override

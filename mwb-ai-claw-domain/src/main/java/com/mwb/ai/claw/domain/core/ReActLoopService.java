@@ -115,7 +115,7 @@ public class ReActLoopService {
                 result.getTraceSteps().add(action);
                 notify(callback, action);
 
-                ToolResult toolResult = toolGateway.execute(toolCall.getName(), toolCall.getArguments());
+                ToolResult toolResult = toolGateway.execute(toolCall.getName(), toolCall.getArguments(), callback);
                 String observation = toolResult.isSuccess()
                         ? toolResult.getOutput()
                         : "ERROR: " + toolResult.getError();
@@ -195,7 +195,7 @@ public class ReActLoopService {
                 result.getTraceSteps().add(action);
                 notify(callback, action);
 
-                ToolResult toolResult = toolGateway.execute(toolCall.getName(), toolCall.getArguments());
+                ToolResult toolResult = toolGateway.execute(toolCall.getName(), toolCall.getArguments(), callback);
                 String observation = toolResult.isSuccess()
                         ? toolResult.getOutput()
                         : "ERROR: " + toolResult.getError();

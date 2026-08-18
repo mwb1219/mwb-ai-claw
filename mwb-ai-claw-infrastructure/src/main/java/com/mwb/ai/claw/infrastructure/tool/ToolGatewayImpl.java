@@ -1,5 +1,6 @@
 package com.mwb.ai.claw.infrastructure.tool;
 
+import com.mwb.ai.claw.domain.core.ProgressCallback;
 import com.mwb.ai.claw.domain.tool.DynamicToolRegistry;
 import com.mwb.ai.claw.domain.tool.ToolExecutor;
 import com.mwb.ai.claw.domain.tool.ToolGateway;
@@ -37,12 +38,17 @@ public class ToolGatewayImpl implements ToolGateway, DynamicToolRegistry {
 
     @Override
     public ToolResult execute(String toolName, String argumentsJson) {
+        return execute(toolName, argumentsJson, null);
+    }
+
+    @Override
+    public ToolResult execute(String toolName, String argumentsJson, ProgressCallback callback) {
         ToolExecutor executor = executors.get(toolName);
         if (executor == null) {
             return ToolResult.error("工具不存在: " + toolName);
         }
         try {
-            return executor.execute(argumentsJson);
+            return executor.execute(argumentsJson, callback);
         } catch (Exception e) {
             log.error("工具执行异常: tool={}, err={}", toolName, e.getMessage(), e);
             return ToolResult.error("工具执行异常: " + e.getMessage());

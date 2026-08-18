@@ -36,8 +36,9 @@ public interface ExecutionUnit {
 
     /**
      * 用一段提示词驱动单个 Agent 执行一次 ReAct（临时会话，不入库），返回最终回复。
+     * {@code streamCallback} 非空时按流式执行（token 实时回调），供 pipeline 阶段 / conversational 串行轮使用。
      */
-    String runAgent(String prompt, Agent agent, ProgressCallback callback);
+    String runAgent(String prompt, Agent agent, ProgressCallback callback, LlmStreamCallback streamCallback);
 
     /**
      * 将阶段产物落盘到工作目录，返回文件路径。

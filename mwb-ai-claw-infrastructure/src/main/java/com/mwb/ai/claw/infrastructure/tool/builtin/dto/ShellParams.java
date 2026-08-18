@@ -13,4 +13,7 @@ public class ShellParams {
 
     /** 可选的工作目录 */
     private String workingDir;
+
+    /** 是否后台运行：true 时立即返回 taskId 不等待执行完成，可用 shell_status 查询/终止 */
+    private Boolean background;
 }

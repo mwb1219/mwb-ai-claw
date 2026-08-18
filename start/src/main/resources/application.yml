@@ -40,6 +40,7 @@ agent:
     - http
     - file
     - shell
+    - shell_status
     - read_memory
     - write_memory
   # 分层记忆（突破上下文窗口：分层存储 + 动态换页 + 检索召回）
@@ -190,6 +191,79 @@ agent:
       - "chmod -R"
       # Fork bomb
       - ":(){ :|:"
+    # Shell 审批模式：auto（白名单内自动执行）| ask（命中审批规则时询问用户 y/N，默认）| read-only（命中审批规则时拒绝执行）
+    shell-approval-mode: ask
+    # Shell 审批规则（子串匹配，不区分大小写）：ask 模式下命中即请求用户确认，read-only 模式下命中即拒绝
+    shell-approval-patterns:
+      # Git 不可逆 / 变更操作
+      - "git push"
+      - "git reset"
+      - "git revert"
+      - "git clean"
+      - "git commit"
+      - "git rm"
+      - "git mv"
+      # 文件系统变更
+      - "rm "
+      - "mv "
+      - "cp "
+      - "chmod"
+      - "chown"
+      - "tee "
+      - "dd "
+      # 进程管理
+      - "kill "
+      # 包管理（安装/卸载会改动系统或项目）
+      - "npm install"
+      - "npm uninstall"
+      - "npm remove"
+      - "pip install"
+      - "pip uninstall"
+      - "pip3 install"
+      - "brew install"
+      - "brew uninstall"
+      - "gem install"
+      # 网络写操作
+      - "ssh "
+      - "scp "
+      - "curl -X"
+      - "curl --data"
+      - "curl --upload"
+      - "curl -F"
+      - "wget "
+      # 压缩 / 格式化 / 磁盘
+      - "tar "
+      - "gzip"
+      - "gunzip"
+      - "zip "
+      - "unzip"
+      - "mkfs"
+      - "fdisk"
+      - "> "
+      # 清理 / 缓存操作（同样不可逆或影响构建，需审批；避免模型用 npm cache clean 等绕过审批直接执行）
+      - "npm cache"
+      - "yarn cache"
+      - "pnpm store"
+      - "pnpm cache"
+      - "pip cache"
+      - "pip3 cache"
+      - "cargo clean"
+      - "go clean"
+      - "mvn clean"
+      - "gradle clean"
+      - "make clean"
+      - "brew cleanup"
+      # find 危险动作（递归删除 / 执行任意命令）
+      - "-delete"
+      - "-exec"
+      # 代码执行（任意脚本注入）
+      - "node -e"
+      - "python3 -c"
+      - "python -c"
+      - "npx "
+      # 文件系统低级写操作
+      - "unlink "
+      - "truncate "
     # 单个工具执行超时（秒）
     tool-timeout-seconds: 30
     # 工具输出最大长度（字符数），超出截断

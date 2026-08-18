@@ -8,6 +8,7 @@ import com.mwb.ai.claw.domain.collaboration.OrchestrationContext;
 import com.mwb.ai.claw.domain.collaboration.OrchestrationDefinition;
 import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.AgentGateway;
+import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
 import com.mwb.ai.claw.dto.data.AgentErrorCode;
 import com.mwb.ai.claw.infrastructure.collaboration.ConversationDefinition;
 import com.mwb.ai.claw.infrastructure.util.JsonUtils;
@@ -138,7 +139,8 @@ public class ConversationalOrchestrator implements AgentOrchestrator {
                         + "\n\n以下是其他专家的观点：\n" + history
                         + "\n\n请回应：同意/质疑/补充，并给出你的结论（置信度 0-1）。"
                         + "\n不要调用任何工具，直接输出。";
-                String reply = runParticipant(ctx, conv, participantId, prompt, "Round:" + r, trace);
+                String reply = runParticipant(ctx, conv, participantId, prompt, "Round:" + r, trace,
+                        ctx.getStreamCallback());
                 if (reply != null && !reply.trim().isEmpty()) {
                     round.put(participantId, reply);
                 }
@@ -180,7 +182,7 @@ public class ConversationalOrchestrator implements AgentOrchestrator {
             futures.add(CompletableFuture.runAsync(() -> {
                 String prompt = "任务：" + ctx.getMessage()
                         + "\n请给出你的专业观点与理由（置信度 0-1）。\n不要调用任何工具，直接输出。";
-                String reply = runParticipant(ctx, conv, participantId, prompt, "Round:1", trace);
+                String reply = runParticipant(ctx, conv, participantId, prompt, "Round:1", trace, null);
                 if (reply != null && !reply.trim().isEmpty()) {
                     replies.put(participantId, reply);
                 }
@@ -198,19 +200,21 @@ public class ConversationalOrchestrator implements AgentOrchestrator {
         return ordered;
     }
 
-    /** 执行单个参与者发言（临时会话，异常/空回复时返回 null，由调用方决定语义） */
+    /** 执行单个参与者发言（临时会话，异常/空回复时返回 null，由调用方决定语义）。
+     *  并行首轮传 null 流式回调（避免多线程交错输出终端），串行讨论轮传 ctx 的流式回调。 */
     private String runParticipant(OrchestrationContext ctx, ConversationDefinition conv,
-                                  String participantId, String prompt, String roundLabel, List<String> trace) {
+                                  String participantId, String prompt, String roundLabel,
+                                  List<String> trace, LlmStreamCallback streamCallback) {
         Agent agent = agentGateway.getAgent(participantId);
         if (conv.getThinking() != null) {
             agent.getModelConfig().setThinking(conv.getThinking());
         }
-        String reply = runQuietly(ctx, prompt, agent, roundLabel);
+        String reply = runQuietly(ctx, prompt, agent, roundLabel, streamCallback);
         // 空回复容错：重试一次并要求直接输出
         if (reply == null || reply.trim().isEmpty()) {
             log.warn("对话式参与者 {} {} 回复为空，重试一次", participantId, roundLabel);
             reply = runQuietly(ctx, prompt + "\n\n（注意：你的上一条回复为空。请直接输出完整回答，不要调用任何工具，不要留空。）",
-                    agent, roundLabel);
+                    agent, roundLabel, streamCallback);
         }
         if (reply == null || reply.trim().isEmpty()) {
             return null;
@@ -223,9 +227,10 @@ public class ConversationalOrchestrator implements AgentOrchestrator {
         return reply;
     }
 
-    private String runQuietly(OrchestrationContext ctx, String prompt, Agent agent, String label) {
+    private String runQuietly(OrchestrationContext ctx, String prompt, Agent agent, String label,
+                              LlmStreamCallback streamCallback) {
         try {
-            return ctx.getExecutionUnit().runAgent(prompt, agent, ctx.getCallback());
+            return ctx.getExecutionUnit().runAgent(prompt, agent, ctx.getCallback(), streamCallback);
         } catch (Exception e) {
             log.warn("对话式参与者 {} 执行失败: {}", label, e.getMessage());
             return null;
@@ -344,10 +349,11 @@ public class ConversationalOrchestrator implements AgentOrchestrator {
         if (conv.getThinking() != null) {
             moderator.getModelConfig().setThinking(conv.getThinking());
         }
-        String reply = runQuietly(ctx, prompt, moderator, "Moderator");
+        String reply = runQuietly(ctx, prompt, moderator, "Moderator", ctx.getStreamCallback());
         if (reply == null || reply.trim().isEmpty()) {
             log.warn("对话式 moderator {} 收敛回复为空，重试一次", conv.getModerator());
-            reply = runQuietly(ctx, prompt + "\n\n（注意：请直接输出最终结论，不要留空。）", moderator, "Moderator");
+            reply = runQuietly(ctx, prompt + "\n\n（注意：请直接输出最终结论，不要留空。）", moderator, "Moderator",
+                    ctx.getStreamCallback());
         }
         if (reply == null || reply.trim().isEmpty()) {
             throw new BizException(AgentErrorCode.B_AGENT_CONFIG_ERROR.getErrCode(),
