@@ -16,8 +16,8 @@ agent:
   system-prompt: 你是 mwb-ai-claw 智能助手。当需要时可以调用工具来完成任务，完成后给出简洁回复。
   # 默认编排 id（意图未命中时的兜底，引用 orchestrations.json 中的 id）
   orchestration: routing
-  # 编排选择器：rule（关键词匹配，默认）| llm（预留）
-  orchestration-selector: rule
+  # 编排选择器：rule（关键词匹配，默认）| llm（LLM 语义选择优先，基于编排 description，未命中/失败时规则兜底）
+  orchestration-selector: llm
   # 模型配置通过环境变量（.env / 系统环境变量）注入，避免密钥泄露
   model: ${DEFAULT_MODEL:deepseek-chat}
   base-url: ${DEFAULT_BASE_URL:https://api.deepseek.com}
@@ -29,6 +29,9 @@ agent:
   max-steps: 8
   # 长期记忆目录（AGENT.md / MEMORY.md 存放位置，默认 ${user.dir}/.agent）
   memory-dir: ""
+  # 技能（Skill）支持：渐进式披露 —— 技能清单常驻 system prompt，SKILL.md 正文按需经 use_skill 工具加载
+  skills-enabled: true            # 技能总开关（false 时不加载技能、不注册 use_skill 工具）
+  skills-dir: ""                  # 技能根目录（运行目录，默认 ${user.dir}/skills；classpath skills/ 为内置模板兜底）
   # 可用工具列表
   tools:
     - echo
@@ -50,7 +53,7 @@ agent:
     summary-block-size: 10         # 多少条消息合成一个摘要块（触发换页）
     importance-threshold: 0.6      # 事实写入长期记忆的重要度阈值
     top-k: 5                       # 关键词检索召回条数
-    eviction-policy: token         # 换页策略：token（预算驱动）| importance（重要度驱动）
+    eviction-policy: importance         # 换页策略：token（预算驱动）| importance（重要度驱动）
     synthesis-async: true          # 提炼是否异步执行（线程池串行，不阻塞主对话链路）
     # ===== Phase 3：向量检索 + 跨会话档案 RAG + 多 Agent 共享记忆 =====
     retriever: hybrid              # 检索器：keyword（关键词）| vector（向量）| hybrid（RRF 融合，默认）

@@ -1,0 +1,145 @@
+# ============================================================
+# mwb-ai-claw 二进制分发打包脚本 (Windows PowerShell)
+#
+# 产出不含源码的可分发安装包（zip），用户解压后执行 .\install.ps1 即可安装。
+# 安装包内容:
+#   mwb-ai-claw-<version>-bin\
+#   ├── install.ps1         安装脚本（自适应二进制模式）
+#   ├── lib\start.jar        预构建可执行 jar（无源码）
+#   └── .env.example        密钥配置模板
+#
+# 用法:
+#   .\package.ps1                构建并打包
+#   .\package.ps1 -SkipBuild    跳过 Maven 构建（复用已构建的 jar）
+#   .\package.ps1 -Help         显示本帮助
+# ============================================================
+[CmdletBinding()]
+param(
+    [switch]$SkipBuild,
+    [switch]$Help
+)
+
+$ErrorActionPreference = "Stop"
+
+# 脚本在 tools/ 下，项目根为上级目录
+$ProjectRoot = Split-Path -Parent $PSScriptRoot
+if (-not $PSScriptRoot) { $ProjectRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path) }
+
+# ---------------- 日志 ----------------
+function Write-Info { param([string]$Msg) Write-Host "[package] $Msg" -ForegroundColor Cyan }
+function Write-OK   { param([string]$Msg) Write-Host "[package] $Msg" -ForegroundColor Green }
+function Write-Warn { param([string]$Msg) Write-Host "[package] $Msg" -ForegroundColor Yellow }
+function Write-Err  { param([string]$Msg) Write-Host "[package] $Msg" -ForegroundColor Red }
+
+function Show-Help {
+    @'
+mwb-ai-claw 二进制分发打包脚本 (Windows PowerShell)
+
+用法:
+    .\package.ps1                构建并打包二进制分发包
+    .\package.ps1 -SkipBuild     跳过 Maven 构建（复用 start\target 下已有 jar）
+    .\package.ps1 -Help          显示本帮助
+
+产物: dist\mwb-ai-claw-<version>-bin.zip
+'@ | Write-Host
+}
+
+if ($Help) { Show-Help; exit 0 }
+
+# ---------------- 版本号 ----------------
+$pomContent = Get-Content (Join-Path $ProjectRoot "pom.xml") -Raw
+$versionMatch = [regex]::Match($pomContent, '<version>([^<]+)</version>')
+if (-not $versionMatch.Success) {
+    Write-Err "无法从 pom.xml 解析版本号"
+    exit 1
+}
+$Version = $versionMatch.Groups[1].Value
+$DistName = "mwb-ai-claw-$Version-bin"
+$DistDir = Join-Path $ProjectRoot "dist\$DistName"
+$Archive = Join-Path $ProjectRoot "dist\$DistName.zip"
+
+Write-Info "版本: $Version"
+Write-Info "产物目录: $DistDir"
+Write-Info "产物包:   $Archive"
+
+# ---------------- 构建 ----------------
+$jar = ""
+if ($SkipBuild) {
+    Write-Info "跳过构建（-SkipBuild）"
+} else {
+    if (-not (Get-Command mvn -ErrorAction SilentlyContinue)) {
+        Write-Err "缺少 mvn，请先安装 Maven"
+        exit 1
+    }
+    Write-Info "构建项目（mvn package, 跳过测试）..."
+    Push-Location $ProjectRoot
+    try {
+        & mvn package -pl start -am -DskipTests -q
+        if ($LASTEXITCODE -ne 0) {
+            Write-Err "构建失败"
+            exit 1
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
+# 定位构建产物
+$jars = Get-ChildItem -Path (Join-Path $ProjectRoot "start\target") -Filter "start-*.jar" -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -notlike "*.original" }
+if (-not $jars -or $jars.Count -eq 0) {
+    Write-Err "未找到构建产物 start\target\start-*.jar"
+    Write-Err "请先执行 .\package.ps1 或去掉 -SkipBuild"
+    exit 1
+}
+$jar = $jars[0].FullName
+Write-Info "构建产物: $jar"
+
+# ---------------- 组装分发目录 ----------------
+Write-Info "组装分发目录..."
+if (Test-Path $DistDir) { Remove-Item $DistDir -Recurse -Force }
+New-Item -ItemType Directory -Force -Path (Join-Path $DistDir "lib") | Out-Null
+
+# 1. 预构建 jar
+Copy-Item -Force $jar (Join-Path $DistDir "lib\start.jar")
+
+# 2. 安装脚本（从 tools/ 拷贝到包根目录）
+Copy-Item -Force (Join-Path $ProjectRoot "tools\install.ps1") (Join-Path $DistDir "install.ps1")
+
+# 3. 密钥配置模板
+$srcExample = Join-Path $ProjectRoot ".env.example"
+$srcEnv = Join-Path $ProjectRoot ".env"
+if (Test-Path $srcExample) {
+    Copy-Item -Force $srcExample (Join-Path $DistDir ".env.example")
+} elseif (Test-Path $srcEnv) {
+    Copy-Item -Force $srcEnv (Join-Path $DistDir ".env.example")
+    Write-Warn "未找到 .env.example，已从 .env 复制为 .env.example（可能含密钥，请检查后再分发）"
+}
+
+Write-OK "分发目录内容:"
+Get-ChildItem -Recurse $DistDir | ForEach-Object {
+    if (-not $_.PSIsContainer) {
+        $rel = $_.FullName.Substring($DistDir.Length + 1)
+        $size = "{0:N1}K" -f ($_.Length / 1KB)
+        Write-Host ("    {0,-8} {1}" -f $size, $rel)
+    }
+}
+
+# ---------------- 打包 zip ----------------
+Write-Info "打包 zip..."
+if (Test-Path $Archive) { Remove-Item $Archive -Force }
+Compress-Archive -Path $DistDir -DestinationPath $Archive -CompressionLevel Optimal
+
+$archiveSize = (Get-Item $Archive).Length
+$sizeStr = if ($archiveSize -gt 1MB) { "{0:N1}M" -f ($archiveSize / 1MB) } else { "{0:N1}K" -f ($archiveSize / 1KB) }
+
+Write-OK "打包完成!"
+Write-Host ""
+Write-Host "  产物: $Archive" -ForegroundColor Cyan
+Write-Host "  大小: $sizeStr"
+Write-Host ""
+Write-Host "  分发方式: 解压后执行" -ForegroundColor Green
+Write-Host "    Expand-Archive $DistName.zip"
+Write-Host "    cd $DistName"
+Write-Host "    .\install.ps1"
+Write-Host ""

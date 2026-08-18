@@ -41,6 +41,24 @@
           }
         ]
       }
+    },
+    {
+      "id": "team-discussion",
+      "type": "conversational",
+      "description": "多方专家对话式讨论：架构师 / 编码专家 / 审查专家围绕同一问题多轮讨论（首轮并行观点、讨论轮互相回应），最后由决策主持收敛为明确结论。适用于技术选型、方案对比、权衡决策类问题",
+      "keywords": ["选型", "方案对比", "对比", "权衡", "决策", "哪个更好", "如何选择", "优缺点", "讨论", "评估", "怎么选"],
+      "agents": ["architect", "coder", "reviewer", "moderator"],
+      "config": {
+        "conversation": {
+          "rounds": 2,
+          "moderator": "moderator",
+          "participants": ["architect", "coder", "reviewer"],
+          "minConsensus": 2,
+          "convergence": "moderator",
+          "visibleHistory": 1,
+          "thinking": false
+        }
+      }
     }
   ]
 }

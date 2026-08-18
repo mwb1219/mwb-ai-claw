@@ -4,10 +4,9 @@
 > 文档编号：feature-config-orchestration-separation
 > 关联文档：`feature-multi-agent-routing技术方案(SUBMIT).md`（路由基线）、`feature-agent-collaboration-pipeline-conversational技术方案(Deprecated).md`（协作模式设计基线）
 
-> **实施状态（2026-08-17）：已实施 ✅**（除标注「可选二期」项）
-> - 已完成：配置与编排分离（agents.json / orchestrations.json）、编排插件化（AgentOrchestrator SPI + OrchestratorRegistry）、意图驱动选择（RuleBasedOrchestrationSelector + 显式指定 + 默认兜底）、Routing/Pipeline 内置编排、旧配置彻底废弃
-> - 已验证：意图选择命中 pipeline、默认回退 routing、显式指定编排、流水线 analyze→implement→review 全链路产出
-> - 待办：ConversationalOrchestrator（对话式协作，见 §7 第 7 步，标注可选二期）
+> **实施状态（2026-08-18）：已实施 ✅**
+> - 已完成：配置与编排分离（agents.json / orchestrations.json）、编排插件化（AgentOrchestrator SPI + OrchestratorRegistry）、意图驱动选择（RuleBasedOrchestrationSelector + 显式指定 + 默认兜底）、Routing / Pipeline / Conversational 内置编排、旧配置彻底废弃
+> - 已验证：意图选择命中 pipeline / conversational、默认回退 routing、显式指定编排、流水线 analyze→implement→review 全链路产出、对话式 team-discussion 首轮并行观点 → 讨论轮串行回应 → moderator 收敛全链路产出
 
 ## 1. 背景与目标
 
@@ -158,10 +157,15 @@
       "description": "多方观点交锋与收敛：适用于技术选型、方案评审、利弊论证",
       "keywords": ["选型", "对比", "评审", "论证", "权衡", "讨论"],
       "config": {
-        "rounds": 2,
-        "moderator": "moderator",
-        "participants": ["architect", "coder", "dba"],
-        "convergence": "moderator"
+        "conversation": {
+          "rounds": 2,
+          "moderator": "moderator",
+          "participants": ["architect", "coder", "dba"],
+          "minConsensus": 2,
+          "convergence": "moderator",
+          "visibleHistory": 1,
+          "thinking": false
+        }
       }
     }
   ]
@@ -207,7 +211,7 @@ public interface OrchestrationSelector {
 ```
 
 ```java
-/** 规则选择器：命中编排 keywords 即返回（可多命中取首个，或按命中数排序取最多） */
+/** 规则选择器：按编排 keywords 命中次数匹配用户意图（命中数最多者胜出，全部未命中返回 null） */
 @Component
 public class RuleBasedOrchestrationSelector implements OrchestrationSelector {
     @Override
@@ -217,13 +221,18 @@ public class RuleBasedOrchestrationSelector implements OrchestrationSelector {
     }
 }
 
-/** LLM 选择器（二期预留）：将各编排 description 作为候选，LLM 返回最匹配的编排 id */
+/**
+ * LLM 意图选择器（agent.orchestration-selector=llm，已实施 ✅）：
+ * 基于各编排 description 做语义匹配——llm 模式下 LLM 语义选择优先（温度 0 + 关闭思考保证确定性，
+ * 返回 id / JSON，校验存在于候选），未命中 / 调用失败时回退规则选择器（关键词兜底）；
+ * rule 模式（默认）仅规则选择，保持原行为。以 @Primary 标记，作为 ChatCmdExe 注入首选。
+ */
 @Component
-@ConditionalOnProperty(name = "agent.orchestration-selector", havingValue = "llm")
-public class LlmBasedOrchestrationSelector implements OrchestrationSelector { ... }
+@Primary
+public class LlmOrchestrationSelector implements OrchestrationSelector { ... }
 ```
 
-> 与 `AgentRouter` 的实现思路一致（规则优先、LLM 扩展），选择器可配置（`agent.orchestration-selector: rule|llm`，默认 `rule`）。
+> 与 `AgentRouter` 的实现思路一致（规则优先、LLM 扩展），选择器可配置（`agent.orchestration-selector: rule|llm`，默认 `rule`；`llm` 模式内置「LLM 优先 + 规则兜底」）。
 
 ### 4.3 编排插件 SPI（domain 层）
 
@@ -363,9 +372,9 @@ ChatCmd{ message: "...", orchestrationId: "tech-debate" }
 | domain/collaboration | `AgentOrchestrator.java` | **新增**：编排插件 SPI |
 | domain/collaboration | `OrchestrationContext.java` / `OrchestrationDefinition.java` / `CollaborationResult.java` | **新增**：上下文 / 定义 / 结果值对象 |
 | domain/collaboration | `ExecutionUnit.java` | **新增**：公共执行单元接口 |
-| infrastructure/collaboration | `RuleBasedOrchestrationSelector.java` | **新增**：规则选择器（默认） |
+| infrastructure/collaboration/strategy | `RuleBasedOrchestrationSelector.java` | **新增**：规则选择器（默认） |
 | infrastructure/collaboration | `OrchestratorRegistry.java` | **新增**：插件注册中心 |
-| infrastructure/collaboration | `RoutingOrchestrator.java` / `PipelineOrchestrator.java` / `ConversationalOrchestrator.java` | **新增**：内置编排插件 |
+| infrastructure/collaboration/strategy | `RoutingOrchestrator.java` / `PipelineOrchestrator.java` / `ConversationalOrchestrator.java` | **新增**：内置编排插件 |
 | infrastructure/collaboration | `ExecutionUnitImpl.java` | **新增**：执行单元实现 |
 | infrastructure/config | `AgentRegistryLoader.java` | **新增**：加载 `agents.json`（演进自 AgentConfigLoader） |
 | infrastructure/config | `OrchestrationConfigLoader.java` | **新增**：加载 `orchestrations.json` + 启动校验 |
@@ -409,11 +418,11 @@ java -jar start/target/start-*.jar --agent.orchestration=code-review-pipeline
 
 1. **domain 层**：新增 `collaboration` 包（`OrchestrationSelector` / `AgentOrchestrator` / `OrchestrationDefinition` / `OrchestrationContext` / `CollaborationResult` / `ExecutionUnit`）；✅
 2. **infrastructure/config**：`AgentProperties` 移除 `mode`、新增 `orchestration` / `orchestrationSelector`；新增 `AgentRegistryLoader` / `OrchestrationConfigLoader`；删除 `AgentConfigLoader` / `AgentsFile`；✅
-3. **infrastructure/collaboration**：`OrchestratorRegistry` + `ExecutionUnitImpl` + `RuleBasedOrchestrationSelector`；✅
+3. **infrastructure/collaboration**：`OrchestratorRegistry` + `ExecutionUnitImpl`；✅（策略实现归位 `strategy/` 子包：`RuleBasedOrchestrationSelector`）
 4. **app 层**：`ChatCmdExe` 改造为「编排选择 + 分发」；✅
-5. **infrastructure/collaboration**：`RoutingOrchestrator`（迁入现有逻辑，行为保留）；✅
-6. **infrastructure/collaboration**：`PipelineOrchestrator`（复用协作方案 §4.2）；✅
-7. **infrastructure/collaboration**：`ConversationalOrchestrator`（复用协作方案 §4.3，可选二期）；⏳ 待实施
+5. **infrastructure/collaboration/strategy**：`RoutingOrchestrator`（迁入现有逻辑，行为保留）；✅
+6. **infrastructure/collaboration/strategy**：`PipelineOrchestrator`（复用协作方案 §4.2）；✅
+7. **infrastructure/collaboration/strategy**：`ConversationalOrchestrator`（复用协作方案 §4.3）+ `ConversationDefinition`（类型化解析 conversation 配置）；✅
 8. 新增 `agents.json` / `orchestrations.json` 默认模板，删除 `routing-agents.json`；✅
 9. 编译验证 + 全链路测试（意图选择 / 显式指定 / 默认回退）。✅
 
@@ -421,16 +430,18 @@ java -jar start/target/start-*.jar --agent.orchestration=code-review-pipeline
 
 | 用例 | 预期 |
 |------|------|
-| 消息命中 pipeline 关键词 | 选择流水线编排，阶段按序执行 |
-| 消息命中 conversational 关键词 | 选择对话式编排，多参与者讨论收敛 |
-| 消息未命中任何编排关键词 | 回退 `agent.orchestration`（默认 routing） |
-| `ChatCmd.orchestrationId` 显式指定 | 跳过意图选择，直接使用指定编排 |
-| 显式指定 id 不存在 | 报错并列出可用编排 id |
-| 编排引用不存在的 agentId | 启动校验报错 |
-| 编排插件类型重复注册 | 启动抛「编排类型重复注册」 |
-| 新增自定义编排插件 | 仅需新增实现类 + orchestrations.json 条目，主链路零改动 |
-| routing 行为回归 | 会话 / 记忆 / 流式与改造前一致 |
-| 旧配置（`--agent.mode` / `{mode}-agents.json`） | 不再生效（已废弃，无兼容层） |
+| 消息命中 pipeline 关键词 | 选择流水线编排，阶段按序执行 | ✅ |
+| 消息命中 conversational 关键词 | 选择对话式编排，多参与者讨论收敛 | ✅ |
+| 消息未命中任何编排关键词 | 回退 `agent.orchestration`（默认 routing） | ✅ |
+| `ChatCmd.orchestrationId` 显式指定 | 跳过意图选择，直接使用指定编排 | ✅ |
+| 显式指定 id 不存在 | 报错并列出可用编排 id | ✅ |
+| 编排引用不存在的 agentId | 启动校验报错 | ✅ |
+| LLM 意图选择（`orchestration-selector=llm`） | 语义匹配命中编排 description 对应编排（如「Kafka 还是 RabbitMQ」→ team-discussion，无需关键词） | ✅ |
+| LLM 未命中 / 调用失败 | 回退规则选择器（关键词兜底），再未命中回退默认编排 | ✅ |
+| 编排插件类型重复注册 | 启动抛「编排类型重复注册」 | ✅ |
+| 新增自定义编排插件 | 仅需新增实现类 + orchestrations.json 条目，主链路零改动 | ✅ |
+| routing 行为回归 | 会话 / 记忆 / 流式与改造前一致 | ✅ |
+| 旧配置（`--agent.mode` / `{mode}-agents.json`） | 不再生效（已废弃，无兼容层） | ✅ |
 
 ## 9. 风险与应对
 

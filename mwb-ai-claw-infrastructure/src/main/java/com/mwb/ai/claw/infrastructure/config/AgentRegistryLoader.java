@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
+import javax.annotation.PostConstruct;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -15,6 +16,7 @@ import java.util.List;
  * <p>
  * 读取优先级：运行目录及其上级目录 ./agents.json 优先，回退 classpath 默认模板。
  * 文件中的 ${VAR:default} 占位符通过 Spring Environment 解析（.env / 系统环境变量）。
+ * 启动时预加载（fail-fast：配置文件格式错误 / 占位符解析异常启动即暴露）。
  */
 @Component
 public class AgentRegistryLoader {
@@ -31,8 +33,14 @@ public class AgentRegistryLoader {
         this.environment = environment;
     }
 
+    /** 应用启动时预加载 Agent 注册表 */
+    @PostConstruct
+    public void preload() {
+        loadAgents();
+    }
+
     /**
-     * 加载 Agent 注册表（懒加载并缓存）。
+     * 加载 Agent 注册表（缓存，启动时已预加载，此处兜底）。
      */
     public List<AgentProperties.AgentConfig> loadAgents() {
         if (cached == null) {

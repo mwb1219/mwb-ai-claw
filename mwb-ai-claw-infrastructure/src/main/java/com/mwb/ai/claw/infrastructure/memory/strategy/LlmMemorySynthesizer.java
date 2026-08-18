@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.infrastructure.memory;
+package com.mwb.ai.claw.infrastructure.memory.strategy;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.mwb.ai.claw.domain.core.Message;
@@ -11,6 +11,7 @@ import com.mwb.ai.claw.domain.memory.LayeredMemoryConfig;
 import com.mwb.ai.claw.domain.memory.MemoryPage;
 import com.mwb.ai.claw.domain.memory.MemorySynthesizer;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
+import com.mwb.ai.claw.infrastructure.memory.SynthesisCache;
 import com.mwb.ai.claw.infrastructure.util.JsonUtils;
 import com.mwb.ai.claw.infrastructure.util.TokenEstimator;
 import org.slf4j.Logger;

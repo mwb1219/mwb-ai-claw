@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.infrastructure.memory;
+package com.mwb.ai.claw.infrastructure.memory.strategy;
 
 import com.mwb.ai.claw.domain.memory.EvictionContext;
 import com.mwb.ai.claw.domain.memory.PageEvictionPolicy;

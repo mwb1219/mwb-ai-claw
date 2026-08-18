@@ -1,0 +1,9 @@
+# ================= Shell 模式专属配置 =================
+# 当以 --spring.profiles.active=shell 启动时自动加载本文件。
+#
+# 目的：shell 模式为纯 CLI REPL（AgentShell, CommandLineRunner），不提供
+# REST / WebSocket 接口。为避免内嵌 Tomcat 启动占用 8080 端口（端口被占时
+# 启动失败），关闭 Web 应用类型 —— Spring Boot 不再初始化 Servlet 容器。
+spring:
+  main:
+    web-application-type: none

@@ -25,6 +25,8 @@ import com.mwb.ai.claw.domain.memory.MemoryRetriever;
 import com.mwb.ai.claw.domain.memory.MemorySynthesizer;
 import com.mwb.ai.claw.domain.memory.PageEvictionPolicy;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
+import com.mwb.ai.claw.infrastructure.memory.strategy.ImportanceEvictionPolicy;
+import com.mwb.ai.claw.infrastructure.memory.strategy.TokenBudgetEvictionPolicy;
 import com.mwb.ai.claw.infrastructure.util.TokenEstimator;
 
 /**

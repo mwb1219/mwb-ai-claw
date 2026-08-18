@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import javax.annotation.PostConstruct;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -24,7 +25,7 @@ import java.util.stream.Collectors;
  * 编排注册表加载器：加载 orchestrations.json（编排定义 + 意图元数据）。
  * <p>
  * 读取优先级：运行目录及其上级目录 ./orchestrations.json 优先，回退 classpath 默认模板。
- * 首次加载时执行启动校验：id 唯一、type 已注册、引用的 agentId 存在。
+ * 启动时预加载并执行启动校验（fail-fast：id 重复 / type 未注册 / 引用 agentId 不存在启动即报错）。
  */
 @Component
 public class OrchestrationConfigLoader {
@@ -47,8 +48,14 @@ public class OrchestrationConfigLoader {
         this.agentProperties = agentProperties;
     }
 
+    /** 应用启动时预加载编排注册表并执行启动校验 */
+    @PostConstruct
+    public void preload() {
+        loadIndexed();
+    }
+
     /**
-     * 加载全部编排定义（懒加载并缓存，首次加载时校验）。
+     * 加载全部编排定义（缓存，启动时已预加载，此处兜底）。
      */
     public List<OrchestrationDefinition> loadDefinitions() {
         return new ArrayList<>(loadIndexed().values());

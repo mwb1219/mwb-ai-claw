@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.infrastructure.collaboration;
+package com.mwb.ai.claw.infrastructure.collaboration.strategy;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -20,6 +20,7 @@ import com.mwb.ai.claw.domain.collaboration.OrchestrationDefinition;
 import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.AgentGateway;
 import com.mwb.ai.claw.dto.data.AgentErrorCode;
+import com.mwb.ai.claw.infrastructure.collaboration.PipelineStage;
 import com.mwb.ai.claw.infrastructure.util.JsonUtils;
 
 /**

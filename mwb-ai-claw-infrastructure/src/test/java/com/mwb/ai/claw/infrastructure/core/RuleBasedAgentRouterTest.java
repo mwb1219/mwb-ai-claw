@@ -2,7 +2,7 @@ package com.mwb.ai.claw.infrastructure.core;
 
 import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.AgentGateway;
-import com.mwb.ai.claw.domain.core.RuleBasedAgentRouter;
+import com.mwb.ai.claw.domain.core.strategy.RuleBasedAgentRouter;
 import org.junit.Before;
 import org.junit.Test;
 

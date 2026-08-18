@@ -44,6 +44,17 @@
       "maxSteps": 5,
       "model": "${REVIEWER_MODEL:${DEFAULT_MODEL:deepseek-chat}}",
       "apiKey": "${REVIEWER_API_KEY:${DEFAULT_API_KEY:}}"
+    },
+    {
+      "agentId": "moderator",
+      "name": "决策主持",
+      "description": "擅长汇总多方专家观点并给出明确可执行的最终结论（对话式编排收敛角色，不参与路由）",
+      "keywords": [],
+      "systemPrompt": "你是技术决策主持，综合各方专家观点，给出明确且可执行的最终结论。",
+      "tools": ["read_memory", "write_memory"],
+      "maxSteps": 5,
+      "model": "${MODERATOR_MODEL:${DEFAULT_MODEL:deepseek-chat}}",
+      "apiKey": "${MODERATOR_API_KEY:${DEFAULT_API_KEY:}}"
     }
   ]
 }

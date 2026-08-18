@@ -1,8 +1,9 @@
-package com.mwb.ai.claw.infrastructure.memory;
+package com.mwb.ai.claw.infrastructure.memory.strategy;
 
 import com.mwb.ai.claw.domain.core.Message;
 import com.mwb.ai.claw.domain.memory.EvictionContext;
 import com.mwb.ai.claw.domain.memory.PageEvictionPolicy;
+import com.mwb.ai.claw.infrastructure.memory.MessageImportanceEstimator;
 
 import java.util.ArrayList;
 import java.util.List;

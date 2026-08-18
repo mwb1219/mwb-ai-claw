@@ -1,21 +1,44 @@
 package com.mwb.ai.claw.infrastructure.config;
 
-import com.mwb.ai.claw.domain.memory.LayeredMemoryConfig;
-import lombok.Data;
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.stereotype.Component;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
+
+import javax.annotation.PostConstruct;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
+
+import com.mwb.ai.claw.domain.memory.LayeredMemoryConfig;
+
+import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Agent 默认配置属性（从 application.yml 读取，前缀 agent）
  */
+@Slf4j
 @Data
 @Component
 @ConfigurationProperties(prefix = "agent")
 public class AgentProperties {
+
+    @PostConstruct
+    public void printStartupConfig() {
+        log.info("Agent 默认配置: id={}, name={}, model={}, baseUrl={}, apiKey={}, temperature={}, maxTokens={}, maxSteps={}",
+                agentId, name, model, baseUrl, mask(apiKey), temperature, maxTokens, maxSteps);
+        log.info("编排配置: 默认编排={}, 编排选择器={}", orchestration, orchestrationSelector);
+        log.info("记忆/技能配置: 记忆目录={}, 技能开关={}, 技能目录={}", memoryDir, skillsEnabled, skillsDir);
+        log.info("工具配置: tools={}", tools);
+        log.info("专家 Agent 配置: 共 {} 个（{}）", agents.size(),
+                agents.stream().map(AgentConfig::getAgentId).collect(Collectors.joining(", ")));
+    }
+
+    /** API Key 掩码：仅输出配置状态，不泄露实际值 */
+    private static String mask(String apiKey) {
+        return (apiKey == null || apiKey.trim().isEmpty()) ? "(未配置)" : "***";
+    }
 
     /** Agent 标识 */
     private String agentId = "default";
@@ -47,11 +70,17 @@ public class AgentProperties {
     /** 默认编排 id（意图未命中时的兜底，引用 orchestrations.json 中的 id），默认 routing */
     private String orchestration = "routing";
 
-    /** 编排选择器：rule（关键词，默认）| llm（预留） */
+    /** 编排选择器：rule（关键词匹配，默认）| llm（LLM 语义选择优先，规则兜底） */
     private String orchestrationSelector = "rule";
 
     /** 长期记忆目录（AGENT.md / MEMORY.md 存放位置，默认 ${user.dir}/.agent） */
     private String memoryDir = "";
+
+    /** 技能总开关（默认 true；关闭后不加载技能、不注册 use_skill 工具） */
+    private boolean skillsEnabled = true;
+
+    /** 技能根目录（运行目录，默认 ${user.dir}/skills；classpath skills/ 为内置模板兜底） */
+    private String skillsDir = "";
 
     /** 可用工具名称列表 */
     private List<String> tools = Arrays.asList("echo");

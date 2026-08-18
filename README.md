@@ -133,17 +133,27 @@
 - [x] 配置与编排分离：`agents.json`（Agent 注册表，跨编排复用）+ `orchestrations.json`（编排注册表 + 意图元数据），彻底废弃旧 `{mode}-agents.json` 与 `agent.mode`
 - [x] 编排插件化（SPI）：`AgentOrchestrator` 接口（`type`/`validate`/`orchestrate`），`OrchestratorRegistry` 自动收集注册，新增编排零主链路改动
 - [x] 意图驱动选择：`OrchestrationSelector` 选编排 → 编排内部选 Agent（三层决策分离）；优先级：显式指定 > 规则意图匹配 > 默认兜底
-- [x] 内置编排：`RoutingOrchestrator`（单专家独立处理，默认兜底）+ `PipelineOrchestrator`（多阶段流水线 analyze→implement→review，产物 text/file 传递，失败 abort/continue）
+- [x] 内置编排：`RoutingOrchestrator`（单专家独立处理，默认兜底）+ `PipelineOrchestrator`（多阶段流水线 analyze→implement→review，产物 text/file 传递，失败 abort/continue）+ `ConversationalOrchestrator`（多方专家多轮讨论，首轮并行观点→讨论轮串行回应→收敛，支持 consensus / moderator / best 三种收敛策略）
 - [x] 流水线阶段类型化：`PipelineStage` 实体类解析 stages（`thinking` 开关 / `pass` / `onFailure` / 空回复重试）
-- [x] 思考模式控制：阶段级 `thinking: false` 关闭推理（DeepSeek 思考模式会吃满输出预算导致正文为空）
+- [x] 对话式定义类型化：`ConversationDefinition` 实体类解析 conversation 配置（`rounds` / `participants` / `moderator` / `convergence` / `visibleHistory` / `thinking`）
+- [x] 思考模式控制：阶段/参与者级 `thinking: false` 关闭推理（DeepSeek 思考模式会吃满输出预算导致正文为空）
 - [x] 启动校验：编排 id 唯一、type 已注册、引用的 agentId 存在于注册表
 
-### 3.8 待实施
+### 3.8 Phase 8：Skill 技能支持 ✅
+
+- [x] Skill 定义标准：`skills/<name>/SKILL.md`（YAML frontmatter：`name` / `description` + Markdown 指令正文）+ 可选 `resources/` 资源目录，遵循 Agent Skills 开放标准
+- [x] 渐进式披露（三层）：L1 技能清单（name + description）常驻 system prompt → L2 `use_skill` 工具按需加载 SKILL.md 全文 → L3 资源经 `$SKILL_DIR` 按需读取，控制 token 成本
+- [x] 零侵入扩展：新增技能 = 放目录重启即可，所有 Agent（routing / pipeline / conversational 任意编排内）自动可用，主链路零改动
+- [x] `use_skill` 注册为全局工具（对齐 MCP 工具），技能清单由 `DefaultContextAssembler` 注入 system prompt
+- [x] 启动校验：技能 name / description 缺失、name 与目录不一致、name 重复 → 启动报错
+- [x] 内置 12 个技能（classpath 模板）：`code-review`、`project-structure-analysis`、`unit-test-writing`、`git-workflow`、`ddd-modeling`、`tech-design-doc`、`web-research`、`database-design`、`doc-writing-guide`、`markdown-diagramming`、`doc-review`、`example-skill`（详见 `docs/feature-skill-support技术方案(SUBMIT).md` §6.2）
+
+### 3.9 待实施
 
 - [ ] IM 渠道接入：飞书、钉钉、Telegram
-- [ ] 对话式编排（ConversationalOrchestrator）：多 Agent 对话协作（二期）
 - [ ] 浏览器控制工具（CDP）
 - [ ] 本地 Ollama 离线部署支持
+- [ ] Agent 级技能绑定（agents.json `skills` 字段静态注入）、技能热加载、技能市场
 
 ## 四、领域模型
 
@@ -157,11 +167,16 @@ domain/
 │   ├── Session.java       # 聚合根：会话（含 createTime/updateTime/自动标题）
 │   ├── SessionStatus.java # 枚举
 │   ├── Message.java       # 实体：消息
-│   ├── MessageRole.java   # 枚举
+│   ├── MessageRole.java   # 枚举（已废弃：Message.role 改用 String）
 │   ├── ModelConfig.java   # 值对象：模型配置
 │   ├── ReActLoopService   # 领域服务：ReAct 推理循环
 │   ├── ReActResult.java   # 值对象：推理结果
-│   └── ProgressCallback   # 回调：进度推送
+│   ├── ProgressCallback   # 回调：进度推送
+│   ├── AgentRouter.java   # 接口：路由策略（意图 → agentId）
+│   └── strategy/          # 路由策略实现
+│       ├── RuleBasedAgentRouter  # 规则路由（关键词匹配）
+│       ├── LlmBasedAgentRouter   # LLM 路由（语义匹配，兜底）
+│       └── CompositeAgentRouter  # 组合路由（规则优先 + LLM 兜底）
 ├── collaboration/         # 编排协作域
 │   ├── OrchestrationDefinition.java # 编排定义（id/type/keywords/config/agents）
 │   ├── OrchestrationContext.java    # 编排上下文（消息/会话/网关/执行单元/回调）
@@ -187,6 +202,9 @@ domain/
 │   ├── DynamicToolRegistry# 接口：动态工具注册
 │   ├── McpServerConfig    # MCP Server 配置
 │   └── McpToolDef.java    # MCP 工具定义
+├── skill/                 # 技能域（Skill）
+│   ├── Skill.java         # 值对象：技能（name/description/content/baseDir）
+│   └── SkillGateway.java  # 接口：技能发现与按需加载（渐进式披露）
 └── memory/                # 记忆域
     ├── MemoryGateway.java        # 接口：会话级记忆
     └── LongTermMemoryGateway.java # 接口：长期记忆（AGENT.md/MEMORY.md）
@@ -197,7 +215,10 @@ domain/
 ```
 infrastructure/
 ├── core/AgentGatewayImpl         # Agent 配置加载 + AGENT.md 注入
-├── llm/LlmGatewayImpl            # OpenAI 兼容 API（流式 SSE 解析）
+├── llm/
+│   └── strategy/                 # LLM 策略实现
+│       ├── LlmGatewayImpl            # OpenAI 兼容 API（流式 SSE 解析）
+│       └── OpenAiEmbeddingGateway    # Embedding 实现（向量检索底座）
 ├── tool/
 │   ├── ToolGatewayImpl           # Bean 自动收集 + 动态注册
 │   ├── ToolSecurity.java         # 安全沙箱（路径/命令/输出）
@@ -207,22 +228,35 @@ infrastructure/
 │   │   ├── ShellTool             # Shell 执行（受白名单保护）
 │   │   ├── HttpTool              # HTTP 请求（受 host 限制）
 │   │   ├── ReadMemoryTool        # 读取 MEMORY.md
-│   │   └── WriteMemoryTool       # 写入 MEMORY.md
+│   │   ├── WriteMemoryTool       # 写入 MEMORY.md
+│   │   └── UseSkillTool          # 技能加载（global 工具，按需加载 SKILL.md 全文）
 │   └── mcp/                      # MCP 协议栈
 │       ├── McpClient / McpClientManager
 │       ├── McpToolAdapter / McpToolRegistrar
 │       └── transport/StdioTransport / SseTransport
+├── skill/
+│   ├── SkillLoader               # 目录扫描 + frontmatter 解析 + 启动校验（运行目录 > classpath）
+│   └── SkillRegistryImpl         # 技能注册表（listSkills / getSkill 渐进式披露）
 ├── memory/
 │   ├── FileBasedSessionGateway   # 会话文件持久化
 │   ├── FileBasedMemoryGateway    # 长期记忆文件读写
-│   └── MemoryGatewayImpl         # 纯内存版（测试用）
+│   ├── MemoryGatewayImpl         # 纯内存版（测试用）
+│   ├── LayeredMemoryGatewayImpl  # 分层记忆门面（工作记忆 + 换页 + 提炼 + 检索）
+│   └── strategy/                 # 记忆策略实现（可插拔）
+│       ├── ImportanceEvictionPolicy / TokenBudgetEvictionPolicy # 换页策略（重要度 / 预算）
+│       ├── KeywordMemoryRetriever / VectorMemoryRetriever / HybridMemoryRetriever # 检索策略
+│       └── LlmMemorySynthesizer  # 提炼策略（LLM 摘要 / 事实提取 / 合并去重）
 ├── collaboration/
 │   ├── OrchestratorRegistry      # 编排插件注册中心（SPI 自动收集）
-│   ├── RoutingOrchestrator       # 路由编排（单专家独立处理，默认兜底）
-│   ├── PipelineOrchestrator      # 流水线编排（阶段接力）
 │   ├── PipelineStage             # 流水线阶段实体（类型化解析 stages）
+│   ├── ConversationDefinition    # 对话式定义（类型化解析 config.conversation）
 │   ├── ExecutionUnitImpl         # 执行原语实现（临时会话/产物落盘）
-│   └── RuleBasedOrchestrationSelector # 关键词意图选择器
+│   └── strategy/                 # 编排 / 选择策略实现（SPI 插件）
+│       ├── RoutingOrchestrator       # 路由编排（单专家独立处理，默认兜底）
+│       ├── PipelineOrchestrator      # 流水线编排（阶段接力）
+│       ├── ConversationalOrchestrator # 对话式编排（多专家多轮讨论 + 收敛）
+│       ├── RuleBasedOrchestrationSelector # 关键词意图选择器（命中数最多者胜出）
+│       └── LlmOrchestrationSelector     # LLM 意图选择器（llm 模式：语义优先 + 规则兜底，@Primary）
 └── config/
     ├── AgentProperties            # YAML 配置映射（orchestration/selector）
     ├── AgentConfiguration         # Spring Bean 装配
@@ -260,6 +294,153 @@ ws://localhost:8080/ws/agent
 服务端推送 JSON 事件流：`session` → `step` → `token` → `tool_name` → `tool_args` → `reply` → `done`
 
 ### 5.3 Shell 终端（REPL）
+
+#### 5.3.1 一键安装为全局命令（推荐）
+
+项目 `tools/` 目录提供 `install.sh`，安装后可在任意目录直接执行 `mwb-ai-claw` 进入 Agent Shell（类似 `claude` 命令）：
+
+```bash
+# 在项目根目录执行
+./tools/install.sh
+```
+
+脚本做的事：
+
+1. `mvn package -pl start -am -DskipTests` 构建 `start-*.jar`
+2. 安装到 `~/.mwb-ai-claw/`（可用 `MWB_AI_CLAW_HOME` 环境变量覆盖）：
+   - `lib/start.jar` —— 构建产物
+   - `bin/mwb-ai-claw` —— 启动器（加载 `.env` → `java -jar --spring.profiles.active=shell`）
+   - `.env` —— 全局密钥配置（首次安装从项目 `.env` 或 `.env.example` 初始化）
+3. 将启动器软链到 `PATH`（优先 `/usr/local/bin`，不可写则 `~/.local/bin`；不在 `PATH` 时自动追加到 `~/.zshrc` / `~/.bashrc`）
+
+**设计要点**：
+
+- **密钥全局**：`~/.mwb-ai-claw/.env` 中的变量作为真实环境变量注入（优先级高于 `.env` 文件加载），任意目录执行都能读取到 API Key。
+- **会话/记忆按项目隔离**：启动器不切换工作目录，`.agent/` 落在当前目录，不同项目互不干扰。
+- **参数透传**：可覆盖任意 Spring 配置，如 `mwb-ai-claw --agent.orchestration=code-review-pipeline`。
+
+```bash
+# 安装完成后（重开终端或 source rc 后）
+mwb-ai-claw                          # 进入 Agent Shell
+mwb-ai-claw --agent.orchestration=... # 指定编排
+./tools/install.sh --uninstall        # 卸载（清理安装目录与 PATH 链接，保留各项目 .agent/）
+```
+
+> 首次安装后请编辑 `~/.mwb-ai-claw/.env` 填入 `DEFAULT_API_KEY`。
+
+#### 5.3.2 打包二进制分发包（不含源码）
+
+项目 `tools/` 目录的 `package.sh` 可产出不含源码的可分发 tarball，便于交付给无 Maven/源码环境的用户：
+
+```bash
+./tools/package.sh                 # 构建并打包
+./tools/package.sh --skip-build     # 复用已构建的 jar，跳过 mvn
+```
+
+产物 `dist/mwb-ai-claw-<version>-bin.tar.gz` 内含：
+
+```
+mwb-ai-claw-<version>-bin/
+├── install.sh        安装脚本（自动识别二进制模式，跳过 mvn）
+├── lib/start.jar     预构建可执行 jar（无源码）
+└── .env.example      密钥配置模板
+```
+
+#### 5.3.3 用户使用流程
+
+分发包同时包含 `install.sh`（Linux/macOS）与 `install.ps1`（Windows），用户按平台选其一，自动识别二进制模式（跳过 mvn 构建）。
+
+##### Linux / macOS
+
+**打包方**（项目维护者，需 java + mvn）：
+
+```bash
+# 1. 在项目根目录打包（构建 jar + 组装 dist + 生成 tar.gz）
+./tools/package.sh
+
+# 2. 得到产物 dist/mwb-ai-claw-<version>-bin.tar.gz（约 21M，不含源码）
+# 3. 将该 tar.gz 分发给用户
+```
+
+**安装方**（终端用户，仅需 java，无需 Maven/源码）：
+
+```bash
+# 1. 解压分发包
+tar -xzf mwb-ai-claw-<version>-bin.tar.gz
+
+# 2. 进入解压目录执行安装（自动识别二进制模式，跳过 mvn 构建）
+cd mwb-ai-claw-<version>-bin
+./install.sh
+
+# 3. （首次安装）编辑全局密钥配置，填入 DEFAULT_API_KEY
+vi ~/.mwb-ai-claw/.env
+
+# 4. 重开终端或 source rc 后，在任意目录执行命令进入 Agent Shell
+mwb-ai-claw
+```
+
+##### Windows
+
+**打包方**（项目维护者，需 java + mvn，在 PowerShell 中执行）：
+
+```powershell
+# 1. 在项目根目录打包（构建 jar + 组装 dist + 生成 zip）
+.\tools\package.ps1
+
+# 2. 得到产物 dist\mwb-ai-claw-<version>-bin.zip（不含源码）
+# 3. 将该 zip 分发给用户
+```
+
+**安装方**（终端用户，仅需 java，无需 Maven/源码）：
+
+```powershell
+# 0. 若遇执行策略限制，先放开（仅当前会话）
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+
+# 1. 解压分发包
+Expand-Archive mwb-ai-claw-<version>-bin.zip
+
+# 2. 进入解压目录执行安装（自动识别二进制模式，跳过 mvn 构建）
+cd mwb-ai-claw-<version>-bin
+.\install.ps1
+
+# 3. （首次安装）编辑全局密钥配置，填入 DEFAULT_API_KEY
+notepad $HOME\.mwb-ai-claw\.env
+
+# 4. 重开终端后，在任意目录执行命令进入 Agent Shell
+mwb-ai-claw
+```
+
+> - 安装脚本会自动检测到同目录的 `lib/start.jar`（或 `lib\start.jar`）切换为二进制模式（跳过 Maven 构建），其余安装步骤（生成启动器、初始化 `.env`、配置 PATH）与源码模式一致。
+> - 升级时重新执行安装脚本即可覆盖旧版本。
+> - Windows 安装会将启动器 `mwb-ai-claw.cmd` 与 `mwb-ai-claw.ps1` 复制到 `%LOCALAPPDATA%\mwb-ai-claw-bin\` 并加入用户 PATH；在 cmd/PowerShell 中均可直接 `mwb-ai-claw` 调用。
+
+#### 5.3.4 一键打包 + 安装（项目维护者）
+
+`tools/setup.sh`（Windows 为 `tools\setup.ps1`）将「构建 → 打包分发包 → 用该包本地安装 → 清理」合并为一步，便于维护者本地验证打包与安装链路：
+
+```bash
+# Linux / macOS
+./tools/setup.sh                # 构建 + 打包 + 安装
+./tools/setup.sh --skip-build    # 复用已构建 jar + 打包 + 安装
+```
+
+```powershell
+# Windows
+.\tools\setup.ps1                # 构建 + 打包 + 安装
+.\tools\setup.ps1 -SkipBuild      # 复用已构建 jar + 打包 + 安装
+```
+
+脚本执行流程：
+
+1. 调用 `package.sh` / `package.ps1` 构建并产出分发包（`dist/`）
+2. 解压刚生成的包到临时目录
+3. 执行包内 `install.sh` / `install.ps1` 以二进制模式安装（验证包可用，不重复 mvn）
+4. 清理临时目录
+
+> 此脚本用于项目维护者本地「构建 + 验证打包 + 安装」一步完成。终端用户只需拿到分发包执行其中的安装脚本即可，无需此脚本。
+
+#### 5.3.5 手动启动
 
 ```bash
 # 构建
@@ -315,7 +496,7 @@ agent:
   name: mwb-ai-claw
   system-prompt: "你是 mwb-ai-claw 智能助手..."
   orchestration: routing             # 默认编排 id（意图未命中时的兜底，引用 orchestrations.json 中的 id）
-  orchestration-selector: rule       # 编排选择器：rule（关键词，默认）| llm（预留）
+  orchestration-selector: rule       # 编排选择器：rule（关键词，默认）| llm（LLM 语义优先 + 规则兜底）
   model: ${DEFAULT_MODEL:deepseek-chat}            # 通过环境变量引用，避免硬编码
   base-url: ${DEFAULT_BASE_URL:https://api.deepseek.com}
   api-key: ${DEFAULT_API_KEY:}
@@ -323,6 +504,8 @@ agent:
   max-tokens: 8192                   # 思考模型 reasoning 计入 max_tokens，需预留足够空间（默认 2048）
   max-steps: 8
   memory-dir: ""                      # 长期记忆目录，默认 ${user.dir}/.agent
+  skills-enabled: true                # 技能总开关（false 时不加载技能、不注册 use_skill 工具）
+  skills-dir: ""                      # 技能根目录（默认 ${user.dir}/skills；classpath skills/ 为内置模板兜底）
   tools:
     - echo
     - http
@@ -455,8 +638,10 @@ Agent 配置与编排定义完全解耦，分两个独立文件存放（`start/s
 对话请求的编排选择优先级（三层决策分离：选择器选「编排」→ 编排内部选「Agent」）：
 
 1. **显式指定**：请求体携带 `orchestrationId`（REST / WebSocket / Shell 均支持）
-2. **规则意图匹配**：`orchestrations.json` 中各编排的 `keywords` 与用户消息做命中计数，命中最多者胜出
-3. **默认兜底**：`agent.orchestration`（默认 `routing`），未命中任何关键词时使用
+2. **意图选择器**（`agent.orchestration-selector` 配置驱动）：
+   - `llm` 模式：`LlmOrchestrationSelector` 基于各编排 `description` 做 LLM 语义匹配（温度 0 + 关闭思考保证确定性），未命中 / 调用失败回退规则关键词匹配
+   - `rule` 模式（默认）：`RuleBasedOrchestrationSelector` 按 `keywords` 命中计数，命中最多者胜出
+3. **默认兜底**：`agent.orchestration`（默认 `routing`），意图未命中时使用
 
 ```bash
 # 默认编排 routing（单专家独立处理）
@@ -464,6 +649,9 @@ java -jar start/target/start-*.jar --spring.profiles.active=shell
 
 # 修改默认兜底编排 / 选择器
 java -jar start/target/start-*.jar --agent.orchestration=code-review-pipeline --agent.orchestration-selector=rule
+
+# 启用 LLM 语义意图选择（LLM 优先 + 规则兜底；如「Kafka 还是 RabbitMQ」无需关键词即可命中 team-discussion）
+java -jar start/target/start-*.jar --agent.orchestration-selector=llm
 ```
 
 每个 Agent 的模型独立配置：在 `agents.json` 中为 Agent 指定 `model` / `apiKey`（用 `${VAR}` 引用 `.env` 变量），未配置的字段自动继承默认值。`.env` 示例：
@@ -566,6 +754,27 @@ public class MyTool implements ToolExecutor {
 ```
 
 然后在 `application.yml` 的 `agent.tools` 列表中添加工具名即可。
+
+### 新增技能（Skill）
+
+无需写代码：在技能根目录（默认 `${user.dir}/skills`，或 `agent.skills-dir` 指定）放一个目录，包含 `SKILL.md`（YAML frontmatter + Markdown 指令）：
+
+```markdown
+---
+name: my-skill
+description: 技能做什么 + 何时使用（触发词）。如：生成项目周报。当用户要求生成周报 / 日报时使用。
+---
+
+# 技能标题
+
+## 工作流
+1. ...
+```
+
+- `name` 必须与目录名一致（kebab-case），`description` 是触发信号（what + when + 触发词）；
+- 正文建议 ≤ 500 行，长文/脚本/模板拆入 `resources/` 子目录，正文用 `$SKILL_DIR` 引用其绝对路径；
+- 重启应用 → 日志输出「已加载技能 [n]」→ 对话中匹配 `description` 场景时，LLM 自动调用 `use_skill` 按需加载；
+- 技能执行仍走工具沙箱（shell 白名单 / 路径限制 / 超时 / 截断），无特权提升。
 
 ### 新增 LLM Provider
 

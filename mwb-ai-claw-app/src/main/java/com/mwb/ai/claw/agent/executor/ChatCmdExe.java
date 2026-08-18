@@ -17,6 +17,8 @@ import com.mwb.ai.claw.dto.data.ChatResponseDTO;
 import com.mwb.ai.claw.infrastructure.collaboration.OrchestratorRegistry;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.config.OrchestrationConfigLoader;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
@@ -29,6 +31,8 @@ import javax.annotation.Resource;
  */
 @Component
 public class ChatCmdExe {
+
+    private static final Logger log = LoggerFactory.getLogger(ChatCmdExe.class);
 
     @Resource
     private AgentGateway agentGateway;
@@ -71,6 +75,8 @@ public class ChatCmdExe {
         // 1. 选择编排：显式指定 > 意图选择 > 默认
         String orchestrationId = resolveOrchestrationId(cmd);
         OrchestrationDefinition definition = orchestrationLoader.get(orchestrationId);
+        log.info("编排选择: orchestrationId={}, 会话={}, 消息={}", orchestrationId,
+                cmd.getSessionId(), cmd.getMessage());
 
         // 2. 装配编排上下文
         OrchestrationContext ctx = new OrchestrationContext();
@@ -87,6 +93,8 @@ public class ChatCmdExe {
         // 3. 委托编排插件执行
         AgentOrchestrator orchestrator = orchestratorRegistry.resolve(definition);
         CollaborationResult result = orchestrator.orchestrate(ctx);
+        log.info("对话完成: orchestrationId={}, agentId={}, 会话={}", orchestrationId,
+                result.getAgentId(), result.getSessionId());
 
         // 4. 组装响应
         ChatResponseDTO dto = new ChatResponseDTO();

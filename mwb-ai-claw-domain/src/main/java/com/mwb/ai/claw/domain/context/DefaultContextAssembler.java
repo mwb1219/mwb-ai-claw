@@ -9,6 +9,8 @@ import com.mwb.ai.claw.domain.llm.ToolCall;
 import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
 import com.mwb.ai.claw.domain.memory.MemoryPage;
 import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
+import com.mwb.ai.claw.domain.skill.Skill;
+import com.mwb.ai.claw.domain.skill.SkillGateway;
 import com.mwb.ai.claw.domain.tool.ToolGateway;
 import com.mwb.ai.claw.domain.tool.ToolSpec;
 import org.slf4j.Logger;
@@ -34,16 +36,23 @@ public class DefaultContextAssembler implements ContextAssembler {
     private final ToolGateway toolGateway;
     private final LongTermMemoryGateway memoryGateway;
     private final LayeredMemoryGateway layeredMemory;
+    private final SkillGateway skillGateway;
 
     public DefaultContextAssembler(ToolGateway toolGateway, LongTermMemoryGateway memoryGateway) {
-        this(toolGateway, memoryGateway, null);
+        this(toolGateway, memoryGateway, null, null);
     }
 
     public DefaultContextAssembler(ToolGateway toolGateway, LongTermMemoryGateway memoryGateway,
                                    LayeredMemoryGateway layeredMemory) {
+        this(toolGateway, memoryGateway, layeredMemory, null);
+    }
+
+    public DefaultContextAssembler(ToolGateway toolGateway, LongTermMemoryGateway memoryGateway,
+                                   LayeredMemoryGateway layeredMemory, SkillGateway skillGateway) {
         this.toolGateway = toolGateway;
         this.memoryGateway = memoryGateway;
         this.layeredMemory = layeredMemory;
+        this.skillGateway = skillGateway;
     }
 
     @Override
@@ -170,7 +179,26 @@ public class DefaultContextAssembler implements ContextAssembler {
                         .append(memContent);
             }
         }
+        appendSkills(systemPrompt);
         return systemPrompt.toString();
+    }
+
+    /**
+     * 追加「可用技能」清单（渐进式披露 L1 发现层）：仅注入 name + description，
+     * 正文由 LLM 按需通过 use_skill 工具加载（L2）。
+     */
+    private void appendSkills(StringBuilder systemPrompt) {
+        if (skillGateway == null) {
+            return;
+        }
+        List<Skill> skills = skillGateway.listSkills();
+        if (skills == null || skills.isEmpty()) {
+            return;
+        }
+        systemPrompt.append("\n\n## 可用技能（按需通过 use_skill 工具加载完整指令）\n");
+        for (Skill skill : skills) {
+            systemPrompt.append("- ").append(skill.getName()).append("：").append(skill.getDescription()).append("\n");
+        }
     }
 
     private void appendPages(StringBuilder sb, String title, List<MemoryPage> pages) {
