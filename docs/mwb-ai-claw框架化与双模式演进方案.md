@@ -165,19 +165,23 @@ domain 零 Spring 依赖，infrastructure 实现端口（依赖倒置）
 
 ## 5. 路线图
 
-### Phase A：框架化改造（结构性）
+> **执行顺序决策（2026-08-18）**：将「服务端生产化」调整为先实施（原 Phase B 前移为 Phase A），「框架化改造」后置。
+> 原因：当前项目以自用服务端应用为主，先满足生产化需求（多租户 / 持久化 / 鉴权），框架化抽取（starter / ClawRuntime / 示例）在功能稳定后进行，避免为尚未验证的能力提前抽象。
+> 权衡：生产化功能先在现有模块结构内实现，后续框架化抽取时需做一次模块归位整理，存在一定返工成本；但可先在真实业务场景中验证多租户 / 持久化设计，降低框架抽象风险。
 
-- [ ] 拆出 `mwb-ai-claw-spring-boot-starter`（自动装配 + `spring.factories` + `@ConditionalOnMissingBean`）
-- [ ] 新增 `ClawRuntime` 客户端嵌入式入口（无 Web 容器启动）
-- [ ] 示例工程模板：服务端示例 + 客户端嵌入式示例
-- [ ] Maven 发布准备（坐标、版本、源码/javadoc 插件）
-
-### Phase B：服务端生产化
+### Phase A：服务端生产化（优先）
 
 - [ ] 多租户 / 用户维度（记忆命名空间、会话 key、检索隔离）
 - [ ] JDBC / Redis 持久化实现（Session / MemoryPageStore / Facts）
 - [ ] session 级并发锁（文件模式并发安全）
 - [ ] 认证鉴权（API Key / Token、租户级权限、工具级权限）
+
+### Phase B：框架化改造（结构性）
+
+- [ ] 拆出 `mwb-ai-claw-spring-boot-starter`（自动装配 + `spring.factories` + `@ConditionalOnMissingBean`）
+- [ ] 新增 `ClawRuntime` 客户端嵌入式入口（无 Web 容器启动）
+- [ ] 示例工程模板：服务端示例 + 客户端嵌入式示例
+- [ ] Maven 发布准备（坐标、版本、源码/javadoc 插件）
 
 ### Phase C：可观测与韧性
 
@@ -204,3 +208,4 @@ domain 零 Spring 依赖，infrastructure 实现端口（依赖倒置）
 | 默认技术栈 | Java 8 + Spring Boot 2.7（现状） | 新框架对外推广建议升级 Java 17/21 + SB 3.x，列入 Phase D |
 | 多租户必要性 | 服务端必做 | 客户端单用户不需要 |
 | 纯 Java 非 Spring 宿主 | 后置 | 仅当遇到非 Spring 宿主时才需要手动装配模块 |
+| Phase 执行顺序 | 服务端生产化优先（原 B 前移为 A） | 先满足自用生产需求，框架化抽取后置（见第 5 节） |

@@ -27,6 +27,8 @@ agent:
   # 提高到 8192 保证「推理 + 完整回复 + 工具调用」有足够空间
   max-tokens: 8192
   max-steps: 8
+  # ReAct 步数扩展系数：初始预算(max-steps)用尽且工具链未完成时自动扩展，硬上限 = max-steps × 系数（>1 生效，默认 2.0）
+  max-steps-extension: 2.0
   # 长期记忆目录（AGENT.md / MEMORY.md 存放位置，默认 ${user.dir}/.agent）
   memory-dir: ""
   # 技能（Skill）支持：渐进式披露 —— 技能清单常驻 system prompt，SKILL.md 正文按需经 use_skill 工具加载

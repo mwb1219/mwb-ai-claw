@@ -180,7 +180,19 @@ public class DefaultContextAssembler implements ContextAssembler {
             }
         }
         appendSkills(systemPrompt);
+        appendBudgetHint(systemPrompt, agent);
         return systemPrompt.toString();
+    }
+
+    /**
+     * 注入推理步数预算提示：告知 LLM 可用步数与工具调用建议，减少无效往返
+     * （配合 ReActLoopService 的动态步数扩展，让 LLM 高效利用预算）。
+     */
+    private void appendBudgetHint(StringBuilder sb, Agent agent) {
+        sb.append("\n\n## 推理预算\n")
+                .append("本次任务有 ").append(agent.getMaxSteps())
+                .append(" 步推理预算用于调用工具完成任务。请合理规划工具调用：优先并行调用相互独立的工具，")
+                .append("避免重复获取已掌握的信息；获得足够信息后请直接给出最终回答，不要做多余的推理步骤。");
     }
 
     /**

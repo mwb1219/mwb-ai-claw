@@ -1,5 +1,7 @@
 package com.mwb.ai.claw.domain.core;
 
+import java.util.List;
+
 import com.mwb.ai.claw.domain.context.ContextAssembler;
 import com.mwb.ai.claw.domain.llm.LlmGateway;
 import com.mwb.ai.claw.domain.llm.LlmRequest;
@@ -9,8 +11,6 @@ import com.mwb.ai.claw.domain.llm.ToolCall;
 import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
 import com.mwb.ai.claw.domain.tool.ToolGateway;
 import com.mwb.ai.claw.domain.tool.ToolResult;
-
-import java.util.List;
 
 /**
  * ReAct 推理循环领域服务：Agent 的核心引擎。
@@ -25,6 +25,12 @@ public class ReActLoopService {
     private final ContextAssembler contextAssembler;
     private final LayeredMemoryGateway memoryManager;
 
+    /**
+     * ReAct 步数扩展系数：初始预算（maxSteps）用尽且工具链未完成时自动追加步数，
+     * 硬上限 = maxSteps × 系数（默认 2.0），防止死循环的同时让复杂工具链跑完。
+     */
+    private final double maxStepsExtensionFactor;
+
     public ReActLoopService(LlmGateway llmGateway, ToolGateway toolGateway,
                             ContextAssembler contextAssembler) {
         this(llmGateway, toolGateway, contextAssembler, null);
@@ -33,10 +39,18 @@ public class ReActLoopService {
     public ReActLoopService(LlmGateway llmGateway, ToolGateway toolGateway,
                             ContextAssembler contextAssembler,
                             LayeredMemoryGateway memoryManager) {
+        this(llmGateway, toolGateway, contextAssembler, memoryManager, 2.0);
+    }
+
+    public ReActLoopService(LlmGateway llmGateway, ToolGateway toolGateway,
+                            ContextAssembler contextAssembler,
+                            LayeredMemoryGateway memoryManager,
+                            double maxStepsExtensionFactor) {
         this.llmGateway = llmGateway;
         this.toolGateway = toolGateway;
         this.contextAssembler = contextAssembler;
         this.memoryManager = memoryManager;
+        this.maxStepsExtensionFactor = maxStepsExtensionFactor > 1.0 ? maxStepsExtensionFactor : 2.0;
     }
 
     /**
@@ -61,8 +75,13 @@ public class ReActLoopService {
     public ReActResult run(Session session, Agent agent, ProgressCallback callback) {
         ReActResult result = new ReActResult();
         int maxSteps = agent.getMaxSteps();
+        // 软预算（初始 maxSteps）+ 硬上限（maxSteps × 扩展系数）：预算用尽且工具链未完成时自动扩展
+        int hardCap = Math.max(maxSteps, (int) Math.ceil(maxSteps * maxStepsExtensionFactor));
+        int effectiveSteps = maxSteps;
+        int step = 0;
 
-        for (int step = 1; step <= maxSteps; step++) {
+        while (step < effectiveSteps) {
+            step++;
             // 1. 组装 LLM 请求（system + history + tools）
             LlmRequest request = contextAssembler.assemble(session, agent);
 
@@ -107,12 +126,21 @@ public class ReActLoopService {
                 notify(callback, obs);
             }
             afterTurn(session, agent);
+            // 动态扩展预算：本轮仍调用了工具（工具链未收敛）且预算用尽 → 自动追加，不超硬上限
+            int extended = extendedBudget(step, maxSteps, effectiveSteps, hardCap);
+            if (extended > effectiveSteps) {
+                effectiveSteps = extended;
+                String ext = "[Info] 步数预算(" + maxSteps + ")已用尽且工具链未完成，自动扩展至 "
+                        + effectiveSteps + "（硬上限 " + hardCap + "）";
+                result.getTraceSteps().add(ext);
+                notify(callback, ext);
+            }
             // 继续下一轮循环，让 LLM 根据 Observation 再次推理
         }
 
-        // 达到最大步数仍未完成
+        // 达到硬上限仍未完成
         result.setMaxStepsReached(true);
-        result.setReply("达到最大推理步数限制(" + maxSteps + ")，未能完成最终回复。");
+        result.setReply("达到最大推理步数限制(" + hardCap + ")，未能完成最终回复。");
         afterTurn(session, agent);
         return result;
     }
@@ -131,8 +159,13 @@ public class ReActLoopService {
                                  LlmStreamCallback streamCallback) {
         ReActResult result = new ReActResult();
         int maxSteps = agent.getMaxSteps();
+        // 软预算（初始 maxSteps）+ 硬上限（maxSteps × 扩展系数）：预算用尽且工具链未完成时自动扩展
+        int hardCap = Math.max(maxSteps, (int) Math.ceil(maxSteps * maxStepsExtensionFactor));
+        int effectiveSteps = maxSteps;
+        int step = 0;
 
-        for (int step = 1; step <= maxSteps; step++) {
+        while (step < effectiveSteps) {
+            step++;
             LlmRequest request = contextAssembler.assemble(session, agent);
 
             // 流式调用 LLM
@@ -173,12 +206,32 @@ public class ReActLoopService {
                 notify(callback, obs);
             }
             afterTurn(session, agent);
+            // 动态扩展预算：本轮仍调用了工具（工具链未收敛）且预算用尽 → 自动追加，不超硬上限
+            int extended = extendedBudget(step, maxSteps, effectiveSteps, hardCap);
+            if (extended > effectiveSteps) {
+                effectiveSteps = extended;
+                String ext = "[Info] 步数预算(" + maxSteps + ")已用尽且工具链未完成，自动扩展至 "
+                        + effectiveSteps + "（硬上限 " + hardCap + "）";
+                result.getTraceSteps().add(ext);
+                notify(callback, ext);
+            }
         }
 
         result.setMaxStepsReached(true);
-        result.setReply("达到最大推理步数限制(" + maxSteps + ")，未能完成最终回复。");
+        result.setReply("达到最大推理步数限制(" + hardCap + ")，未能完成最终回复。");
         afterTurn(session, agent);
         return result;
+    }
+
+    /**
+     * 计算扩展后的步数预算：当前步已用尽预算且仍有工具调用（工具链未收敛）时，
+     * 每次追加 maxSteps/2 步（至少 1 步），不超过硬上限。
+     */
+    private int extendedBudget(int step, int maxSteps, int effectiveSteps, int hardCap) {
+        if (step >= effectiveSteps && effectiveSteps < hardCap) {
+            return Math.min(hardCap, effectiveSteps + Math.max(1, maxSteps / 2));
+        }
+        return effectiveSteps;
     }
 
     private void afterTurn(Session session, Agent agent) {

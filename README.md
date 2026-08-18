@@ -503,6 +503,7 @@ agent:
   temperature: 0.7
   max-tokens: 8192                   # 思考模型 reasoning 计入 max_tokens，需预留足够空间（默认 2048）
   max-steps: 8
+  max-steps-extension: 2.0            # ReAct 步数扩展系数：预算(max-steps)用尽且工具链未完成时自动扩展，硬上限 = max-steps × 系数
   memory-dir: ""                      # 长期记忆目录，默认 ${user.dir}/.agent
   skills-enabled: true                # 技能总开关（false 时不加载技能、不注册 use_skill 工具）
   skills-dir: ""                      # 技能根目录（默认 ${user.dir}/skills；classpath skills/ 为内置模板兜底）
@@ -576,7 +577,7 @@ Agent 配置与编排定义完全解耦，分两个独立文件存放（`start/s
 | `keywords`                     | 否  | 规则路由关键词（路由编排内部选择 Agent 使用）           |
 | `systemPrompt`                 | 否  | 系统提示词，缺省继承默认                          |
 | `tools`                        | 否  | 可用工具列表，缺省继承默认                         |
-| `maxSteps`                     | 否  | 最大推理步数，缺省继承默认                         |
+| `maxSteps`                     | 否  | 初始推理预算步数，缺省继承默认；预算用尽且工具链未完成时按 `max-steps-extension` 自动扩展（硬上限 = maxSteps × 系数） |
 | `model` / `baseUrl` / `apiKey` | 否  | 独立模型配置，缺省继承默认，支持 `${VAR:default}` 占位符 |
 | `temperature` / `maxTokens`    | 否  | 采样温度 / 单次最大 tokens，缺省继承默认             |
 

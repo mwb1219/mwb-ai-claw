@@ -47,8 +47,10 @@ public class AgentConfiguration {
     @Bean
     public ReActLoopService reActLoopService(LlmGateway llmGateway, ToolGateway toolGateway,
                                              ContextAssembler contextAssembler,
-                                             LayeredMemoryGateway layeredMemoryGateway) {
-        return new ReActLoopService(llmGateway, toolGateway, contextAssembler, layeredMemoryGateway);
+                                             LayeredMemoryGateway layeredMemoryGateway,
+                                             AgentProperties properties) {
+        return new ReActLoopService(llmGateway, toolGateway, contextAssembler, layeredMemoryGateway,
+                properties.getMaxStepsExtension());
     }
 
     @Bean

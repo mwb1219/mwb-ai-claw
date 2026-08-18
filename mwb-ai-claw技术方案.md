@@ -1,6 +1,6 @@
 # mwb-ai-claw 技术方案
 
-> 本文档为 mwb-ai-claw 项目的完整技术方案，涵盖项目背景、目标、概要设计、整体架构设计（整洁架构 + DDD + 六边形架构融合）、数据模型设计（UML 类图）以及各核心领域的详细流程设计（状态图、数据交互图、文字说明）。所有图形均采用 Mermaid 描述，可在支持 Mermaid 的编辑器（GitHub / Typora / VS Code 等）中直接渲染。
+> 本文档为 mwb-ai-claw 项目的完整技术方案，涵盖项目背景、目标、概要设计、整体架构设计（整洁架构 + DDD + 六边形架构融合）、数据模型设计（UML 类图）以及各核心领域的详细流程设计（状态图、数据交互图、文字说明）。所有图形均采用 PlantUML 描述，可在支持 PlantUML 的编辑器（VS Code / IDEA / Typora 等）中直接渲染。
 
 ---
 
@@ -84,144 +84,188 @@ mwb-ai-claw-parent (pom)
 
 ### 4.1 架构同心圆（整洁架构 + 六边形端口适配器）
 
-```mermaid
-flowchart TD
-    %% 整洁架构同心圆：外层依赖内层
-    DOMAIN["<b>Domain</b>（领域层 = 纯业务规则）<br/>──────────<br/>聚合根 / 实体 / 值对象<br/>领域服务 / Gateway 端口接口<br/>(零 Spring 依赖)"]
-    APP["<b>App</b>（应用层 = 用例编排）<br/>──────────<br/>AgentServiceImpl<br/>ChatCmdExe<br/>(无业务规则)"]
-    OUTER["<b>Adapter + Infrastructure</b>（适配器 + 基础设施）<br/>──────────<br/>输入适配器: REST/SSE/WS/Shell<br/>输出适配器: LLM/Tool/Memory/File<br/>(技术实现)"]
+```plantuml
+@startuml
+title 架构同心圆（整洁架构 + 六边形端口适配器）
+skinparam componentStyle rectangle
+skinparam component {
+  BackgroundColor #FBFBFB
+  BorderColor #888888
+  ArrowColor #333333
+}
 
-    %% 六边形端口：Gateway 接口
-    PORTNOTE["<b>六边形端口（Gateway 接口）</b><br/>LlmGateway | EmbeddingGateway | ToolGateway<br/>LayeredMemoryGateway | AgentGateway<br/>AgentOrchestrator(SPI) | OrchestrationSelector(SPI)<br/>ToolExecutor(SPI) | PageEvictionPolicy(SPI) | MemoryRetriever(SPI)"]
-    %% 六边形适配器（实现）
-    ADAPTERNOTE["<b>六边形适配器（实现）</b><br/>LlmGatewayImpl | OpenAiEmbeddingGateway<br/>ToolGatewayImpl + BuiltinTools + McpClient<br/>LayeredMemoryGatewayImpl + FileMemoryPageStore<br/>AgentGatewayImpl | RoutingOrchestrator | PipelineOrchestrator"]
-    %% 依赖倒置箭头
-    DIPNOTE["依赖倒置：infrastructure 实现 domain 的端口接口<br/>箭头方向 = 编译期依赖方向（外→内）"]
+component "Domain（领域层 = 纯业务规则）\n──────────\n聚合根 / 实体 / 值对象\n领域服务 / Gateway 端口接口\n(零 Spring 依赖)" as DOMAIN
+component "App（应用层 = 用例编排）\n──────────\nAgentServiceImpl\nChatCmdExe\n(无业务规则)" as APP
+component "Adapter + Infrastructure（适配器 + 基础设施）\n──────────\n输入适配器: REST/SSE/WS/Shell\n输出适配器: LLM/Tool/Memory/File\n(技术实现)" as OUTER
 
-    %% 依赖方向：外→内
-    OUTER -.->|依赖（调用用例）| APP
-    APP -.->|依赖（调用领域服务/端口）| DOMAIN
-    OUTER -.->|依赖（实现端口）| DOMAIN
+note bottom of DOMAIN
+  六边形端口（Gateway 接口）
+  LlmGateway | EmbeddingGateway | ToolGateway
+  LayeredMemoryGateway | AgentGateway
+  AgentOrchestrator(SPI) | OrchestrationSelector(SPI)
+  ToolExecutor(SPI) | PageEvictionPolicy(SPI) | MemoryRetriever(SPI)
+end note
 
-    PORTNOTE -.-> DOMAIN
-    ADAPTERNOTE -.-> OUTER
-    DIPNOTE -.-> OUTER
+note bottom of APP
+  六边形适配器（实现）
+  LlmGatewayImpl | OpenAiEmbeddingGateway
+  ToolGatewayImpl + BuiltinTools + McpClient
+  LayeredMemoryGatewayImpl + FileMemoryPageStore
+  AgentGatewayImpl | RoutingOrchestrator | PipelineOrchestrator
+end note
+
+note bottom of OUTER
+  依赖倒置：infrastructure 实现 domain 的端口接口
+  箭头方向 = 编译期依赖方向（外→内）
+end note
+
+OUTER ..> APP : 依赖（调用用例）
+APP ..> DOMAIN : 依赖（调用领域服务/端口）
+OUTER ..> DOMAIN : 依赖（实现端口）
+@enduml
 ```
 
 ### 4.2 分层架构与模块依赖
 
-```mermaid
-flowchart TD
-    subgraph START_MOD["start 启动模块"]
-        START["Application<br/>Spring Boot 入口"]
-        ENV[".env 加载<br/>DotenvPostProcessor"]
-        CONFIG["agents.json<br/>orchestrations.json<br/>mcp-server.json"]
-    end
-    subgraph ADAPTER_MOD["adapter 适配层（输入适配器）"]
-        CTRL["AgentController<br/>REST / SSE"]
-        WS["AgentWebSocketHandler<br/>/ws/agent"]
-        SHELL["AgentShell<br/>JLine REPL"]
-        MEMCTRL["MemoryController<br/>记忆面板"]
-    end
-    subgraph APP_MOD["app 应用层（用例编排）"]
-        SVC["AgentServiceImpl"]
-        EXE["ChatCmdExe<br/>编排分发"]
-    end
-    subgraph CLIENT_MOD["client 客户端 SDK"]
-        API["AgentServiceI 接口"]
-        DTO["ChatCmd / DTO"]
-    end
-    subgraph DOMAIN_MOD["domain 领域层（端口 + 业务规则）"]
-        CORE["core<br/>Session/Agent/Message<br/>ReActLoopService"]
-        COLLAB["collaboration<br/>Orchestration SPI"]
-        CTX["context<br/>ContextAssembler"]
-        LLM_PORT["llm<br/>LlmGateway/EmbeddingGateway"]
-        TOOL_PORT["tool<br/>ToolGateway/ToolExecutor"]
-        MEM_PORT["memory<br/>LayeredMemoryGateway"]
-    end
-    subgraph INFRA_MOD["infrastructure 基础设施层（输出适配器）"]
-        ILLM["LlmGatewayImpl"]
-        ITOOL["ToolGatewayImpl + MCP"]
-        IMEM["LayeredMemoryGatewayImpl<br/>+ FilePageStore + Retriever"]
-        ICORE["AgentGatewayImpl"]
-        ICOLLAB["RoutingOrchestrator<br/>PipelineOrchestrator"]
-    end
+```plantuml
+@startuml
+title 分层架构与模块依赖
+skinparam componentStyle rectangle
+skinparam component {
+  BackgroundColor #FBFBFB
+  BorderColor #888888
+  ArrowColor #333333
+}
 
-    %% 输入适配器 → 应用层
-    CTRL --> SVC
-    WS --> SVC
-    SHELL --> SVC
-    MEMCTRL --> SVC
+package "start 启动模块" {
+    component "Application\nSpring Boot 入口" as START
+    component ".env 加载\nDotenvPostProcessor" as ENV
+    component "agents.json\norchestrations.json\nmcp-server.json" as CONFIG
+}
+package "adapter 适配层（输入适配器）" {
+    component "AgentController\nREST / SSE" as CTRL
+    component "AgentWebSocketHandler\n/ws/agent" as WS
+    component "AgentShell\nJLine REPL" as SHELL
+    component "MemoryController\n记忆面板" as MEMCTRL
+}
+package "app 应用层（用例编排）" {
+    component "AgentServiceImpl" as SVC
+    component "ChatCmdExe\n编排分发" as EXE
+}
+package "client 客户端 SDK" {
+    component "AgentServiceI 接口" as API
+    component "ChatCmd / DTO" as DTO
+}
+package "domain 领域层（端口 + 业务规则）" {
+    component "core\nSession/Agent/Message\nReActLoopService" as CORE
+    component "collaboration\nOrchestration SPI" as COLLAB
+    component "context\nContextAssembler" as CTX
+    component "llm\nLlmGateway/EmbeddingGateway" as LLM_PORT
+    component "tool\nToolGateway/ToolExecutor" as TOOL_PORT
+    component "memory\nLayeredMemoryGateway" as MEM_PORT
+}
+package "infrastructure 基础设施层（输出适配器）" {
+    component "LlmGatewayImpl" as ILLM
+    component "ToolGatewayImpl + MCP" as ITOOL
+    component "LayeredMemoryGatewayImpl\n+ FilePageStore + Retriever" as IMEM
+    component "AgentGatewayImpl" as ICORE
+    component "RoutingOrchestrator\nPipelineOrchestrator" as ICOLLAB
+}
 
-    %% 应用层 → 领域端口
-    SVC --> EXE
-    EXE --> COLLAB
-    EXE --> API
+' 输入适配器 → 应用层
+CTRL --> SVC
+WS --> SVC
+SHELL --> SVC
+MEMCTRL --> SVC
 
-    %% 领域内部
-    COLLAB --> CORE
-    CORE --> CTX
-    CORE --> LLM_PORT
-    CORE --> TOOL_PORT
-    CORE --> MEM_PORT
+' 应用层 → 领域端口
+SVC --> EXE
+EXE --> COLLAB
+EXE --> API
 
-    %% 输出适配器实现端口（依赖倒置：infrastructure → domain）
-    ILLM -.-> LLM_PORT
-    ITOOL -.-> TOOL_PORT
-    IMEM -.-> MEM_PORT
-    ICORE -.->|AgentGateway| CORE
-    ICOLLAB -.-> COLLAB
+' 领域内部
+COLLAB --> CORE
+CORE --> CTX
+CORE --> LLM_PORT
+CORE --> TOOL_PORT
+CORE --> MEM_PORT
 
-    %% 启动配置
-    START --> CTRL
-    START --> SHELL
-    ENV --> CONFIG
-    CONFIG --> ICORE
-    CONFIG --> ICOLLAB
-    CONFIG --> ITOOL
+' 输出适配器实现端口（依赖倒置：infrastructure → domain）
+ILLM ..> LLM_PORT
+ITOOL ..> TOOL_PORT
+IMEM ..> MEM_PORT
+ICORE ..> CORE : AgentGateway
+ICOLLAB ..> COLLAB
+
+' 启动配置
+START --> CTRL
+START --> SHELL
+ENV --> CONFIG
+CONFIG --> ICORE
+CONFIG --> ICOLLAB
+CONFIG --> ITOOL
+@enduml
 ```
 
 ### 4.3 六边形端口-适配器映射
 
 六边形架构的核心是：**领域层定义端口（接口），基础设施层提供适配器（实现），适配器层作为外部世界与领域交互的入口**。
 
-```mermaid
-flowchart LR
-    %% 六边形主体：领域层
-    DOMAIN["<b>Domain</b><br/>（领域核心 + 端口定义）"]
+```plantuml
+@startuml
+title 六边形端口-适配器映射
+left to right direction
+skinparam componentStyle rectangle
+skinparam component {
+  BackgroundColor #FBFBFB
+  BorderColor #888888
+  ArrowColor #333333
+}
 
-    %% 左侧：输入适配器（Driving Adapters）
-    subgraph IN_MOD["输入适配器（Driving）"]
-        REST["REST Controller"]
-        WSH["WebSocket Handler"]
-        REPL["Shell REPL"]
-        FE["前端控制台"]
-    end
+component "Domain\n（领域核心 + 端口定义）" as DOMAIN
 
-    %% 右侧：输出适配器（Driven Adapters）
-    subgraph OUT_MOD["输出适配器（Driven）"]
-        LLM_IMPL["LlmGatewayImpl<br/>→ OpenAI API"]
-        TOOL_IMPL["ToolGatewayImpl<br/>→ 内置工具 + MCP"]
-        MEM_IMPL["LayeredMemoryGatewayImpl<br/>→ 文件系统 + 向量索引"]
-        AGENT_IMPL["AgentGatewayImpl<br/>→ agents.json"]
-    end
+package "输入适配器（Driving）" {
+    component "REST Controller" as REST
+    component "WebSocket Handler" as WSH
+    component "Shell REPL" as REPL
+    component "前端控制台" as FE
+}
 
-    %% 端口接口（在领域层定义，适配器实现）
-    PORTS["<b>端口（Port = 领域层接口）</b><br/>AgentServiceI ← 输入端口（用例入口）<br/>AgentOrchestrator(SPI) ← 编排端口<br/>OrchestrationSelector ← 选择器端口<br/>LlmGateway ← LLM 调用端口<br/>EmbeddingGateway ← 向量生成端口<br/>ToolGateway ← 工具执行端口<br/>ToolExecutor(SPI) ← 工具扩展端口<br/>LayeredMemoryGateway ← 记忆读写端口<br/>AgentGateway ← Agent 配置端口<br/>PageEvictionPolicy(SPI) ← 换页策略端口<br/>MemoryRetriever(SPI) ← 检索器端口<br/>ExecutionUnit ← 执行原语端口"]
+package "输出适配器（Driven）" {
+    component "LlmGatewayImpl\n→ OpenAI API" as LLM_IMPL
+    component "ToolGatewayImpl\n→ 内置工具 + MCP" as TOOL_IMPL
+    component "LayeredMemoryGatewayImpl\n→ 文件系统 + 向量索引" as MEM_IMPL
+    component "AgentGatewayImpl\n→ agents.json" as AGENT_IMPL
+}
 
-    %% 输入适配器 → 领域
-    REST -->|HTTP/SSE| DOMAIN
-    WSH -->|WebSocket| DOMAIN
-    REPL -->|JLine| DOMAIN
-    FE -->|fetch API| DOMAIN
+note bottom of DOMAIN
+  端口（Port = 领域层接口，适配器实现）
+  AgentServiceI ← 输入端口（用例入口）
+  AgentOrchestrator(SPI) ← 编排端口
+  OrchestrationSelector ← 选择器端口
+  LlmGateway ← LLM 调用端口
+  EmbeddingGateway ← 向量生成端口
+  ToolGateway ← 工具执行端口
+  ToolExecutor(SPI) ← 工具扩展端口
+  LayeredMemoryGateway ← 记忆读写端口
+  AgentGateway ← Agent 配置端口
+  PageEvictionPolicy(SPI) ← 换页策略端口
+  MemoryRetriever(SPI) ← 检索器端口
+  ExecutionUnit ← 执行原语端口
+end note
 
-    %% 领域 → 输出适配器（通过端口，依赖倒置）
-    DOMAIN -.->|LlmGateway| LLM_IMPL
-    DOMAIN -.->|ToolGateway| TOOL_IMPL
-    DOMAIN -.->|LayeredMemoryGateway| MEM_IMPL
-    DOMAIN -.->|AgentGateway| AGENT_IMPL
+' 输入适配器 → 领域
+REST --> DOMAIN : HTTP/SSE
+WSH --> DOMAIN : WebSocket
+REPL --> DOMAIN : JLine
+FE --> DOMAIN : fetch API
 
-    PORTS -.-> DOMAIN
+' 领域 → 输出适配器（通过端口，依赖倒置）
+DOMAIN ..> LLM_IMPL : LlmGateway
+DOMAIN ..> TOOL_IMPL : ToolGateway
+DOMAIN ..> MEM_IMPL : LayeredMemoryGateway
+DOMAIN ..> AGENT_IMPL : AgentGateway
+@enduml
 ```
 
 ### 4.4 架构设计原则
@@ -242,11 +286,11 @@ flowchart LR
 
 ### 5.1 领域模型全景图
 
-```mermaid
-classDiagram
-    %% ===== 核心域 =====
+```plantuml
+@startuml
+    ' ===== 核心域 =====
     namespace core核心域 {
-        %% Session <<AggregateRoot>>
+        ' Session <<AggregateRoot>>
         class Session {
             -String sessionId
             -String agentId
@@ -260,7 +304,7 @@ classDiagram
             +addToolMessage(toolCallId, content)
             +close()
         }
-        %% Agent <<Entity>>
+        ' Agent <<Entity>>
         class Agent {
             -String agentId
             -String name
@@ -272,7 +316,7 @@ classDiagram
             -List~String~ toolNames
             -int maxSteps = 8
         }
-        %% Message <<Entity>>
+        ' Message <<Entity>>
         class Message {
             -String role
             -String content
@@ -283,7 +327,7 @@ classDiagram
             +assistant(content, toolCalls)
             +tool(toolCallId, content)
         }
-        %% ModelConfig <<ValueObject>>
+        ' ModelConfig <<ValueObject>>
         class ModelConfig {
             -String model
             -String baseUrl
@@ -292,42 +336,42 @@ classDiagram
             -int maxTokens = 2048
             -Boolean thinking
         }
-        %% ReActResult <<ValueObject>>
+        ' ReActResult <<ValueObject>>
         class ReActResult {
             -String reply
             -List~String~ traceSteps
             -boolean maxStepsReached
         }
-        %% SessionStatus <<enumeration>>
-        class SessionStatus {
+        ' SessionStatus <<enumeration>>
+        enum SessionStatus {
             ACTIVE
             CLOSED
         }
-        %% MessageRole <<enumeration>>
-        class MessageRole {
+        ' MessageRole <<enumeration>>
+        enum MessageRole {
             SYSTEM
             USER
             ASSISTANT
             TOOL
         }
-        %% ReActLoopService <<DomainService>>
+        ' ReActLoopService <<DomainService>>
         class ReActLoopService {
             +run(session, agent, callback) ReActResult
             +streamRun(session, agent, callback, streamCallback) ReActResult
         }
-        %% AgentGateway <<Port>>
+        ' AgentGateway <<Port>>
         class AgentGateway {
             +getAgent(agentId) Agent
             +listAgents() List~Agent~
         }
-        %% ProgressCallback <<Port>>
+        ' ProgressCallback <<Port>>
         class ProgressCallback {
             +onProgress(step)
         }
     }
-    %% ===== 编排协作域 =====
+    ' ===== 编排协作域 =====
     namespace collaboration编排域 {
-        %% OrchestrationDefinition <<ValueObject>>
+        ' OrchestrationDefinition <<ValueObject>>
         class OrchestrationDefinition {
             -String id
             -String type
@@ -336,7 +380,7 @@ classDiagram
             -Map~String, Object~ config
             -List~String~ agents
         }
-        %% OrchestrationContext <<ValueObject>>
+        ' OrchestrationContext <<ValueObject>>
         class OrchestrationContext {
             -String message
             -String sessionId
@@ -348,7 +392,7 @@ classDiagram
             -ProgressCallback callback
             -LlmStreamCallback streamCallback
         }
-        %% CollaborationResult <<ValueObject>>
+        ' CollaborationResult <<ValueObject>>
         class CollaborationResult {
             -String reply
             -String agentId
@@ -356,17 +400,17 @@ classDiagram
             -String orchestrationId
             -List~String~ traceSteps
         }
-        %% AgentOrchestrator <<interface>>
+        ' AgentOrchestrator <<interface>>
         class AgentOrchestrator {
             +type() String
             +validate(definition)
             +orchestrate(context) CollaborationResult
         }
-        %% OrchestrationSelector <<interface>>
+        ' OrchestrationSelector <<interface>>
         class OrchestrationSelector {
             +select(message, definitions) String
         }
-        %% ExecutionUnit <<Port>>
+        ' ExecutionUnit <<Port>>
         class ExecutionUnit {
             +getOrCreateSession(sessionId, agent) Session
             +saveSession(session)
@@ -375,18 +419,18 @@ classDiagram
             +writeArtifact(workdir, stageId, content) Path
         }
     }
-    %% ===== LLM 域 =====
+    ' ===== LLM 域 =====
     namespace llmLLM域 {
-        %% LlmGateway <<interface>>
+        ' LlmGateway <<interface>>
         class LlmGateway {
             +chat(request, modelConfig) LlmResponse
             +streamChat(request, modelConfig, callback) LlmResponse
         }
-        %% EmbeddingGateway <<interface>>
+        ' EmbeddingGateway <<interface>>
         class EmbeddingGateway {
             +embed(text) float[]
         }
-        %% LlmRequest <<ValueObject>>
+        ' LlmRequest <<ValueObject>>
         class LlmRequest {
             -String model
             -List~LlmMessage~ messages
@@ -395,26 +439,26 @@ classDiagram
             -int maxTokens
             -Boolean thinking
         }
-        %% LlmResponse <<ValueObject>>
+        ' LlmResponse <<ValueObject>>
         class LlmResponse {
             -String content
             -List~ToolCall~ toolCalls
             -String finishReason
         }
-        %% LlmMessage <<ValueObject>>
+        ' LlmMessage <<ValueObject>>
         class LlmMessage {
             -String role
             -String content
             -List~ToolCall~ toolCalls
             -String toolCallId
         }
-        %% ToolCall <<ValueObject>>
+        ' ToolCall <<ValueObject>>
         class ToolCall {
             -String id
             -String name
             -String arguments
         }
-        %% LlmStreamCallback <<interface>>
+        ' LlmStreamCallback <<interface>>
         class LlmStreamCallback {
             +onToken(token)
             +onToolName(toolName)
@@ -423,28 +467,28 @@ classDiagram
             +onError(error)
         }
     }
-    %% ===== 工具域 =====
+    ' ===== 工具域 =====
     namespace tool工具域 {
-        %% ToolGateway <<interface>>
+        ' ToolGateway <<interface>>
         class ToolGateway {
             +execute(toolName, argumentsJson) ToolResult
             +listTools() List~ToolSpec~
             +getToolSpec(toolName) ToolSpec
         }
-        %% ToolExecutor <<interface>>
+        ' ToolExecutor <<interface>>
         class ToolExecutor {
             +getName() String
             +getSpec() ToolSpec
             +execute(argumentsJson) ToolResult
         }
-        %% ToolSpec <<ValueObject>>
+        ' ToolSpec <<ValueObject>>
         class ToolSpec {
             -String name
             -String description
             -String parametersJson
             -boolean global = false
         }
-        %% ToolResult <<ValueObject>>
+        ' ToolResult <<ValueObject>>
         class ToolResult {
             -boolean success
             -String output
@@ -453,9 +497,9 @@ classDiagram
             +error(error)
         }
     }
-    %% ===== 记忆域 =====
+    ' ===== 记忆域 =====
     namespace memory记忆域 {
-        %% LayeredMemoryGateway <<interface>>
+        ' LayeredMemoryGateway <<interface>>
         class LayeredMemoryGateway {
             +isEnabled() boolean
             +readContext(session, agent) MemoryView
@@ -465,7 +509,7 @@ classDiagram
             +readFactsText() String
             +search(query, topK) List~MemoryPage~
         }
-        %% MemoryPage <<ValueObject>>
+        ' MemoryPage <<ValueObject>>
         class MemoryPage {
             -String pageId
             -PageType type
@@ -482,14 +526,14 @@ classDiagram
             +fact(...)
             +archive(...)
         }
-        %% MemoryView <<ValueObject>>
+        ' MemoryView <<ValueObject>>
         class MemoryView {
             -List~Message~ workingMessages
             -List~MemoryPage~ summaryPages
             -List~MemoryPage~ factPages
             -List~MemoryPage~ retrievedPages
         }
-        %% LayeredMemoryConfig <<Config>>
+        ' LayeredMemoryConfig <<Config>>
         class LayeredMemoryConfig {
             -boolean enabled
             -int contextWindowTokens
@@ -508,16 +552,16 @@ classDiagram
             -String synthesizerModel
             -int synthesisCacheSize
         }
-        %% PageEvictionPolicy <<interface>>
+        ' PageEvictionPolicy <<interface>>
         class PageEvictionPolicy {
             +shouldEvict(context) boolean
         }
-        %% MemoryRetriever <<interface>>
+        ' MemoryRetriever <<interface>>
         class MemoryRetriever {
             +search(query, topK) List~MemoryPage~
         }
-        %% PageType <<enumeration>>
-        class PageType {
+        ' PageType <<enumeration>>
+        enum PageType {
             HOT
             SUMMARY
             FACT
@@ -525,7 +569,7 @@ classDiagram
             ARCHIVE
         }
     }
-    %% ===== 关系 =====
+    ' ===== 关系 =====
     Session *-- "1..*" Message
     Session --> SessionStatus
     Agent *-- "1" ModelConfig
@@ -558,15 +602,16 @@ classDiagram
     LlmRequest ..> ToolSpec
     LlmResponse ..> ToolCall
     Message ..> ToolCall
+@enduml
 ```
 
 ### 5.2 核心域数据模型
 
 核心域是整个系统的业务核心，包含 Session 聚合根、Agent 实体、Message 实体及 ReAct 推理引擎。
 
-```mermaid
-classDiagram
-    %% Session <<AggregateRoot>>
+```plantuml
+@startuml
+    ' Session <<AggregateRoot>>
     class Session {
         -String sessionId
         -String agentId
@@ -581,19 +626,22 @@ classDiagram
         +close() void
         -refreshUpdateTime() void
     }
-    note for Session "构造时 status=ACTIVE<br/>title 首条 user 消息取前30字符"
-    %% Message <<Entity>>
+    note right of Session
+      构造时 status=ACTIVE
+      title 首条 user 消息取前30字符
+    end note
+    ' Message <<Entity>>
     class Message {
         -String role
         -String content
         -List~ToolCall~ toolCalls
         -String toolCallId
         -long timestamp
-        +of(role, content)$ Message
-        +assistant(content, toolCalls)$ Message
-        +tool(toolCallId, content)$ Message
+        +of(role, content) Message
+        +assistant(content, toolCalls) Message
+        +tool(toolCallId, content) Message
     }
-    %% Agent <<Entity>>
+    ' Agent <<Entity>>
     class Agent {
         -String agentId
         -String name
@@ -605,7 +653,7 @@ classDiagram
         -List~String~ toolNames
         -int maxSteps = 8
     }
-    %% ModelConfig <<ValueObject>>
+    ' ModelConfig <<ValueObject>>
     class ModelConfig {
         -String model
         -String baseUrl
@@ -614,24 +662,24 @@ classDiagram
         -int maxTokens = 2048
         -Boolean thinking
     }
-    %% ReActResult <<ValueObject>>
+    ' ReActResult <<ValueObject>>
     class ReActResult {
         -String reply
         -List~String~ traceSteps
         -boolean maxStepsReached
     }
-    %% ReActLoopService <<DomainService>>
+    ' ReActLoopService <<DomainService>>
     class ReActLoopService {
         +run(Session session, Agent agent, ProgressCallback callback) ReActResult
         +streamRun(Session session, Agent agent, ProgressCallback callback, LlmStreamCallback streamCallback) ReActResult
     }
-    %% SessionStatus <<enumeration>>
-    class SessionStatus {
+    ' SessionStatus <<enumeration>>
+    enum SessionStatus {
         ACTIVE
         CLOSED
     }
-    %% MessageRole <<enumeration>>
-    class MessageRole {
+    ' MessageRole <<enumeration>>
+    enum MessageRole {
         SYSTEM
         USER
         ASSISTANT
@@ -645,13 +693,14 @@ classDiagram
     ReActLoopService ..> Agent : 使用
     ReActLoopService ..> ReActResult : 产出
     ReActLoopService ..> ProgressCallback : 回调
+@enduml
 ```
 
 ### 5.3 编排协作域数据模型
 
-```mermaid
-classDiagram
-    %% OrchestrationDefinition <<ValueObject>>
+```plantuml
+@startuml
+    ' OrchestrationDefinition <<ValueObject>>
     class OrchestrationDefinition {
         -String id
         -String type
@@ -660,8 +709,11 @@ classDiagram
         -Map~String, Object~ config
         -List~String~ agents
     }
-    note for OrchestrationDefinition "type: routing | pipeline | conversational<br/>config 由插件自行解释"
-    %% OrchestrationContext <<ValueObject>>
+    note right of OrchestrationDefinition
+      type: routing | pipeline | conversational
+      config 由插件自行解释
+    end note
+    ' OrchestrationContext <<ValueObject>>
     class OrchestrationContext {
         -String message
         -String sessionId
@@ -673,7 +725,7 @@ classDiagram
         -ProgressCallback callback
         -LlmStreamCallback streamCallback
     }
-    %% CollaborationResult <<ValueObject>>
+    ' CollaborationResult <<ValueObject>>
     class CollaborationResult {
         -String reply
         -String agentId
@@ -681,19 +733,24 @@ classDiagram
         -String orchestrationId
         -List~String~ traceSteps
     }
-    %% AgentOrchestrator <<interface>>
+    ' AgentOrchestrator <<interface>>
     class AgentOrchestrator {
         +type() String
         +validate(OrchestrationDefinition definition)
         +orchestrate(OrchestrationContext context) CollaborationResult
     }
-    note for AgentOrchestrator "实现类注册为 Spring Bean<br/>新增编排零主链路改动"
-    %% OrchestrationSelector <<interface>>
+    note right of AgentOrchestrator
+      实现类注册为 Spring Bean
+      新增编排零主链路改动
+    end note
+    ' OrchestrationSelector <<interface>>
     class OrchestrationSelector {
         +select(String message, List~OrchestrationDefinition~ definitions) String
     }
-    note for OrchestrationSelector "消息→编排（第一层决策）"
-    %% ExecutionUnit <<Port>>
+    note right of OrchestrationSelector
+      消息→编排（第一层决策）
+    end note
+    ' ExecutionUnit <<Port>>
     class ExecutionUnit {
         +getOrCreateSession(String sessionId, Agent agent) Session
         +saveSession(Session session)
@@ -701,7 +758,7 @@ classDiagram
         +runAgent(String prompt, Agent agent, ProgressCallback callback) String
         +writeArtifact(String workdir, String stageId, String content) Path
     }
-    %% PipelineStage <<Infrastructure>>
+    ' PipelineStage <<Infrastructure>>
     class PipelineStage {
         -String stageId
         -String agentId
@@ -712,20 +769,24 @@ classDiagram
         +isFilePass() boolean
         +abortOnFailure() boolean
     }
-    note for PipelineStage "pass: text | file<br/>onFailure: abort | continue"
+    note right of PipelineStage
+      pass: text | file
+      onFailure: abort | continue
+    end note
     OrchestrationContext --> OrchestrationDefinition : definition
     OrchestrationContext --> ExecutionUnit : executionUnit
     AgentOrchestrator ..> OrchestrationContext : 输入
     AgentOrchestrator --> CollaborationResult : 产出
     OrchestrationSelector ..> OrchestrationDefinition : 选择
-    OrchestrationDefinition <|-- PipelineStage : infrastructure 解析 config.stages[*]
+    OrchestrationDefinition <|-- PipelineStage : "infrastructure 解析 config.stages[*]"
+@enduml
 ```
 
 ### 5.4 记忆域数据模型
 
-```mermaid
-classDiagram
-    %% LayeredMemoryGateway <<interface>>
+```plantuml
+@startuml
+    ' LayeredMemoryGateway <<interface>>
     class LayeredMemoryGateway {
         +isEnabled() boolean
         +readContext(session, agent) MemoryView
@@ -735,15 +796,17 @@ classDiagram
         +readFactsText() String
         +search(query, topK) List~MemoryPage~
     }
-    %% MemoryView <<ValueObject>>
+    ' MemoryView <<ValueObject>>
     class MemoryView {
         -List~Message~ workingMessages
         -List~MemoryPage~ summaryPages
         -List~MemoryPage~ factPages
         -List~MemoryPage~ retrievedPages
     }
-    note for MemoryView "组装进 LlmRequest 的素材"
-    %% MemoryPage <<ValueObject>>
+    note right of MemoryView
+      组装进 LlmRequest 的素材
+    end note
+    ' MemoryPage <<ValueObject>>
     class MemoryPage {
         -String pageId
         -PageType type
@@ -756,12 +819,17 @@ classDiagram
         -int blockEnd
         -long createTime
         -int version
-        +summary(pageId, content, sessionId, blockStart, blockEnd, tokenCount)$
-        +fact(key, content, importance, sessionId)$
-        +archive(pageId, content, sessionId, blockStart, blockEnd, tokenCount)$
+        +summary(pageId, content, sessionId, blockStart, blockEnd, tokenCount)
+        +fact(key, content, importance, sessionId)
+        +archive(pageId, content, sessionId, blockStart, blockEnd, tokenCount)
     }
-    note for MemoryPage "key 仅 FACT<br/>importance 仅 FACT<br/>blockStart/blockEnd 仅 SUMMARY/ARCHIVE<br/>version 仅 FACT"
-    %% LayeredMemoryConfig <<Config>>
+    note right of MemoryPage
+      key 仅 FACT
+      importance 仅 FACT
+      blockStart/blockEnd 仅 SUMMARY/ARCHIVE
+      version 仅 FACT
+    end note
+    ' LayeredMemoryConfig <<Config>>
     class LayeredMemoryConfig {
         -boolean enabled = true
         -int contextWindowTokens = 65536
@@ -780,18 +848,25 @@ classDiagram
         -String synthesizerModel = ""
         -int synthesisCacheSize = 50
     }
-    %% PageEvictionPolicy <<interface>>
+    ' PageEvictionPolicy <<interface>>
     class PageEvictionPolicy {
         +shouldEvict(EvictionContext context) boolean
     }
-    note for PageEvictionPolicy "内置实现: TokenBudgetEvictionPolicy<br/>内置实现: ImportanceEvictionPolicy"
-    %% MemoryRetriever <<interface>>
+    note right of PageEvictionPolicy
+      内置实现: TokenBudgetEvictionPolicy
+      内置实现: ImportanceEvictionPolicy
+    end note
+    ' MemoryRetriever <<interface>>
     class MemoryRetriever {
         +search(String query, int topK) List~MemoryPage~
     }
-    note for MemoryRetriever "内置实现: KeywordMemoryRetriever<br/>内置实现: VectorMemoryRetriever<br/>内置实现: HybridMemoryRetriever"
-    %% PageType <<enumeration>>
-    class PageType {
+    note right of MemoryRetriever
+      内置实现: KeywordMemoryRetriever
+      内置实现: VectorMemoryRetriever
+      内置实现: HybridMemoryRetriever
+    end note
+    ' PageType <<enumeration>>
+    enum PageType {
         HOT
         SUMMARY
         FACT
@@ -805,24 +880,29 @@ classDiagram
     PageEvictionPolicy ..> MemoryPage : 判断
     MemoryRetriever ..> MemoryPage : 召回
     LayeredMemoryGateway ..> LayeredMemoryConfig : 配置
+@enduml
 ```
 
 ### 5.5 LLM 域数据模型
 
-```mermaid
-classDiagram
-    %% LlmGateway <<interface>>
+```plantuml
+@startuml
+    ' LlmGateway <<interface>>
     class LlmGateway {
         +chat(LlmRequest request, ModelConfig modelConfig) LlmResponse
         +streamChat(LlmRequest request, ModelConfig modelConfig, LlmStreamCallback callback) LlmResponse
     }
-    note for LlmGateway "实现类: LlmGatewayImpl (OkHttp + OpenAI API)"
-    %% EmbeddingGateway <<interface>>
+    note right of LlmGateway
+      实现类: LlmGatewayImpl (OkHttp + OpenAI API)
+    end note
+    ' EmbeddingGateway <<interface>>
     class EmbeddingGateway {
         +embed(String text) float[]
     }
-    note for EmbeddingGateway "实现类: OpenAiEmbeddingGateway"
-    %% LlmRequest <<ValueObject>>
+    note right of EmbeddingGateway
+      实现类: OpenAiEmbeddingGateway
+    end note
+    ' LlmRequest <<ValueObject>>
     class LlmRequest {
         -String model
         -List~LlmMessage~ messages
@@ -831,33 +911,37 @@ classDiagram
         -int maxTokens
         -Boolean thinking
     }
-    %% LlmResponse <<ValueObject>>
+    ' LlmResponse <<ValueObject>>
     class LlmResponse {
         -String content
         -List~ToolCall~ toolCalls
         -String finishReason
     }
-    note for LlmResponse "finishReason: stop | tool_calls | length"
-    %% LlmMessage <<ValueObject>>
+    note right of LlmResponse
+      finishReason: stop | tool_calls | length
+    end note
+    ' LlmMessage <<ValueObject>>
     class LlmMessage {
         -String role
         -String content
         -List~ToolCall~ toolCalls
         -String toolCallId
-        +system(content)$
-        +user(content)$
-        +assistant(content, toolCalls)$
-        +tool(toolCallId, content)$
+        +system(content)
+        +user(content)
+        +assistant(content, toolCalls)
+        +tool(toolCallId, content)
     }
-    note for LlmMessage "role: system | user | assistant | tool"
-    %% ToolCall <<ValueObject>>
+    note right of LlmMessage
+      role: system | user | assistant | tool
+    end note
+    ' ToolCall <<ValueObject>>
     class ToolCall {
         -String id
         -String name
         -String arguments
         +ToolCall(String id, String name, String arguments)
     }
-    %% LlmStreamCallback <<interface>>
+    ' LlmStreamCallback <<interface>>
     class LlmStreamCallback {
         +onToken(String token)
         +onToolName(String toolName)
@@ -865,7 +949,9 @@ classDiagram
         +onComplete(LlmResponse response)
         +onError(Throwable error)
     }
-    note for LlmStreamCallback "所有方法 default 空实现"
+    note right of LlmStreamCallback
+      所有方法 default 空实现
+    end note
     LlmGateway ..> LlmRequest : 输入
     LlmGateway ..> LlmResponse : 输出
     LlmRequest *-- "1..*" LlmMessage
@@ -873,27 +959,33 @@ classDiagram
     LlmResponse --> "0..*" ToolCall : toolCalls
     LlmMessage --> "0..*" ToolCall : toolCalls
     LlmGateway ..> LlmStreamCallback : 回调
+@enduml
 ```
 
 ### 5.6 工具域数据模型
 
-```mermaid
-classDiagram
-    %% ToolGateway <<interface>>
+```plantuml
+@startuml
+    ' ToolGateway <<interface>>
     class ToolGateway {
         +execute(String toolName, String argumentsJson) ToolResult
         +listTools() List~ToolSpec~
         +getToolSpec(String toolName) ToolSpec
     }
-    note for ToolGateway "实现类: ToolGatewayImpl"
-    %% ToolExecutor <<interface>>
+    note right of ToolGateway
+      实现类: ToolGatewayImpl
+    end note
+    ' ToolExecutor <<interface>>
     class ToolExecutor {
         +getName() String
         +getSpec() ToolSpec
         +execute(String argumentsJson) ToolResult
     }
-    note for ToolExecutor "内置实现: EchoTool, FileTool, ShellTool, HttpTool, ReadMemoryTool, WriteMemoryTool<br/>MCP 实现: McpToolAdapter"
-    %% ToolSpec <<ValueObject>>
+    note right of ToolExecutor
+      内置实现: EchoTool, FileTool, ShellTool, HttpTool, ReadMemoryTool, WriteMemoryTool
+      MCP 实现: McpToolAdapter
+    end note
+    ' ToolSpec <<ValueObject>>
     class ToolSpec {
         -String name
         -String description
@@ -901,20 +993,23 @@ classDiagram
         -boolean global = false
         +ToolSpec(String name, String description, String parametersJson)
     }
-    note for ToolSpec "parametersJson: JSON Schema"
-    %% ToolResult <<ValueObject>>
+    note right of ToolSpec
+      parametersJson: JSON Schema
+    end note
+    ' ToolResult <<ValueObject>>
     class ToolResult {
         -boolean success
         -String output
         -String error
-        +success(output)$
-        +error(error)$
+        +success(output)
+        +error(error)
     }
     ToolGateway ..> ToolResult : 输出
     ToolGateway ..> ToolSpec : 规格
     ToolExecutor ..> ToolResult : 输出
     ToolExecutor ..> ToolSpec : 规格
     ToolGateway ..> ToolExecutor : 委托执行
+@enduml
 ```
 
 ### 5.7 枚举定义汇总
@@ -935,134 +1030,143 @@ classDiagram
 
 ReAct 推理引擎是整个系统的核心，驱动「思考→行动→观察」迭代循环。每轮循环中，LLM 要么直接产出最终回复（终止），要么声明工具调用（进入工具执行后继续循环）。
 
-```mermaid
-stateDiagram-v2
-    [*] --> IDLE
+```plantuml
+@startuml
+title ReAct 循环状态图
+skinparam state {
+  BackgroundColor #FBFBFB
+  BorderColor #888888
+  ArrowColor #333333
+}
 
-    state IDLE {
-        [*] --> CONTEXT_ASSEMBLE
-    }
+[*] --> IDLE
+state IDLE {
+  [*] --> CONTEXT_ASSEMBLE
+}
 
-    state "组装上下文<br/>(ContextAssembler:<br/>system + history + tools)" as CONTEXT_ASSEMBLE
-    CONTEXT_ASSEMBLE --> LLM_CALLING : 上下文就绪
+state "组装上下文\n(ContextAssembler:\nsystem + history + tools)" as CONTEXT_ASSEMBLE
+CONTEXT_ASSEMBLE --> LLM_CALLING : 上下文就绪
 
-    state "调用 LLM<br/>(chat / streamChat)" as LLM_CALLING
-    LLM_CALLING --> CHECK_RESPONSE : LLM 返回
+state "调用 LLM\n(chat / streamChat)" as LLM_CALLING
+LLM_CALLING --> CHECK_RESPONSE : LLM 返回
 
-    state "检查响应<br/>(finishReason?)" as CHECK_RESPONSE
+state "检查响应\n(finishReason?)" as CHECK_RESPONSE
 
-    state HAS_TOOL_CALLS {
-        [*] --> RECORD_ASSISTANT
-        state "记录 assistant 消息<br/>(含 tool_calls)" as RECORD_ASSISTANT
-        RECORD_ASSISTANT --> EXECUTE_TOOLS
-        state EXECUTE_TOOLS {
-            [*] --> TOOL_SECURITY_CHECK
-            TOOL_SECURITY_CHECK --> TOOL_EXECUTING : 通过
-            TOOL_SECURITY_CHECK --> TOOL_REJECTED : 拦截
-            TOOL_EXECUTING --> TOOL_DONE : 完成
-            TOOL_REJECTED --> TOOL_DONE : 返回错误
-        }
-        TOOL_DONE --> RECORD_OBSERVATION
-        state "记录 tool 消息<br/>(Observation)" as RECORD_OBSERVATION
-        RECORD_OBSERVATION --> [*]
-    }
+state HAS_TOOL_CALLS {
+  [*] --> RECORD_ASSISTANT
+  state "记录 assistant 消息\n(含 tool_calls)" as RECORD_ASSISTANT
+  RECORD_ASSISTANT --> EXECUTE_TOOLS
+  state EXECUTE_TOOLS {
+    [*] --> TOOL_SECURITY_CHECK
+    TOOL_SECURITY_CHECK --> TOOL_EXECUTING : 通过
+    TOOL_SECURITY_CHECK --> TOOL_REJECTED : 拦截
+    TOOL_EXECUTING --> TOOL_DONE : 完成
+    TOOL_REJECTED --> TOOL_DONE : 返回错误
+  }
+  TOOL_DONE --> RECORD_OBSERVATION
+  state "记录 tool 消息\n(Observation)" as RECORD_OBSERVATION
+  RECORD_OBSERVATION --> [*]
+}
 
-    state NO_TOOL_CALLS {
-        [*] --> RECORD_REPLY
-        state "记录 assistant 消息" as RECORD_REPLY
-        RECORD_REPLY --> SET_REPLY
-        state "结果 = 最终回复" as SET_REPLY
-        SET_REPLY --> [*]
-    }
+state NO_TOOL_CALLS {
+  [*] --> RECORD_REPLY
+  state "记录 assistant 消息" as RECORD_REPLY
+  RECORD_REPLY --> SET_REPLY
+  state "结果 = 最终回复" as SET_REPLY
+  SET_REPLY --> [*]
+}
 
-    CHECK_RESPONSE --> HAS_TOOL_CALLS : toolCalls 非空
-    CHECK_RESPONSE --> NO_TOOL_CALLS : toolCalls 为空
+CHECK_RESPONSE --> HAS_TOOL_CALLS : toolCalls 非空
+CHECK_RESPONSE --> NO_TOOL_CALLS : toolCalls 为空
 
-    HAS_TOOL_CALLS --> STEP_CHECK : 所有 ToolCall 执行完毕
+HAS_TOOL_CALLS --> STEP_CHECK : 所有 ToolCall 执行完毕
 
-    state "步数 +1<br/>是否达到 maxSteps?" as STEP_CHECK
-    STEP_CHECK --> CONTEXT_ASSEMBLE : 未达上限<br/>继续下一轮
-    STEP_CHECK --> MAX_STEPS : 达到上限
+state "步数 +1\n预算用尽且工具链未完成?\n自动扩展(不超过硬上限)" as STEP_CHECK
+STEP_CHECK --> CONTEXT_ASSEMBLE : 预算内或已扩展\n继续下一轮
+STEP_CHECK --> MAX_STEPS : 达到硬上限
 
-    state "结果 = 达到最大推理步数" as MAX_STEPS
-    MAX_STEPS --> DONE
+state "结果 = 达到最大推理步数" as MAX_STEPS
+MAX_STEPS --> DONE
 
-    NO_TOOL_CALLS --> DONE
+NO_TOOL_CALLS --> DONE
 
-    state "返回 ReActResult<br/>(reply + traceSteps)" as DONE
-    DONE --> [*]
+state "返回 ReActResult\n(reply + traceSteps)" as DONE
+DONE --> [*]
+@enduml
 ```
 
 #### 6.1.2 ReAct 循环数据交互图
 
-```mermaid
-sequenceDiagram
-    participant RACT as ReActLoopService
-    participant CTX as ContextAssembler
-    participant SESS as Session<br/>(聚合根)
-    participant LLM as LlmGateway
-    participant TG as ToolGateway
+```plantuml
+@startuml
+title ReAct 循环数据交互图
+participant RACT as "ReActLoopService"
+participant CTX as "ContextAssembler"
+participant SESS as "Session\n(聚合根)"
+participant LLM as "LlmGateway"
+participant TG as "ToolGateway"
 
-    Note over RACT, LLM: 第 1 轮推理
-    RACT->>CTX: assemble(session, agent)
-    activate CTX
-    CTX->>SESS: 读取 messages
-    SESS-->>CTX: List<Message>
-    CTX->>CTX: 组装 system prompt<br/>+ 历史消息 + 工具列表
-    CTX-->>RACT: LlmRequest
-    deactivate CTX
+Note over RACT, LLM : 第 1 轮推理
+RACT->>CTX: assemble(session, agent)
+activate CTX
+CTX->>SESS: 读取 messages
+SESS-->>CTX: List<Message>
+CTX->>CTX: 组装 system prompt\n+ 历史消息 + 工具列表
+CTX-->>RACT: LlmRequest
+deactivate CTX
 
-    RACT->>LLM: chat(request, modelConfig)
-    activate LLM
-    LLM-->>RACT: LlmResponse<br/>(content + toolCalls)
-    deactivate LLM
+RACT->>LLM: chat(request, modelConfig)
+activate LLM
+LLM-->>RACT: LlmResponse\n(content + toolCalls)
+deactivate LLM
 
-    alt 无工具调用（finishReason=stop）
-        RACT->>SESS: addAssistantMessage(content, null)
-        RACT->>RACT: reply = content
-        RACT->>RACT: traceSteps.add("[Reply] " + content)
-    else 有工具调用（finishReason=tool_calls）
-        RACT->>SESS: addAssistantMessage(content, toolCalls)
-        loop 每个 ToolCall
-            RACT->>TG: execute(toolName, argumentsJson)
-            activate TG
-            TG-->>RACT: ToolResult(output 或 error)
-            deactivate TG
-            RACT->>SESS: addToolMessage(toolCallId, result)
-            RACT->>RACT: traceSteps.add("[Action] " + toolName)
-            RACT->>RACT: traceSteps.add("[Observation] " + result)
-        end
-    end
-
-    Note over RACT, LLM: 第 2 轮推理（若上轮有工具调用）
-    RACT->>CTX: assemble(session, agent)
-    activate CTX
-    CTX->>SESS: 读取更新后的 messages
-    SESS-->>CTX: List<Message>（含 tool 消息）
-    CTX-->>RACT: LlmRequest（历史已含 Observation）
-    deactivate CTX
-
-    RACT->>LLM: chat(request, modelConfig)
-    activate LLM
-    LLM-->>RACT: LlmResponse(content, toolCalls=null)
-    deactivate LLM
-
+alt 无工具调用（finishReason=stop）
     RACT->>SESS: addAssistantMessage(content, null)
     RACT->>RACT: reply = content
     RACT->>RACT: traceSteps.add("[Reply] " + content)
+else 有工具调用（finishReason=tool_calls）
+    RACT->>SESS: addAssistantMessage(content, toolCalls)
+    loop 每个 ToolCall
+        RACT->>TG: execute(toolName, argumentsJson)
+        activate TG
+        TG-->>RACT: ToolResult(output 或 error)
+        deactivate TG
+        RACT->>SESS: addToolMessage(toolCallId, result)
+        RACT->>RACT: traceSteps.add("[Action] " + toolName)
+        RACT->>RACT: traceSteps.add("[Observation] " + result)
+    end
+end
 
-    RACT->>RACT: 构造 ReActResult<br/>(reply + traceSteps + maxStepsReached)
+Note over RACT, LLM : 第 2 轮推理（若上轮有工具调用）
+RACT->>CTX: assemble(session, agent)
+activate CTX
+CTX->>SESS: 读取更新后的 messages
+SESS-->>CTX: List<Message>（含 tool 消息）
+CTX-->>RACT: LlmRequest（历史已含 Observation）
+deactivate CTX
+
+RACT->>LLM: chat(request, modelConfig)
+activate LLM
+LLM-->>RACT: LlmResponse(content, toolCalls=null)
+deactivate LLM
+
+RACT->>SESS: addAssistantMessage(content, null)
+RACT->>RACT: reply = content
+RACT->>RACT: traceSteps.add("[Reply] " + content)
+
+RACT->>RACT: 构造 ReActResult\n(reply + traceSteps + maxStepsReached)
+@enduml
 ```
 
 #### 6.1.3 文字说明
 
 ReAct（Reasoning + Acting）循环由 [ReActLoopService](file:///Users/mawenbin/workspace/java/mwb_coding/mwb-ai-claw/mwb-ai-claw-domain/src/main/java/com/mwb/ai/claw/domain/core/ReActLoopService.java) 驱动，核心流程如下：
 
-1. **上下文组装**：每轮推理开始，调用 `ContextAssembler.assemble()` 组装 LLM 请求。组装内容包括 system prompt（Agent 人设 + AGENT.md 指令 + 长期记忆）、会话历史消息（或分层记忆的工作记忆视图）、工具规格列表。
+1. **上下文组装**：每轮推理开始，调用 `ContextAssembler.assemble()` 组装 LLM 请求。组装内容包括 system prompt（Agent 人设 + AGENT.md 指令 + 长期记忆 + **推理预算提示**：告知本次任务预算步数，引导并行调用相互独立的工具、获得足够信息后直接给出最终回复）、会话历史消息（或分层记忆的工作记忆视图）、工具规格列表。
 2. **LLM 调用**：通过 `LlmGateway` 发送请求。支持同步（`chat`）与流式（`streamChat`）两种模式。流式模式下通过 `LlmStreamCallback` 逐 token 推送增量内容。
 3. **响应判定**：检查 `LlmResponse.finishReason`——若为 `stop` 且无 `toolCalls`，则 LLM 已产出最终回复，循环终止；若为 `tool_calls`，则进入工具执行阶段。
 4. **工具执行**：遍历 LLM 声明的 `ToolCall` 列表，逐个调用 `ToolGateway.execute()` 执行。每个工具结果作为 `tool` 角色消息（Observation）追加到会话。
-5. **迭代或终止**：工具执行完毕后步数 +1，若未达到 `Agent.maxSteps`（默认 8），则回到步骤 1 继续下一轮推理；若达到上限，则产出「达到最大推理步数」提示并终止。
+5. **迭代或终止（软预算 + 自动扩展）**：工具执行完毕后步数 +1。初始预算为 `Agent.maxSteps`（默认 8），硬上限 = `maxSteps × maxStepsExtensionFactor`（默认 2.0）。预算用尽但本轮仍调用了工具（工具链未收敛）时，自动追加 `max(maxSteps/2, 1)` 步继续推理（每次扩展在 `traceSteps` 记录 `[Info] 步数预算已用尽…自动扩展`）；达到硬上限仍未产出最终回复，才以「达到最大推理步数」终止。
 6. **结果返回**：构造 `ReActResult`，包含最终回复 `reply`、执行轨迹 `traceSteps`（Thought/Action/Observation 摘要）、以及 `maxStepsReached` 标志。
 
 ---
@@ -1071,32 +1175,40 @@ ReAct（Reasoning + Acting）循环由 [ReActLoopService](file:///Users/mawenbin
 
 #### 6.2.1 编排生命周期状态图
 
-```mermaid
-stateDiagram-v2
-    [*] --> PENDING
+```plantuml
+@startuml
+title 编排生命周期状态图
+skinparam state {
+  BackgroundColor #FBFBFB
+  BorderColor #888888
+  ArrowColor #333333
+}
 
-    state "等待编排选择<br/>(ChatCmd 到达)" as PENDING
-    PENDING --> SELECTING : 开始解析编排 id
+[*] --> PENDING
 
-    state "编排选择（三层决策）" as SELECTING
-    SELECTING --> RESOLVING : 确定编排 id
+state "等待编排选择\n(ChatCmd 到达)" as PENDING
+PENDING --> SELECTING : 开始解析编排 id
 
-    state "OrchestratorRegistry.resolve()<br/>按 type 匹配编排插件" as RESOLVING
-    RESOLVING --> VALIDATING : 找到 AgentOrchestrator
+state "编排选择（三层决策）" as SELECTING
+SELECTING --> RESOLVING : 确定编排 id
 
-    state "编排配置校验<br/>(validate)" as VALIDATING
-    VALIDATING --> EXECUTING : 校验通过
-    VALIDATING --> FAILED : 校验失败
+state "OrchestratorRegistry.resolve()\n按 type 匹配编排插件" as RESOLVING
+RESOLVING --> VALIDATING : 找到 AgentOrchestrator
 
-    state "编排插件执行<br/>(orchestrate)" as EXECUTING
-    EXECUTING --> COMPLETED : 成功
-    EXECUTING --> FAILED : 异常
+state "编排配置校验\n(validate)" as VALIDATING
+VALIDATING --> EXECUTING : 校验通过
+VALIDATING --> FAILED : 校验失败
 
-    state "返回 CollaborationResult<br/>(reply + traceSteps)" as COMPLETED
-    COMPLETED --> [*]
+state "编排插件执行\n(orchestrate)" as EXECUTING
+EXECUTING --> COMPLETED : 成功
+EXECUTING --> FAILED : 异常
 
-    state "异常 / 校验失败<br/>抛出 RuntimeException" as FAILED
-    FAILED --> [*]
+state "返回 CollaborationResult\n(reply + traceSteps)" as COMPLETED
+COMPLETED --> [*]
+
+state "异常 / 校验失败\n抛出 RuntimeException" as FAILED
+FAILED --> [*]
+@enduml
 ```
 
 #### 6.2.2 编排选择活动图（三层决策分离）
@@ -1104,148 +1216,157 @@ stateDiagram-v2
 对话请求先「选编排」，再由编排内部「选 Agent」，两层决策解耦：
 - 意图选择器由 `agent.orchestration-selector` 配置驱动：`rule`（默认）仅关键词匹配；`llm` 模式由 `LlmOrchestrationSelector` 基于各编排 description 做语义匹配（温度 0 + 关闭思考保证确定性，返回 id 并校验存在于候选），未命中 / 调用失败回退规则关键词（兜底），两者均未命中回退默认编排。
 
-```mermaid
-flowchart TD
-    %% 编排选择活动图（三层决策分离）
-    START([开始]) --> REQ["收到对话请求 ChatCmd<br/>(message / sessionId / agentId / orchestrationId)"]
-    REQ --> D1{请求体显式指定<br/>orchestrationId？}
-    D1 --是--> EXPLICIT["使用显式编排 id"]
-    D1 --否--> SELECT["调用 OrchestrationSelector.select<br/>(第一层：消息→编排)<br/>LlmOrchestrationSelector：llm 模式 LLM 语义选择优先<br/>(基于编排 description)，未命中/失败回退规则关键词匹配<br/>rule 模式仅规则关键词匹配(命中数最多者胜出)"]
-    SELECT --> D2{命中编排？}
-    D2 --是--> HIT["使用意图命中编排"]
-    D2 --否--> FALLBACK["使用默认兜底编排<br/>(agent.orchestration, 默认 routing)"]
-    EXPLICIT --> RESOLVE["OrchestratorRegistry.resolve(definition)<br/>按 definition.type 匹配已注册的编排插件<br/>type = routing → RoutingOrchestrator<br/>type = pipeline → PipelineOrchestrator<br/>其他 → 自定义 SPI 实现"]
-    HIT --> RESOLVE
-    FALLBACK --> RESOLVE
-    RESOLVE --> EXEC["编排插件执行 orchestrate(ctx)"]
-    EXEC --> D3{type = ?}
-    D3 --routing--> DECIDE["第二层决策：选 Agent<br/>显式 agentId > 规则/LLM 路由 > 默认 Agent"]
-    DECIDE --> REACT["单会话 ReAct 独立处理<br/>(主会话持久化)"]
-    D3 --pipeline--> STAGES["按 stages 顺序接力<br/>各阶段独立临时会话<br/>产物 text/file 传递"]
-    D3 --其他 SPI--> CUSTOM["自定义编排逻辑"]
-    REACT --> RESULT["返回 CollaborationResult<br/>(reply / agentId / sessionId / traceSteps)"]
-    STAGES --> RESULT
-    CUSTOM --> RESULT
-    RESULT --> END_([结束])
+```plantuml
+@startuml
+title 编排选择活动图（三层决策分离）
+start
+:收到对话请求 ChatCmd\n(message / sessionId / agentId / orchestrationId);
+if (请求体显式指定\norchestrationId？) then (是)
+  :使用显式编排 id;
+else (否)
+  :调用 OrchestrationSelector.select\n(第一层：消息→编排)\nLlmOrchestrationSelector：llm 模式 LLM 语义选择优先\n(基于编排 description)，未命中/失败回退规则关键词匹配\nrule 模式仅规则关键词匹配(命中数最多者胜出);
+  if (命中编排？) then (是)
+    :使用意图命中编排;
+  else (否)
+    :使用默认兜底编排\n(agent.orchestration, 默认 routing);
+  endif
+endif
+:OrchestratorRegistry.resolve(definition)\n按 definition.type 匹配已注册的编排插件\ntype = routing → RoutingOrchestrator\ntype = pipeline → PipelineOrchestrator\n其他 → 自定义 SPI 实现;
+:编排插件执行 orchestrate(ctx);
+if (type = ?) then (routing)
+  :第二层决策：选 Agent\n显式 agentId > 规则/LLM 路由 > 默认 Agent;
+  :单会话 ReAct 独立处理\n(主会话持久化);
+elseif (pipeline) then
+  :按 stages 顺序接力\n各阶段独立临时会话\n产物 text/file 传递;
+else (其他 SPI)
+  :自定义编排逻辑;
+endif
+:返回 CollaborationResult\n(reply / agentId / sessionId / traceSteps);
+stop
+@enduml
 ```
 
 #### 6.2.3 流水线编排数据交互图
 
-```mermaid
-sequenceDiagram
-    participant P as PipelineOrchestrator
-    participant AG as AgentGateway
-    participant EU as ExecutionUnit
-    participant A1 as "Agent<br/>(architect)"
-    participant A2 as "Agent<br/>(coder)"
-    participant A3 as "Agent<br/>(reviewer)"
+```plantuml
+@startuml
+title 流水线编排数据交互图
+participant P as "PipelineOrchestrator"
+participant AG as "AgentGateway"
+participant EU as "ExecutionUnit"
+participant A1 as "Agent\n(architect)"
+participant A2 as "Agent\n(coder)"
+participant A3 as "Agent\n(reviewer)"
 
-    %% 启动校验
-    P->>P: parseStages(definition.config.stages)
-    P->>AG: listAgents()
-    AG-->>P: knownAgentIds
-    loop 每个 stage
-        P->>P: 校验 agentId 存在<br/>+ promptTemplate 非空
-    end
+' 启动校验
+P->>P: parseStages(definition.config.stages)
+P->>AG: listAgents()
+AG-->>P: knownAgentIds
+loop 每个 stage
+    P->>P: 校验 agentId 存在\n+ promptTemplate 非空
+end
 
-    %% 执行流水线
-    P->>P: input = ctx.message<br/>workdir = config.workdir
+' 执行流水线
+P->>P: input = ctx.message\nworkdir = config.workdir
 
-    %% Stage 1: architect
-    P->>AG: getAgent("architect")
-    AG-->>P: Agent(architect)
-    P->>P: 渲染 promptTemplate<br/>替换 {input}
-    P->>EU: runAgent(prompt, agent, callback)
-    activate EU
-    EU->>A1: 临时会话 ReAct
-    A1-->>EU: reply1
-    deactivate EU
-    P->>P: input = reply1<br/>(pass=text)
-    P->>P: traceSteps.add("[Stage:architect] ...")
+' Stage 1: architect
+P->>AG: getAgent("architect")
+AG-->>P: Agent(architect)
+P->>P: 渲染 promptTemplate\n替换 {input}
+P->>EU: runAgent(prompt, agent, callback)
+activate EU
+EU->>A1: 临时会话 ReAct
+A1-->>EU: reply1
+deactivate EU
+P->>P: input = reply1\n(pass=text)
+P->>P: traceSteps.add("[Stage:architect] ...")
 
-    %% Stage 2: coder
-    P->>AG: getAgent("coder")
-    AG-->>P: Agent(coder)
-    P->>P: 渲染 promptTemplate<br/>替换 {input} = reply1
-    P->>EU: runAgent(prompt, agent, callback)
-    activate EU
-    EU->>A2: 临时会话 ReAct
-    A2-->>EU: reply2
-    deactivate EU
-    P->>P: input = reply2
-    P->>P: traceSteps.add("[Stage:coder] ...")
+' Stage 2: coder
+P->>AG: getAgent("coder")
+AG-->>P: Agent(coder)
+P->>P: 渲染 promptTemplate\n替换 {input} = reply1
+P->>EU: runAgent(prompt, agent, callback)
+activate EU
+EU->>A2: 临时会话 ReAct
+A2-->>EU: reply2
+deactivate EU
+P->>P: input = reply2
+P->>P: traceSteps.add("[Stage:coder] ...")
 
-    %% Stage 3: reviewer
-    P->>AG: getAgent("reviewer")
-    AG-->>P: Agent(reviewer)
-    P->>P: 渲染 promptTemplate<br/>替换 {input} = reply2
-    P->>EU: runAgent(prompt, agent, callback)
-    activate EU
-    EU->>A3: 临时会话 ReAct
-    A3-->>EU: reply3
-    deactivate EU
-    P->>P: traceSteps.add("[Stage:reviewer] ...")
+' Stage 3: reviewer
+P->>AG: getAgent("reviewer")
+AG-->>P: Agent(reviewer)
+P->>P: 渲染 promptTemplate\n替换 {input} = reply2
+P->>EU: runAgent(prompt, agent, callback)
+activate EU
+EU->>A3: 临时会话 ReAct
+A3-->>EU: reply3
+deactivate EU
+P->>P: traceSteps.add("[Stage:reviewer] ...")
 
-    %% 汇总
-    P->>P: reply = reply3<br/>lastAgentId = "reviewer"
-    P-->>P: CollaborationResult
+' 汇总
+P->>P: reply = reply3\nlastAgentId = "reviewer"
+P-->>P: CollaborationResult
+@enduml
 ```
 
 #### 6.2.4 对话式编排数据交互图
 
-```mermaid
-sequenceDiagram
-    participant C as ConversationalOrchestrator
-    participant AG as AgentGateway
-    participant EU as ExecutionUnit
-    participant A1 as "Agent<br/>(architect)"
-    participant A2 as "Agent<br/>(coder)"
-    participant A3 as "Agent<br/>(reviewer)"
-    participant AM as "Agent<br/>(moderator)"
+```plantuml
+@startuml
+title 对话式编排数据交互图
+participant C as "ConversationalOrchestrator"
+participant AG as "AgentGateway"
+participant EU as "ExecutionUnit"
+participant A1 as "Agent\n(architect)"
+participant A2 as "Agent\n(coder)"
+participant A3 as "Agent\n(reviewer)"
+participant AM as "Agent\n(moderator)"
 
-    %% 启动校验
-    C->>C: conversation(definition.config.conversation)
-    C->>AG: listAgents()
-    AG-->>C: knownAgentIds
-    C->>C: 校验 participants>=2 存在<br/>+ convergence/moderator 合法
+' 启动校验
+C->>C: conversation(definition.config.conversation)
+C->>AG: listAgents()
+AG-->>C: knownAgentIds
+C->>C: 校验 participants>=2 存在\n+ convergence/moderator 合法
 
-    %% Round 1（并行，CompletableFuture + 线程池）
-    C->>C: 各参与者独立观点 prompt
-    par 并行
-        C->>EU: runAgent(prompt, architect)
-        EU->>A1: 临时会话 ReAct
-        A1-->>EU: 观点1
-        C->>EU: runAgent(prompt, coder)
-        EU->>A2: 临时会话 ReAct
-        A2-->>EU: 观点2
-        C->>EU: runAgent(prompt, reviewer)
-        EU->>A3: 临时会话 ReAct
-        A3-->>EU: 观点3
-    end
-    C->>C: board.record(1, participant, reply)<br/>traceSteps.add("[Round:1] ...")
-
-    %% Round 2（串行，可见历史 visibleHistory=1）
-    C->>C: buildVisibleHistory(board, 2, participant, 1)
-    C->>EU: runAgent(讨论 prompt + 他人观点, architect)
+' Round 1（并行，CompletableFuture + 线程池）
+C->>C: 各参与者独立观点 prompt
+par 并行
+    C->>EU: runAgent(prompt, architect)
     EU->>A1: 临时会话 ReAct
-    A1-->>EU: 回应1
-    C->>EU: runAgent(讨论 prompt + 他人观点, coder)
+    A1-->>EU: 观点1
+    C->>EU: runAgent(prompt, coder)
     EU->>A2: 临时会话 ReAct
-    A2-->>EU: 回应2
-    C->>EU: runAgent(讨论 prompt + 他人观点, reviewer)
+    A2-->>EU: 观点2
+    C->>EU: runAgent(prompt, reviewer)
     EU->>A3: 临时会话 ReAct
-    A3-->>EU: 回应3
-    C->>C: board.record(2, participant, reply)<br/>traceSteps.add("[Round:2] ...")
+    A3-->>EU: 观点3
+end
+C->>C: board.record(1, participant, reply)\ntraceSteps.add("[Round:1] ...")
 
-    %% 收敛（convergence=moderator）
-    C->>C: transcript = 全部轮次发言
-    C->>AG: getAgent("moderator")
-    AG-->>C: Agent(moderator)
-    C->>EU: runAgent(汇总 prompt + transcript, moderator)
-    EU->>AM: 临时会话 ReAct
-    AM-->>EU: 最终结论
-    C->>C: traceSteps.add("[Converge:moderator] ...")
-    C-->>C: CollaborationResult(reply=结论, agentId=moderator)
+' Round 2（串行，可见历史 visibleHistory=1）
+C->>C: buildVisibleHistory(board, 2, participant, 1)
+C->>EU: runAgent(讨论 prompt + 他人观点, architect)
+EU->>A1: 临时会话 ReAct
+A1-->>EU: 回应1
+C->>EU: runAgent(讨论 prompt + 他人观点, coder)
+EU->>A2: 临时会话 ReAct
+A2-->>EU: 回应2
+C->>EU: runAgent(讨论 prompt + 他人观点, reviewer)
+EU->>A3: 临时会话 ReAct
+A3-->>EU: 回应3
+C->>C: board.record(2, participant, reply)\ntraceSteps.add("[Round:2] ...")
+
+' 收敛（convergence=moderator）
+C->>C: transcript = 全部轮次发言
+C->>AG: getAgent("moderator")
+AG-->>C: Agent(moderator)
+C->>EU: runAgent(汇总 prompt + transcript, moderator)
+EU->>AM: 临时会话 ReAct
+AM-->>EU: 最终结论
+C->>C: traceSteps.add("[Converge:moderator] ...")
+C-->>C: CollaborationResult(reply=结论, agentId=moderator)
+@enduml
 ```
 
 #### 6.2.5 文字说明
@@ -1283,106 +1404,123 @@ sequenceDiagram
 
 `MemoryPage` 在分层记忆系统中经历多种类型转换：
 
-```mermaid
-stateDiagram-v2
-    [*] --> HOT
+```plantuml
+@startuml
+title 记忆页生命周期状态图
+skinparam state {
+  BackgroundColor #FBFBFB
+  BorderColor #888888
+  ArrowColor #333333
+}
 
-    state "工作记忆原文<br/>(会话内最近消息<br/>hotWindowSize 条内)" as HOT
+[*] --> HOT
 
-    state "历史摘要页<br/>(最旧块压缩为摘要<br/>blockStart/blockEnd 标记区间)" as SUMMARY
+state "工作记忆原文\n(会话内最近消息\nhotWindowSize 条内)" as HOT
 
-    state "会话原文归档<br/>(会话结束后增量归档<br/>跨会话 RAG 数据源)" as ARCHIVE
+state "历史摘要页\n(最旧块压缩为摘要\nblockStart/blockEnd 标记区间)" as SUMMARY
 
-    state "长期事实页<br/>(重要度≥阈值<br/>同 key 合并去重<br/>version 自增)" as FACT
+state "会话原文归档\n(会话结束后增量归档\n跨会话 RAG 数据源)" as ARCHIVE
 
-    state "检索召回页<br/>(临时态：检索命中后<br/>注入 MemoryView)" as RETRIEVED
+state "长期事实页\n(重要度≥阈值\n同 key 合并去重\nversion 自增)" as FACT
 
-    HOT --> SUMMARY : afterTurn<br/>换页策略触发<br/>(预算溢出/importance驱动)
-    SUMMARY --> FACT : afterSession<br/>事实提炼<br/>(重要度≥阈值)
-    HOT --> ARCHIVE : afterSession<br/>原文增量归档<br/>(archiveEnabled)
-    ARCHIVE --> RETRIEVED : 检索召回<br/>(search/sharedRetrieve)
-    SUMMARY --> RETRIEVED : 检索召回
-    FACT --> RETRIEVED : 检索召回
+state "检索召回页\n(临时态：检索命中后\n注入 MemoryView)" as RETRIEVED
 
-    RETRIEVED --> [*] : 注入 MemoryView 后<br/>生命周期结束
+HOT --> SUMMARY : afterTurn\n换页策略触发\n(预算溢出/importance驱动)
+SUMMARY --> FACT : afterSession\n事实提炼\n(重要度≥阈值)
+HOT --> ARCHIVE : afterSession\n原文增量归档\n(archiveEnabled)
+ARCHIVE --> RETRIEVED : 检索召回\n(search/sharedRetrieve)
+SUMMARY --> RETRIEVED : 检索召回
+FACT --> RETRIEVED : 检索召回
 
-    FACT --> FACT : 同 key 合并<br/>(version++<br/>content 更新)
-    SUMMARY --> [*]
-    ARCHIVE --> [*]
-    FACT --> [*]
+RETRIEVED --> [*] : 注入 MemoryView 后\n生命周期结束
+
+FACT --> FACT : 同 key 合并\n(version++\ncontent 更新)
+SUMMARY --> [*]
+ARCHIVE --> [*]
+FACT --> [*]
+@enduml
 ```
 
 #### 6.3.2 会话记忆流转状态图
 
-```mermaid
-stateDiagram-v2
-    [*] --> ACTIVE
+```plantuml
+@startuml
+title 会话记忆流转状态图
+skinparam state {
+  BackgroundColor #FBFBFB
+  BorderColor #888888
+  ArrowColor #333333
+}
 
-    state "会话活跃" as ACTIVE {
-        [*] --> TURN
-        state "每轮对话" as TURN {
-            [*] --> 读取上下文
-            读取上下文 : readContext(session, agent)<br/>组装 MemoryView<br/>(Hot + Summary + Fact + Retrieved)
-            读取上下文 --> LLM推理 : 组装进 LlmRequest
-            LLM推理 --> 追加消息 : ReAct 执行完毕
-            追加消息 --> afterTurn : 换页检查
-            afterTurn --> [*] : 继续 / 换页
-        }
-    }
+[*] --> ACTIVE
 
-    state "换页" as EVICT {
-        [*] --> 判断策略
-        判断策略 : PageEvictionPolicy.shouldEvict
-        判断策略 --> 压缩最旧块 : shouldEvict=true
-        判断策略 --> [*] : shouldEvict=false
-        压缩最旧块 : synthesizer.summarizeBlock<br/>(可异步执行)
-        压缩最旧块 --> 落盘摘要页 : summary-{blockStart}.json
-        落盘摘要页 --> [*]
-    }
+state "会话活跃" as ACTIVE {
+  [*] --> TURN
+  state "每轮对话" as TURN {
+    [*] --> READ_CTX
+    state "读取上下文 : readContext(session, agent)\n组装 MemoryView\n(Hot + Summary + Fact + Retrieved)" as READ_CTX
+    READ_CTX --> LLM_REASON : 组装进 LlmRequest
+    state "LLM推理" as LLM_REASON
+    LLM_REASON --> APPEND_MSG : ReAct 执行完毕
+    state "追加消息" as APPEND_MSG
+    APPEND_MSG --> AFTER_TURN : 换页检查
+    state "afterTurn" as AFTER_TURN
+    AFTER_TURN --> [*] : 继续 / 换页
+  }
+}
 
-    state "会话结束" as CLOSE {
-        [*] --> 档案归档
-        档案归档 : ARCHIVE 页增量归档<br/>(原文写入 archive-{n}.json<br/>幂等)
-        档案归档 --> 事实提炼
-        事实提炼 : 提取重要事实<br/>写入 facts.jsonl<br/>(importantance≥阈值<br/>同 key 合并去重)
-        事实提炼 --> [*]
-    }
+state "换页" as EVICT {
+  [*] --> CHECK_POLICY
+  state "判断策略 : PageEvictionPolicy.shouldEvict" as CHECK_POLICY
+  CHECK_POLICY --> COMPRESS : shouldEvict=true
+  CHECK_POLICY --> [*] : shouldEvict=false
+  state "压缩最旧块 : synthesizer.summarizeBlock\n(可异步执行)" as COMPRESS
+  COMPRESS --> SAVE_SUMMARY : summary-{blockStart}.json
+  state "落盘摘要页" as SAVE_SUMMARY
+  SAVE_SUMMARY --> [*]
+}
 
-    ACTIVE --> EVICT : 每轮对话后
-    EVICT --> ACTIVE : 换页完毕
-    ACTIVE --> CLOSE : session.close()
-    CLOSE --> [*]
+state "会话结束" as CLOSE {
+  [*] --> ARCHIVE_DONE
+  state "档案归档 : ARCHIVE 页增量归档\n(原文写入 archive-{n}.json\n幂等)" as ARCHIVE_DONE
+  ARCHIVE_DONE --> FACT_EXTRACT
+  state "事实提炼 : 提取重要事实\n写入 facts.jsonl\n(importantance≥阈值\n同 key 合并去重)" as FACT_EXTRACT
+  FACT_EXTRACT --> [*]
+}
+
+ACTIVE --> EVICT : 每轮对话后
+EVICT --> ACTIVE : 换页完毕
+ACTIVE --> CLOSE : session.close()
+CLOSE --> [*]
+@enduml
 ```
 
 #### 6.3.3 分层记忆上下文组装活动图
 
-```mermaid
-flowchart TD
-    %% 分层记忆上下文组装活动图
-    START([开始]) --> BUDGET["计算 Token 预算<br/>总预算 = contextWindow × contextBudgetRatio (60%)<br/>System 区 = 总预算 × promptBudgetRatio (25%)<br/>Tools 区 = 总预算 × toolBudgetRatio (25%)<br/>Memory 区 = 总预算 × 50%"]
-
-    subgraph SYS["System 区（预算内）"]
-        FACTS["读取事实页 facts<br/>重要度降序排列，裁剪到预算内"] --> SUMS["读取历史摘要 summaries<br/>本会话的 SUMMARY 页"]
-        SUMS --> SHARED{sharedRetrieve 开启？}
-        SHARED --是--> RETRIEVE["以最新 user 消息检索跨会话记忆<br/>HybridMemoryRetriever:<br/>keyword(BM25) + vector(余弦) + RRF融合<br/>embedding 失败降级为关键词"]
-        RETRIEVE --> RETRIEVED["获得检索召回页 retrieved"]
-    end
-
-    subgraph MEM["Memory 区（预算内）"]
-        HOT["读取工作记忆 Hot<br/>从最新消息往前取<br/>不超过 hotWindowSize 条<br/>扣除 Summary 已占用 token"]
-    end
-
-    subgraph TOOLS["Tools 区"]
-        COLLECT["收集工具列表<br/>Agent 配置 toolNames + 全局 MCP 工具(去重)"]
-    end
-
-    BUDGET --> FACTS
-    SHARED --否--> HOT
-    RETRIEVED --> HOT
-    HOT --> COLLECT
-    COLLECT --> ASSEMBLE["组装 MemoryView<br/>(workingMessages + summaryPages + factPages + retrievedPages)"]
-    ASSEMBLE --> INJECT["返回给 ContextAssembler 注入 LlmRequest"]
-    INJECT --> END_([结束])
+```plantuml
+@startuml
+title 分层记忆上下文组装活动图
+start
+:计算 Token 预算\n总预算 = contextWindow × contextBudgetRatio (60%)\nSystem 区 = 总预算 × promptBudgetRatio (25%)\nTools 区 = 总预算 × toolBudgetRatio (25%)\nMemory 区 = 总预算 × 50%;
+partition "System 区（预算内）" {
+  :读取事实页 facts\n重要度降序排列，裁剪到预算内;
+  :读取历史摘要 summaries\n本会话的 SUMMARY 页;
+  if (sharedRetrieve 开启？) then (是)
+    :以最新 user 消息检索跨会话记忆\nHybridMemoryRetriever:\nkeyword(BM25) + vector(余弦) + RRF融合\nembedding 失败降级为关键词;
+    :获得检索召回页 retrieved;
+  else (否)
+  endif
+}
+partition "Memory 区（预算内）" {
+  :读取工作记忆 Hot\n从最新消息往前取\n不超过 hotWindowSize 条\n扣除 Summary 已占用 token;
+}
+partition "Tools 区" {
+  :收集工具列表\nAgent 配置 toolNames + 全局 MCP 工具(去重);
+}
+:组装 MemoryView\n(workingMessages + summaryPages + factPages + retrievedPages);
+:返回给 ContextAssembler 注入 LlmRequest;
+stop
+@enduml
 ```
 
 #### 6.3.4 文字说明
@@ -1415,23 +1553,26 @@ flowchart TD
 
 #### 6.4.1 上下文组装活动图
 
-```mermaid
-flowchart TD
-    %% 上下文组装活动图
-    START([开始]) --> ASSEMBLE["ContextAssembler.assemble(session, agent)"]
-    ASSEMBLE --> D1{分层记忆 enabled？}
-    D1 --是--> READ_CTX["layeredMemory.readContext(session, agent)"]
-    READ_CTX --> MEMVIEW["获得 MemoryView<br/>(workingMessages + summaryPages<br/>+ factPages + retrievedPages)"]
-    MEMVIEW --> SYS_PROMPT["组装 System Prompt<br/>System = agent.systemPrompt<br/>+ AGENT.md 扩展指令<br/>+ 跨会话事实 (factPages)<br/>+ 本会话历史摘要 (summaryPages)<br/>+ 检索召回 (retrievedPages)"]
-    SYS_PROMPT --> MSG_AREA["消息区 = MemoryView.workingMessages (Hot)"]
-    D1 --否--> READ_FULL["读取 AGENT.md + MEMORY.md 全文"]
-    READ_FULL --> SYS_LEGACY["System = agent.systemPrompt + AGENT.md + MEMORY.md"]
-    SYS_LEGACY --> MSG_LEGACY["消息区 = 会话全量历史"]
-    MSG_AREA --> COLLECT["收集工具列表<br/>Agent.toolNames → 对应 ToolSpec<br/>+ 全局 MCP 工具 ToolSpec (global=true)<br/>按 name 去重"]
-    MSG_LEGACY --> COLLECT
-    COLLECT --> SANITIZE["消息序列清洗 (sanitizeMessages)<br/>1. 移除孤立 tool 消息（无对应 assistant tool_calls）<br/>2. 为有 tool_calls 无结果的 assistant 补空 tool 消息<br/>避免触发 OpenAI 协议错误"]
-    SANITIZE --> LLM_REQ["构造 LlmRequest<br/>(model + messages + tools + temperature + maxTokens + thinking)"]
-    LLM_REQ --> END_([结束])
+```plantuml
+@startuml
+title 上下文组装活动图
+start
+:ContextAssembler.assemble(session, agent);
+if (分层记忆 enabled？) then (是)
+  :layeredMemory.readContext(session, agent);
+  :获得 MemoryView\n(workingMessages + summaryPages\n+ factPages + retrievedPages);
+  :组装 System Prompt\nSystem = agent.systemPrompt\n+ AGENT.md 扩展指令\n+ 跨会话事实 (factPages)\n+ 本会话历史摘要 (summaryPages)\n+ 检索召回 (retrievedPages);
+  :消息区 = MemoryView.workingMessages (Hot);
+else (否)
+  :读取 AGENT.md + MEMORY.md 全文;
+  :System = agent.systemPrompt + AGENT.md + MEMORY.md;
+  :消息区 = 会话全量历史;
+endif
+:收集工具列表\nAgent.toolNames → 对应 ToolSpec\n+ 全局 MCP 工具 ToolSpec (global=true)\n按 name 去重;
+:消息序列清洗 (sanitizeMessages)\n1. 移除孤立 tool 消息（无对应 assistant tool_calls）\n2. 为有 tool_calls 无结果的 assistant 补空 tool 消息\n避免触发 OpenAI 协议错误;
+:构造 LlmRequest\n(model + messages + tools + temperature + maxTokens + thinking);
+stop
+@enduml
 ```
 
 #### 6.4.2 文字说明
@@ -1450,98 +1591,108 @@ flowchart TD
 
 #### 6.5.1 工具执行状态图
 
-```mermaid
-stateDiagram-v2
-    [*] --> PENDING
+```plantuml
+@startuml
+title 工具执行状态图
+skinparam state {
+  BackgroundColor #FBFBFB
+  BorderColor #888888
+  ArrowColor #333333
+}
 
-    state "等待执行<br/>(ReActLoopService 调用<br/>ToolGateway.execute)" as PENDING
+[*] --> PENDING
 
-    PENDING --> SECURITY_CHECK : 开始执行
+state "等待执行\n(ReActLoopService 调用\nToolGateway.execute)" as PENDING
 
-    state "安全校验<br/>(ToolSecurity)" as SECURITY_CHECK
-    SECURITY_CHECK --> REJECTED : 命中黑名单 / 越界路径 / 超出白名单
-    SECURITY_CHECK --> DISPATCHING : 通过
+PENDING --> SECURITY_CHECK : 开始执行
 
-    state "拒绝执行<br/>返回 ToolResult.error('安全拦截: ...')" as REJECTED
-    REJECTED --> DONE
+state "安全校验\n(ToolSecurity)" as SECURITY_CHECK
+SECURITY_CHECK --> REJECTED : 命中黑名单 / 越界路径 / 超出白名单
+SECURITY_CHECK --> DISPATCHING : 通过
 
-    state "分发工具<br/>(内置 ToolExecutor 或 MCP)" as DISPATCHING
-    DISPATCHING --> EXECUTING : 找到对应执行器
-    DISPATCHING --> NOT_FOUND : 未找到工具
+state "拒绝执行\n返回 ToolResult.error('安全拦截: ...')" as REJECTED
+REJECTED --> DONE
 
-    state "工具不存在<br/>返回 ToolResult.error('未知工具: ...')" as NOT_FOUND
-    NOT_FOUND --> DONE
+state "分发工具\n(内置 ToolExecutor 或 MCP)" as DISPATCHING
+DISPATCHING --> EXECUTING : 找到对应执行器
+DISPATCHING --> NOT_FOUND : 未找到工具
 
-    state "执行工具<br/>(ToolExecutor.execute / McpAdapter.callTool)" as EXECUTING
-    EXECUTING --> SUCCESS : 执行成功
-    EXECUTING --> FAILED : 执行异常 / 超时
+state "工具不存在\n返回 ToolResult.error('未知工具: ...')" as NOT_FOUND
+NOT_FOUND --> DONE
 
-    state "成功<br/>返回 ToolResult.success(output)" as SUCCESS
-    SUCCESS --> TRUNCATE_CHECK
+state "执行工具\n(ToolExecutor.execute / McpAdapter.callTool)" as EXECUTING
+EXECUTING --> SUCCESS : 执行成功
+EXECUTING --> FAILED : 执行异常 / 超时
 
-    state "输出截断检查" as TRUNCATE_CHECK
-    TRUNCATE_CHECK --> DONE : output ≤ 10000 字符
-    TRUNCATE_CHECK --> TRUNCATED : output > 10000 字符
+state "成功\n返回 ToolResult.success(output)" as SUCCESS
+SUCCESS --> TRUNCATE_CHECK
 
-    state "截断输出<br/>(保留前 10000 字符<br/>追加 '...[已截断]')" as TRUNCATED
-    TRUNCATED --> DONE
+state "输出截断检查" as TRUNCATE_CHECK
+TRUNCATE_CHECK --> DONE : output ≤ 10000 字符
+TRUNCATE_CHECK --> TRUNCATED : output > 10000 字符
 
-    state "失败<br/>返回 ToolResult.error(异常信息)" as FAILED
-    FAILED --> DONE
+state "截断输出\n(保留前 10000 字符\n追加 '...[已截断]')" as TRUNCATED
+TRUNCATED --> DONE
 
-    state "返回 ToolResult<br/>给 ReActLoopService" as DONE
-    DONE --> [*]
+state "失败\n返回 ToolResult.error(异常信息)" as FAILED
+FAILED --> DONE
+
+state "返回 ToolResult\n给 ReActLoopService" as DONE
+DONE --> [*]
+@enduml
 ```
 
 #### 6.5.2 工具调用数据交互图
 
-```mermaid
-sequenceDiagram
-    participant RACT as ReActLoopService
-    participant TG as ToolGatewayImpl
-    participant SEC as ToolSecurity
-    participant REG as DynamicToolRegistry
-    participant BUILTIN as "ToolExecutor<br/>(内置)"
-    participant MCP as "McpToolAdapter<br/>(MCP)"
+```plantuml
+@startuml
+title 工具调用数据交互图
+participant RACT as "ReActLoopService"
+participant TG as "ToolGatewayImpl"
+participant SEC as "ToolSecurity"
+participant REG as "DynamicToolRegistry"
+participant BUILTIN as "ToolExecutor\n(内置)"
+participant MCP as "McpToolAdapter\n(MCP)"
 
-    RACT->>TG: execute(toolName, argumentsJson)
-    activate TG
+RACT->>TG: execute(toolName, argumentsJson)
+activate TG
 
-    TG->>SEC: 安全校验(toolName, args)
-    activate SEC
-    alt 命中黑名单 / 越界路径
-        SEC-->>TG: SecurityException
-        TG-->>RACT: ToolResult.error("安全拦截: ...")
-    else 通过校验
-        SEC-->>TG: 放行
-    end
-    deactivate SEC
+TG->>SEC: 安全校验(toolName, args)
+activate SEC
+alt 命中黑名单 / 越界路径
+    SEC-->>TG: SecurityException
+    TG-->>RACT: ToolResult.error("安全拦截: ...")
+else 通过校验
+    SEC-->>TG: 放行
+end
+deactivate SEC
 
-    TG->>REG: 查找工具执行器(toolName)
-    activate REG
+TG->>REG: 查找工具执行器(toolName)
+activate REG
 
-    alt 内置工具（Echo/File/Shell/Http/Memory）
-        REG-->>TG: ToolExecutor 实例
-        TG->>BUILTIN: execute(argumentsJson)
-        activate BUILTIN
-        BUILTIN-->>TG: ToolResult(output)
-        deactivate BUILTIN
-    else MCP 工具
-        REG-->>TG: McpToolAdapter 实例
-        TG->>MCP: JSON-RPC callTool(toolName, args)
-        activate MCP
-        MCP->>MCP: McpClient.callTool<br/>(stdio / streamable_http)
-        MCP-->>TG: ToolResult(output)
-        deactivate MCP
-    else 未找到工具
-        REG-->>TG: null
-        TG-->>RACT: ToolResult.error("未知工具")
-    end
-    deactivate REG
+alt 内置工具（Echo/File/Shell/Http/Memory）
+    REG-->>TG: ToolExecutor 实例
+    TG->>BUILTIN: execute(argumentsJson)
+    activate BUILTIN
+    BUILTIN-->>TG: ToolResult(output)
+    deactivate BUILTIN
+else MCP 工具
+    REG-->>TG: McpToolAdapter 实例
+    TG->>MCP: JSON-RPC callTool(toolName, args)
+    activate MCP
+    MCP->>MCP: McpClient.callTool\n(stdio / streamable_http)
+    MCP-->>TG: ToolResult(output)
+    deactivate MCP
+else 未找到工具
+    REG-->>TG: null
+    TG-->>RACT: ToolResult.error("未知工具")
+end
+deactivate REG
 
-    TG->>TG: 截断检查(output > 10000?)
-    TG-->>RACT: ToolResult(success/error)
-    deactivate TG
+TG->>TG: 截断检查(output > 10000?)
+TG-->>RACT: ToolResult(success/error)
+deactivate TG
+@enduml
 ```
 
 #### 6.5.3 文字说明
@@ -1573,37 +1724,48 @@ sequenceDiagram
 
 #### 6.6.1 会话生命周期状态图
 
-```mermaid
-stateDiagram-v2
-    [*] --> CREATED
+```plantuml
+@startuml
+title 会话生命周期状态图
+skinparam state {
+  BackgroundColor #FBFBFB
+  BorderColor #888888
+  ArrowColor #333333
+}
 
-    state "创建<br/>(Session 构造<br/>status=ACTIVE<br/>自动设置标题)" as CREATED
+[*] --> CREATED
 
-    CREATED --> ACTIVE : 构造完成
+state "创建\n(Session 构造\nstatus=ACTIVE\n自动设置标题)" as CREATED
 
-    state "活跃" as ACTIVE {
-        [*] --> ADD_USER_MSG
-        ADD_USER_MSG : addUserMessage(content)<br/>自动设置标题(前30字符)
-        ADD_USER_MSG --> REACT_EXEC : ReAct 循环执行
-        REACT_EXEC : ReActLoopService.run
-        REACT_EXEC --> ADD_ASSISTANT : 记录 assistant 消息
-        ADD_ASSISTANT --> ADD_TOOL : 记录 tool 消息(若有)
-        ADD_TOOL --> REACT_EXEC : 继续推理(若有工具调用)
-        ADD_ASSISTANT --> [*] : 无工具调用，本轮完成
-        ADD_TOOL --> AFTER_TURN : 记忆换页检查
-        AFTER_TURN --> [*] : 继续 / 换页
-    }
+CREATED --> ACTIVE : 构造完成
 
-    ACTIVE --> CLOSED : session.close()<br/>(status=CLOSED)
+state "活跃" as ACTIVE {
+  [*] --> ADD_USER_MSG
+  state "addUserMessage(content)\n自动设置标题(前30字符)" as ADD_USER_MSG
+  ADD_USER_MSG --> REACT_EXEC : ReAct 循环执行
+  state "ReActLoopService.run" as REACT_EXEC
+  REACT_EXEC --> ADD_ASSISTANT : 记录 assistant 消息
+  state "addAssistantMessage(content)" as ADD_ASSISTANT
+  ADD_ASSISTANT --> ADD_TOOL : 记录 tool 消息(若有)
+  state "addToolMessage(toolCallId, result)" as ADD_TOOL
+  ADD_TOOL --> REACT_EXEC : 继续推理(若有工具调用)
+  ADD_ASSISTANT --> [*] : 无工具调用，本轮完成
+  ADD_TOOL --> AFTER_TURN : 记忆换页检查
+  state "afterTurn 换页检查" as AFTER_TURN
+  AFTER_TURN --> [*] : 继续 / 换页
+}
 
-    state "关闭<br/>(不再接收新消息<br/>触发记忆 afterSession<br/>归档+事实提炼)" as CLOSED
+ACTIVE --> CLOSED : session.close()\n(status=CLOSED)
 
-    CLOSED --> DELETED : 显式删除<br/>(FileBasedSessionGateway.delete)
+state "关闭\n(不再接收新消息\n触发记忆 afterSession\n归档+事实提炼)" as CLOSED
 
-    state "已删除<br/>(sessions/{id}.json 物理删除)" as DELETED
-    DELETED --> [*]
+CLOSED --> DELETED : 显式删除\n(FileBasedSessionGateway.delete)
 
-    ACTIVE --> ACTIVE : 多轮对话<br/>活跃状态可经历多轮对话<br/>每轮：addUserMessage → ReAct → afterTurn<br/>会话文件自动持久化<br/>跨重启恢复
+state "已删除\n(sessions/{id}.json 物理删除)" as DELETED
+DELETED --> [*]
+
+ACTIVE --> ACTIVE : 多轮对话\n活跃状态可经历多轮对话\n每轮：addUserMessage → ReAct → afterTurn\n会话文件自动持久化\n跨重启恢复
+@enduml
 ```
 
 #### 6.6.2 文字说明
@@ -1630,50 +1792,52 @@ stateDiagram-v2
 
 #### 6.7.1 配置加载流程图
 
-```mermaid
-sequenceDiagram
-    participant JVM as "JVM 启动"
-    participant ENV as DotenvPostProcessor
-    participant SE as "Spring Environment"
-    participant YML as "application.yml"
-    participant ARL as AgentRegistryLoader
-    participant OCL as OrchestrationConfigLoader
-    participant MCL as McpServerConfigLoader
-    participant OR as OrchestratorRegistry
+```plantuml
+@startuml
+title 配置加载流程图
+participant JVM as "JVM 启动"
+participant ENV as "DotenvPostProcessor"
+participant SE as "Spring Environment"
+participant YML as "application.yml"
+participant ARL as "AgentRegistryLoader"
+participant OCL as "OrchestrationConfigLoader"
+participant MCL as "McpServerConfigLoader"
+participant OR as "OrchestratorRegistry"
 
-    JVM->>ENV: environmentPostProcessor
-    activate ENV
-    ENV->>ENV: 解析 .env 文件<br/>(KEY=value, 忽略 # 注释)
-    ENV->>SE: 注入环境变量<br/>优先级: 命令行 > 系统环境 > .env > 默认
-    deactivate ENV
+JVM->>ENV: environmentPostProcessor
+activate ENV
+ENV->>ENV: 解析 .env 文件\n(KEY=value, 忽略 # 注释)
+ENV->>SE: 注入环境变量\n优先级: 命令行 > 系统环境 > .env > 默认
+deactivate ENV
 
-    JVM->>YML: 加载配置<br/>${VAR:default} 占位符解析
+JVM->>YML: 加载配置\n${VAR:default} 占位符解析
 
-    JVM->>ARL: 加载 agents.json
-    activate ARL
-    ARL->>ARL: 查找: 运行目录同名文件<br/>> jar classpath 默认模板
-    ARL->>ARL: ${VAR:default} 占位符解析
-    ARL-->>JVM: Agent 注册表<br/>(跨编排共享)
-    deactivate ARL
+JVM->>ARL: 加载 agents.json
+activate ARL
+ARL->>ARL: 查找: 运行目录同名文件\n> jar classpath 默认模板
+ARL->>ARL: ${VAR:default} 占位符解析
+ARL-->>JVM: Agent 注册表\n(跨编排共享)
+deactivate ARL
 
-    JVM->>OCL: 加载 orchestrations.json
-    activate OCL
-    OCL->>OCL: 启动校验:<br/>id 唯一 / type 已注册<br/>/ agentId 存在
-    OCL-->>JVM: 编排注册表
-    deactivate OCL
+JVM->>OCL: 加载 orchestrations.json
+activate OCL
+OCL->>OCL: 启动校验:\nid 唯一 / type 已注册\n/ agentId 存在
+OCL-->>JVM: 编排注册表
+deactivate OCL
 
-    JVM->>MCL: 加载 mcp-server.json
-    activate MCL
-    MCL-->>JVM: MCP Server 列表<br/>(stdio / streamable_http)
-    deactivate MCL
+JVM->>MCL: 加载 mcp-server.json
+activate MCL
+MCL-->>JVM: MCP Server 列表\n(stdio / streamable_http)
+deactivate MCL
 
-    JVM->>OR: Spring 容器收集 SPI
-    activate OR
-    OR->>OR: 收集 AgentOrchestrator 实现<br/>收集 ToolExecutor 实现<br/>收集 OrchestrationSelector 实现<br/>收集 PageEvictionPolicy 实现<br/>收集 MemoryRetriever 实现
-    OR-->>JVM: SPI 注册完成
-    deactivate OR
+JVM->>OR: Spring 容器收集 SPI
+activate OR
+OR->>OR: 收集 AgentOrchestrator 实现\n收集 ToolExecutor 实现\n收集 OrchestrationSelector 实现\n收集 PageEvictionPolicy 实现\n收集 MemoryRetriever 实现
+OR-->>JVM: SPI 注册完成
+deactivate OR
 
-    JVM->>JVM: Spring 容器启动完成<br/>系统就绪
+JVM->>JVM: Spring 容器启动完成\n系统就绪
+@enduml
 ```
 
 #### 6.7.2 文字说明
@@ -1701,20 +1865,29 @@ sequenceDiagram
 
 #### 6.8.1 技能渐进式披露流程图
 
-```mermaid
-flowchart TD
-    U[用户消息] --> R[ReActLoopService]
-    R --> A[ContextAssembler 组装上下文]
-    A --> L1[L1 发现层: system prompt 携带技能清单<br/>name + description, 约 100 token/技能]
-    A --> T[工具规格: 含 use_skill 全局工具]
-    L1 --> LLM{LLM 判定技能相关?}
-    LLM -- 否 --> N[常规推理, 技能正文零消耗]
-    LLM -- 是 --> C[ToolCall: use_skill 技能名]
-    C --> S[SkillGateway 按名加载]
-    S --> L2[L2: SKILL.md 全文注入 tool 消息<br/>$SKILL_DIR 替换为绝对路径]
-    L2 --> E[继续 ReAct: shell / file 等工具执行指令]
-    E --> L3[L3: 经 $SKILL_DIR 按需读取 resources/]
-    L3 --> O[最终回复]
+```plantuml
+@startuml
+title 技能渐进式披露流程图
+start
+:用户消息;
+:ReActLoopService;
+:ContextAssembler 组装上下文;
+note right
+  工具规格: 含 use_skill 全局工具
+end note
+:L1 发现层: system prompt 携带技能清单\nname + description, 约 100 token/技能;
+if (LLM 判定技能相关?) then (是)
+  :ToolCall: use_skill 技能名;
+  :SkillGateway 按名加载;
+  :L2: SKILL.md 全文注入 tool 消息\n$SKILL_DIR 替换为绝对路径;
+  :继续 ReAct: shell / file 等工具执行指令;
+  :L3: 经 $SKILL_DIR 按需读取 resources/;
+else (否)
+  :常规推理, 技能正文零消耗;
+endif
+:最终回复;
+stop
+@enduml
 ```
 
 #### 6.8.2 文字说明
