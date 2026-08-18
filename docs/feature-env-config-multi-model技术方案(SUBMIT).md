@@ -64,8 +64,9 @@ public class DotenvEnvironmentPostProcessor implements EnvironmentPostProcessor 
                                        SpringApplication application) {
         // 1. 定位 .env：优先运行目录（user.dir），回退 classpath
         // 2. 解析 KEY=VALUE（忽略 # 注释、去除引号、跳过空行）
-        // 3. 包装为 MapPropertySource，addLast 注入（保证系统环境变量优先级更高）
-        environment.getPropertySources().addLast(new MapPropertySource("dotenv", map));
+        // 3. 包装为 MapPropertySource，注入到系统环境变量之前（项目 .env 优先，命令行参数仍可覆盖）
+        environment.getPropertySources().addBefore("systemEnvironment",
+                new MapPropertySource("dotenv", map));
     }
 }
 ```
@@ -330,7 +331,7 @@ agent:
 ## 7. 风险与注意点
 
 - `.env` 必须加入 `.gitignore`，历史提交中已泄露的 key 建议轮换。
-- `.env` 优先级低于系统环境变量，生产部署推荐直接注入系统环境变量。
+- `.env` 优先级高于系统环境变量（项目 `.env` 覆盖全局环境变量/全局密钥兜底），命令行参数与 `-D` 系统属性仍可覆盖 `.env`。
 - `xxx-agents.json` 放在运行目录，不打包进 jar；首次运行需依赖 classpath 默认模板引导（或手动创建）。
 - `xxx-agents.json` 中的 `${VAR}` 占位符需由加载器解析（不能依赖 Spring 自动解析，因为 JSON 非 Spring 配置体系）。
 - `MCP` 的密钥（`mcp-server.json` 中的 `TAVILY_API_KEY` 等）属于另一配置体系，可后续按同样思路处理，本方案暂不覆盖。

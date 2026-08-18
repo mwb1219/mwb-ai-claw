@@ -24,7 +24,8 @@ import java.util.stream.Collectors;
 /**
  * 编排注册表加载器：加载 orchestrations.json（编排定义 + 意图元数据）。
  * <p>
- * 读取优先级：运行目录及其上级目录 ./orchestrations.json 优先，回退 classpath 默认模板。
+ * 读取优先级：运行目录（user.dir）下 ./orchestrations.json 优先（命中即用，不再读取内置），
+ * 未命中回退 classpath 默认模板。
  * 启动时预加载并执行启动校验（fail-fast：id 重复 / type 未注册 / 引用 agentId 不存在启动即报错）。
  */
 @Component

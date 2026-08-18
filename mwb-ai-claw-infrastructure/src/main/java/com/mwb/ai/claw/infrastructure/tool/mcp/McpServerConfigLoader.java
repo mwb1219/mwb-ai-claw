@@ -16,8 +16,8 @@ import com.mwb.ai.claw.infrastructure.util.JsonUtils;
  * MCP Server 配置加载器：从 mcp-server.json 读取配置。
  * <p>
  * 读取优先级：
- * 1. 运行目录及其上级目录的外部 mcp-server.json（便于运行时覆盖，无需重新打包）
- * 2. classpath 下的 mcp-server.json（打包进 jar 的默认配置）
+ * 1. 运行目录（user.dir）下的外部 mcp-server.json（命中即用，便于运行时覆盖，无需重新打包）
+ * 2. classpath 下的 mcp-server.json（打包进 jar 的默认配置，仅在外部未命中时回退）
  * <p>
  * 文件格式与 Cursor / Claude 的 mcp.json 保持一致（顶层 mcpServers map）。
  */

@@ -13,10 +13,11 @@ import com.mwb.ai.claw.infrastructure.util.ConfigFileLocator;
 /**
  * .env 文件加载器：在 Spring 环境初始化阶段解析 .env 并注入为 PropertySource。
  * <p>
- * 查找策略复用 {@link ConfigFileLocator}：启动目录及其上级目录优先（兼容从任意
- * 工作目录 / IDE 启动），回退 classpath。
- * 通过 addLast 注入，保证系统环境变量（systemEnvironment）优先级更高，
- * 即 .env 仅作为开发环境默认值。
+ * 查找策略复用 {@link ConfigFileLocator}：仅读取运行目录（user.dir）下的 .env，
+ * 未命中回退 classpath。
+ * 通过 addBefore 注入在系统环境变量之前，保证「项目 .env 优先于系统环境变量」——
+ * 全局密钥（如启动器注入的 ~/.mwb-ai-claw/.env 环境变量）仅作为兜底默认值；
+ * 命令行参数 / -D 系统属性（优先级更高）仍可覆盖项目 .env。
  */
 public class DotenvEnvironmentPostProcessor implements EnvironmentPostProcessor {
 
@@ -36,7 +37,10 @@ public class DotenvEnvironmentPostProcessor implements EnvironmentPostProcessor 
                     ? "【空】" : mask((String) dotenv.get("DEFAULT_API_KEY"))));
         }
         if (!dotenv.isEmpty()) {
-            environment.getPropertySources().addLast(new MapPropertySource("dotenv", dotenv));
+            // 注入到 systemEnvironment 之前：项目 .env 优先于系统环境变量（全局密钥兜底），
+            // 但命令行参数 / -D 系统属性仍可覆盖项目 .env
+            environment.getPropertySources().addBefore("systemEnvironment",
+                    new MapPropertySource("dotenv", dotenv));
         }
     }
 

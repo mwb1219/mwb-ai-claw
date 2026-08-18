@@ -982,7 +982,7 @@ DOMAIN ..> AGENT_IMPL : AgentGateway
         +execute(String argumentsJson) ToolResult
     }
     note right of ToolExecutor
-      内置实现: EchoTool, FileTool, ShellTool, HttpTool, ReadMemoryTool, WriteMemoryTool
+      内置实现: EchoTool, FileTool, ShellTool, ShellStatusTool, HttpTool, ReadMemoryTool, WriteMemoryTool
       MCP 实现: McpToolAdapter
     end note
     ' ToolSpec <<ValueObject>>
@@ -1701,22 +1701,26 @@ deactivate TG
 
 **工具 SPI（`ToolExecutor`）**：
 - 新增工具只需实现 `ToolExecutor` 接口并注册为 Spring Bean，`ToolGatewayImpl` 通过 `DynamicToolRegistry` 自动收集。
-- 内置工具：`echo`（测试）、`file`（文件读写）、`shell`（命令执行）、`http`（网络请求）、`read_memory`/`write_memory`（长期记忆读写）。
+- 内置工具：`echo`（测试）、`file`（文件读写）、`shell`（命令执行）、`shell_status`（后台任务查询/终止）、`http`（网络请求）、`read_memory`/`write_memory`（长期记忆读写）。
+- 流式执行：`ToolExecutor` / `ToolGateway` 提供回调版 `execute(argumentsJson, ProgressCallback)`，Shell 命令输出逐行推送（`[Stream]`），供终端实时回显。
 - MCP 工具：通过 `McpToolRegistrar` 将 MCP Server 暴露的工具动态注册为全局工具（`global=true`），对所有 Agent 可见。
 
 **安全沙箱（`ToolSecurity`）**：
-- 命令白名单：65 个允许的 Shell 命令。
+- Shell 语义：经 `bash -lc`（Windows 为 `cmd /c`）执行，完整支持管道 / 重定向 / 通配符 / `&&` / 环境变量。
+- 命令白名单：允许的 Shell 命令，**按命令段逐段校验**（`splitShellSegments` 引号感知切分，防 `ls; rm -rf` / `&&` 拼接绕过）。
 - 命令黑名单：21 个危险模式（`rm -rf /`、`sudo`、`mkfs`、fork bomb 等），优先级高于白名单。
+- 审批模式：`shell-approval-mode` 三档（`auto` 自动执行 / `ask` 命中规则弹 Y/N 确认（默认）/ `read-only` 拒绝），`shell-approval-patterns` 配置 30+ 高风险规则（`git push`、`rm`、`npm install`、`curl -X` 等）；`ToolApproval` 领域接口由 Shell REPL 实现，headless / 无审批器场景安全默认拒绝。
+- 长时任务：前台超时**不再强杀**，转为后台任务（`ShellProcessManager`）返回 taskId，`shell_status` 工具（status/output/kill）查询 / 终止；`shell` 支持 `background=true` 参数。
 - 路径限制：File/Shell 工具仅允许在配置的 `workspace-dir` 内操作。
-- 超时控制：30 秒超时强制终止。
-- 输出截断：工具输出限制 10000 字符。
+- 输出截断：工具输出限制 10000 字符（截断前先脱敏）。
+- 敏感信息脱敏：shell 输出与工具入参中的密钥（`sk-` / `api_key=` / `token:` / `password=` / `Bearer` / `AKIA`）经 `maskSecrets` 打码后再进上下文。
 - HTTP 限制：可配置 `http-allowed-hosts` 防 SSRF。
 - 所有安全违规捕获为 `SecurityException`，返回 `ToolResult.error`，不中断 ReAct 循环。
 
 **MCP 协议栈**：
-- `McpClientManager` 管理多个 MCP Server 连接（stdio / streamable_http 传输）。
-- `McpToolRegistrar` 在启动期从 MCP Server 获取工具列表，注册为全局工具。
-- 工具调用时通过 JSON-RPC `callTool` 方法远程执行。
+- `McpClientManager` 管理多个 MCP Server 连接（stdio / streamable_http 传输），启动期自动初始化。
+- 运行时管理：`McpClientManager` 支持 `disconnectServer`（关闭连接 + 注销其注册的工具）与 `reconnectServer`，Shell REPL 的 `/mcp` 命令（list / connect / disconnect）可直接查看与启停。
+- `McpToolRegistrar` 在启动期从 MCP Server 获取工具列表，注册为全局工具；工具调用时通过 JSON-RPC `callTool` 方法远程执行。
 
 ---
 
@@ -1807,7 +1811,7 @@ participant OR as "OrchestratorRegistry"
 JVM->>ENV: environmentPostProcessor
 activate ENV
 ENV->>ENV: 解析 .env 文件\n(KEY=value, 忽略 # 注释)
-ENV->>SE: 注入环境变量\n优先级: 命令行 > 系统环境 > .env > 默认
+ENV->>SE: 注入环境变量\n优先级: 命令行 > 项目.env > 系统环境 > 默认
 deactivate ENV
 
 JVM->>YML: 加载配置\n${VAR:default} 占位符解析
@@ -1846,11 +1850,11 @@ JVM->>JVM: Spring 容器启动完成\n系统就绪
 
 **环境变量注入**：
 - `DotenvEnvironmentPostProcessor` 在 Spring Environment 后处理阶段解析 `.env` 文件，注入为环境变量。
-- 优先级（由高到低）：命令行参数 > 系统环境变量 > `.env` 文件 > 配置文件默认值。
+- 优先级（由高到低）：命令行参数 > 项目 `.env` 文件 > 系统环境变量 > 配置文件默认值。
 
 **配置文件加载**：
 - `application.yml`：Spring Boot 标准配置，`${VAR:default}` 占位符解析。
-- `agents.json`：Agent 注册表，`AgentRegistryLoader` 加载。查找顺序：运行目录同名文件 > jar classpath 默认模板。支持 `${VAR:default}` 占位符。
+- `agents.json`：Agent 注册表，`AgentRegistryLoader` 加载。查找顺序：运行目录（user.dir）同名文件（命中即用，不再读取内置）> jar classpath 默认模板。支持 `${VAR:default}` 占位符。
 - `orchestrations.json`：编排注册表，`OrchestrationConfigLoader` 加载。启动期校验：id 唯一、type 已注册、引用的 agentId 存在。
 - `mcp-server.json`：MCP Server 配置，`McpServerConfigLoader` 加载。
 
@@ -1859,7 +1863,7 @@ JVM->>JVM: Spring 容器启动完成\n系统就绪
 - `DynamicToolRegistry` 自动收集所有 `ToolExecutor` 实现并注册为工具。
 - `OrchestrationSelector`、`PageEvictionPolicy`、`MemoryRetriever` 同理自动收集。
 
-**配置覆盖优先级**（由高到低）：命令行参数 > 系统环境变量 > `.env` 文件 > 配置文件默认值 > 代码默认值。
+**配置覆盖优先级**（由高到低）：命令行参数 > 项目 `.env` 文件 > 系统环境变量 > 配置文件默认值 > 代码默认值。
 
 ### 6.8 技能域（Skill）
 

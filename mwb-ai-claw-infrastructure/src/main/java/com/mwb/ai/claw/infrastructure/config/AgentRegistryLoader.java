@@ -14,7 +14,8 @@ import java.util.List;
 /**
  * Agent 注册表加载器：加载 agents.json（Agent 定义与编排模式解耦，跨编排复用）。
  * <p>
- * 读取优先级：运行目录及其上级目录 ./agents.json 优先，回退 classpath 默认模板。
+ * 读取优先级：运行目录（user.dir）下 ./agents.json 优先（命中即用，不再读取内置），
+ * 未命中回退 classpath 默认模板。
  * 文件中的 ${VAR:default} 占位符通过 Spring Environment 解析（.env / 系统环境变量）。
  * 启动时预加载（fail-fast：配置文件格式错误 / 占位符解析异常启动即暴露）。
  */
