@@ -39,6 +39,7 @@ import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.AgentGateway;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
 import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
+import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.dto.data.AgentErrorCode;
 import com.mwb.ai.claw.exception.BizException;
 import com.mwb.ai.claw.infrastructure.collaboration.ApprovalDecision;
@@ -170,38 +171,50 @@ public class TodoDelegateOrchestrator implements AgentOrchestrator {
         }
         chain.push(orchestrationId);
         try {
-            DelegateDefinition def = delegateRequired(ctx.getDefinition());
-            // 并行 Wave 线程池：并发数=concurrency，daemon 线程随 JVM 退出；编排结束即关闭
-            ExecutorService pool = Executors.newFixedThreadPool(def.concurrencyOrDefault(), r -> {
-                Thread t = new Thread(r, "delegate-wave");
-                t.setDaemon(true);
-                return t;
-            });
-            List<String> trace = Collections.synchronizedList(new ArrayList<>());
-            try {
-                if (ctx.getCallback() != null) {
-                    ctx.getCallback().onProgress("[Orchestration] 委托编排开始: 深度=" + def.maxDepthOrDefault()
-                            + ", 并发=" + def.concurrencyOrDefault());
-                }
-                DelegateExecutor exe = new DelegateExecutor(ctx, def, trace, pool, artifactBaseDir(def, ctx));
-                NodeResult root = exe.executeNode(ctx.getMessage(), def.plannerAgentIdOrDefault(), 0, "",
-                        ctx.getStreamCallback());
-
-                CollaborationResult cr = new CollaborationResult();
-                cr.setReply(root.reply);
-                cr.setAgentId(root.agentId);
-                cr.setSessionId(ctx.getSessionId());
-                cr.setOrchestrationId(ctx.getDefinition().getId());
-                cr.setTraceSteps(new ArrayList<>(trace));
-                return cr;
-            } finally {
-                pool.shutdown();
+            // 主 Agent 会话粒度加锁：规划 → 委派 → 汇总全程串行化（同会话多消息不乱序）；
+            // 未携带 sessionId（临时/嵌套编排，不入库无持久化竞争）不加锁。
+            String sessionId = ctx.getSessionId();
+            if (sessionId == null || sessionId.trim().isEmpty()) {
+                return orchestrateLocked(ctx);
             }
+            return ctx.getExecutionUnit().executeWithSessionLock(ctx.getScope(), sessionId,
+                    () -> orchestrateLocked(ctx));
         } finally {
             chain.pop();
             if (chain.isEmpty()) {
                 NESTED_CHAIN.remove();
             }
+        }
+    }
+
+    /** 加锁后的委托编排主体：规划 → 委派（Wave 并行）→ 汇总，详见 {@link #orchestrate} */
+    private CollaborationResult orchestrateLocked(OrchestrationContext ctx) {
+        DelegateDefinition def = delegateRequired(ctx.getDefinition());
+        // 并行 Wave 线程池：并发数=concurrency，daemon 线程随 JVM 退出；编排结束即关闭
+        ExecutorService pool = Executors.newFixedThreadPool(def.concurrencyOrDefault(), r -> {
+            Thread t = new Thread(r, "delegate-wave");
+            t.setDaemon(true);
+            return t;
+        });
+        List<String> trace = Collections.synchronizedList(new ArrayList<>());
+        try {
+            if (ctx.getCallback() != null) {
+                ctx.getCallback().onProgress("[Orchestration] 委托编排开始: 深度=" + def.maxDepthOrDefault()
+                        + ", 并发=" + def.concurrencyOrDefault());
+            }
+            DelegateExecutor exe = new DelegateExecutor(ctx, def, trace, pool, artifactBaseDir(def, ctx));
+            NodeResult root = exe.executeNode(ctx.getMessage(), def.plannerAgentIdOrDefault(), 0, "",
+                    ctx.getStreamCallback());
+
+            CollaborationResult cr = new CollaborationResult();
+            cr.setReply(root.reply);
+            cr.setAgentId(root.agentId);
+            cr.setSessionId(ctx.getSessionId());
+            cr.setOrchestrationId(ctx.getDefinition().getId());
+            cr.setTraceSteps(new ArrayList<>(trace));
+            return cr;
+        } finally {
+            pool.shutdown();
         }
     }
 
@@ -229,14 +242,21 @@ public class TodoDelegateOrchestrator implements AgentOrchestrator {
     // ---------------- 递归执行单元 ----------------
 
     /**
-     * 本次编排的产物根目录：{workdir}/{sessionId}/{时间戳}，同一编排所有 plan/result 落盘彼此隔离；
+     * 本次编排的产物根目录：{workdir}/[namespace/]{sessionId}/{时间戳}，
+     * 同一编排所有 plan/result 落盘彼此隔离；多租户下先拼 scope.namespace()（多用户产物互不可见）；
      * 重复编排进入不同时间戳子目录（幂等不冲突），目录不存在由落盘时自动创建。
      */
     private Path artifactBaseDir(DelegateDefinition def, OrchestrationContext ctx) {
         String session = ctx.getSessionId() == null || ctx.getSessionId().trim().isEmpty()
                 ? "default" : ctx.getSessionId().trim();
         String ts = new SimpleDateFormat("yyyyMMdd-HHmmss-SSS").format(new Date());
-        return Paths.get(def.workdirOrDefault(), session, ts).toAbsolutePath().normalize();
+        Path base = Paths.get(def.workdirOrDefault()).toAbsolutePath().normalize();
+        AgentScope scope = ctx.getScope();
+        String ns = scope != null ? scope.namespace() : null;
+        if (ns != null) {
+            base = base.resolve(ns);
+        }
+        return base.resolve(session).resolve(ts);
     }
 
     /**
@@ -354,7 +374,8 @@ public class TodoDelegateOrchestrator implements AgentOrchestrator {
          */
         NodeResult runNestedOrchestration(TodoDefinition todo, String subTask, String todoPath) {
             String orchestrationId = todo.getOrchestrationId().trim();
-            CollaborationResult nested = ctx.getExecutionUnit().runOrchestration(subTask, orchestrationId);
+            CollaborationResult nested = ctx.getExecutionUnit()
+                    .runOrchestration(ctx.getScope(), subTask, orchestrationId);
             String reply = nested == null || nested.getReply() == null || nested.getReply().trim().isEmpty()
                     ? "（嵌套编排 " + orchestrationId + " 无产出）" : nested.getReply();
             step("[Todo:" + todoPath + "] 嵌套编排 " + orchestrationId + " 完成: " + truncate(reply, TRACE_CHARS));
@@ -469,7 +490,8 @@ public class TodoDelegateOrchestrator implements AgentOrchestrator {
             for (TodoDefinition t : todos) {
                 t.setStatus(TodoStatus.PAUSED);
             }
-            PendingApproval pa = approvalRegistry.register(ctx.getSessionId(), layerKey, task, todos);
+            PendingApproval pa = approvalRegistry.register(ctx.getScope(), ctx.getSessionId(),
+                    layerKey, task, todos);
             step(label + " 计划完成，等待人工审批: " + displayKey() + "/" + layerKey);
             ApprovalDecision decision = pa.await(def.approvalTimeoutMsOrDefault());
             String appLabel = path.isEmpty() ? "[Approval]" : "[Approval:" + path + "]";

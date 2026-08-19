@@ -35,8 +35,19 @@ public class RoutingOrchestrator implements AgentOrchestrator {
     public CollaborationResult orchestrate(OrchestrationContext ctx) {
         Agent agent = resolveAgent(ctx);
 
+        // 主会话粒度加锁：同会话「获取 → 追加 → 推理 → 保存 → 提炼」串行化，不同会话/用户完全并行；
+        // 未携带 sessionId（临时/嵌套编排，不入库无持久化竞争）不加锁。
+        String sessionId = ctx.getSessionId();
+        if (sessionId == null || sessionId.trim().isEmpty()) {
+            return orchestrateLocked(ctx, agent);
+        }
+        return ctx.getExecutionUnit().executeWithSessionLock(ctx.getScope(), sessionId,
+                () -> orchestrateLocked(ctx, agent));
+    }
+
+    private CollaborationResult orchestrateLocked(OrchestrationContext ctx, Agent agent) {
         // 获取或创建会话
-        Session session = ctx.getExecutionUnit().getOrCreateSession(ctx.getSessionId(), agent);
+        Session session = ctx.getExecutionUnit().getOrCreateSession(ctx.getScope(), ctx.getSessionId(), agent);
 
         // 追加用户消息并执行 ReAct
         session.addUserMessage(ctx.getMessage());

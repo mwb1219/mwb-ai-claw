@@ -5,6 +5,7 @@ import com.mwb.ai.claw.domain.memory.LayeredMemoryConfig;
 import com.mwb.ai.claw.domain.memory.MemoryPage;
 import com.mwb.ai.claw.domain.memory.MemoryPageStore;
 import com.mwb.ai.claw.domain.memory.MemoryRetriever;
+import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.util.JsonUtils;
 import org.slf4j.Logger;
@@ -27,9 +28,10 @@ import java.util.Map;
 /**
  * 向量记忆检索器（Phase 3）：对事实 + 摘要 + 档案按向量余弦相似度召回。
  * <p>
- * 候选页向量惰性生成并缓存到磁盘（.agent/memory/vectors/&lt;pageId&gt;.json），
+ * 候选页向量惰性生成并缓存到磁盘（.agent/memory/vectors/[namespace/]&lt;pageId&gt;.json），
  * 避免每次检索重复调用 embedding 服务；embedding 失败（空向量）时返回空结果，
  * 由 {@link HybridMemoryRetriever} 融合层回退到关键词检索。
+ * 多租户模式下向量目录与内存缓存 key 均按 scope 隔离。
  */
 @Component
 public class VectorMemoryRetriever implements MemoryRetriever {
@@ -41,7 +43,7 @@ public class VectorMemoryRetriever implements MemoryRetriever {
     private final LayeredMemoryConfig config;
     private final Path vectorsDir;
 
-    /** 内存向量缓存：pageId → vector（避免重复调用 embedding） */
+    /** 内存向量缓存：scopePrefix:pageId → vector（避免重复调用 embedding） */
     private final Map<String, float[]> cache = new HashMap<>();
 
     public VectorMemoryRetriever(MemoryPageStore pageStore,
@@ -67,7 +69,7 @@ public class VectorMemoryRetriever implements MemoryRetriever {
     }
 
     @Override
-    public List<MemoryPage> search(String query, int topK) {
+    public List<MemoryPage> search(AgentScope scope, String query, int topK) {
         if (!config.isVectorEnabled()) {
             return new ArrayList<>();
         }
@@ -79,15 +81,15 @@ public class VectorMemoryRetriever implements MemoryRetriever {
             return new ArrayList<>();
         }
 
-        // 候选 = 事实 + 摘要 + 档案（跨会话，多 Agent 共享）
+        // 候选 = 事实 + 摘要 + 档案（跨会话，多 Agent 共享，scope 隔离）
         List<MemoryPage> candidates = new ArrayList<>();
-        candidates.addAll(pageStore.loadFacts());
-        candidates.addAll(pageStore.listAllSummaries());
-        candidates.addAll(pageStore.listAllArchive());
+        candidates.addAll(pageStore.loadFacts(scope));
+        candidates.addAll(pageStore.listAllSummaries(scope));
+        candidates.addAll(pageStore.listAllArchive(scope));
 
         List<ScoredPage> scored = new ArrayList<>();
         for (MemoryPage page : candidates) {
-            float[] vec = vectorOf(page);
+            float[] vec = vectorOf(scope, page);
             if (vec == null || vec.length == 0) {
                 continue;
             }
@@ -108,37 +110,43 @@ public class VectorMemoryRetriever implements MemoryRetriever {
 
     // ==================== 私有方法 ====================
 
-    /** 取候选页向量：内存缓存 → 磁盘缓存 → 计算并写盘 */
-    private float[] vectorOf(MemoryPage page) {
+    /** 取候选页向量：内存缓存 → 磁盘缓存 → 计算并写盘（缓存 key 带 scope 前缀防串户） */
+    private float[] vectorOf(AgentScope scope, MemoryPage page) {
         String pageId = page.getPageId();
         if (pageId == null || pageId.isEmpty()) {
             return null;
         }
-        float[] cached = cache.get(pageId);
+        String cacheKey = (scope != null ? scope.keyPrefix() : "default") + ":" + pageId;
+        float[] cached = cache.get(cacheKey);
         if (cached != null) {
             return cached;
         }
-        float[] loaded = loadFromDisk(pageId);
+        float[] loaded = loadFromDisk(scope, pageId);
         if (loaded == null) {
             loaded = embeddingGateway.embed(page.getContent());
             if (loaded == null || loaded.length == 0) {
                 return null;
             }
-            saveToDisk(pageId, loaded);
+            saveToDisk(scope, pageId, loaded);
         }
-        cache.put(pageId, loaded);
+        cache.put(cacheKey, loaded);
         return loaded;
     }
 
-    private Path vectorFile(String pageId) {
+    private Path vectorFile(AgentScope scope, String pageId) {
         String name = Base64.getUrlEncoder().withoutPadding()
                 .encodeToString(pageId.getBytes(StandardCharsets.UTF_8)) + ".json";
-        return vectorsDir.resolve(name);
+        Path base = vectorsDir;
+        String ns = scope != null ? scope.namespace() : null;
+        if (ns != null) {
+            base = base.resolve(ns);
+        }
+        return base.resolve(name);
     }
 
-    private float[] loadFromDisk(String pageId) {
+    private float[] loadFromDisk(AgentScope scope, String pageId) {
         try {
-            Path file = vectorFile(pageId);
+            Path file = vectorFile(scope, pageId);
             if (!Files.exists(file)) {
                 return null;
             }
@@ -155,13 +163,15 @@ public class VectorMemoryRetriever implements MemoryRetriever {
         }
     }
 
-    private void saveToDisk(String pageId, float[] vec) {
+    private void saveToDisk(AgentScope scope, String pageId, float[] vec) {
         try {
             double[] arr = new double[vec.length];
             for (int i = 0; i < vec.length; i++) {
                 arr[i] = vec[i];
             }
-            Files.write(vectorFile(pageId), JsonUtils.toJson(arr).getBytes(StandardCharsets.UTF_8));
+            Path file = vectorFile(scope, pageId);
+            Files.createDirectories(file.getParent());
+            Files.write(file, JsonUtils.toJson(arr).getBytes(StandardCharsets.UTF_8));
         } catch (Exception e) {
             log.warn("保存向量缓存失败: {}", pageId, e);
         }

@@ -8,6 +8,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import com.mwb.ai.claw.domain.scope.AgentScope;
+
 /**
  * 待审批节点（P1 交互与上下文）：命中审批门禁的层在规划完成后注册，等待人工 approve / reject。
  * <p>
@@ -16,6 +18,8 @@ import java.util.concurrent.TimeoutException;
  */
 public class PendingApproval {
 
+    /** 所属租户/用户维度（null 视为默认空间） */
+    private final AgentScope scope;
     private final String sessionId;
     /** 层级标识：根层 "root"，子层为 todoId 路径（如 "t1/t1-1"） */
     private final String layerKey;
@@ -26,7 +30,9 @@ public class PendingApproval {
     private final long createdAt = System.currentTimeMillis();
     private final CompletableFuture<ApprovalDecision> future = new CompletableFuture<>();
 
-    public PendingApproval(String sessionId, String layerKey, String task, List<TodoDefinition> plan) {
+    public PendingApproval(AgentScope scope, String sessionId, String layerKey, String task,
+                           List<TodoDefinition> plan) {
+        this.scope = scope;
         this.sessionId = sessionId;
         this.layerKey = layerKey;
         this.task = task;
@@ -66,6 +72,10 @@ public class PendingApproval {
 
     public String getSessionId() {
         return sessionId;
+    }
+
+    public AgentScope getScope() {
+        return scope;
     }
 
     public String getLayerKey() {

@@ -1,15 +1,18 @@
 package com.mwb.ai.claw.infrastructure.tool;
 
 import com.mwb.ai.claw.domain.core.ProgressCallback;
+import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.domain.tool.DynamicToolRegistry;
 import com.mwb.ai.claw.domain.tool.ToolExecutor;
 import com.mwb.ai.claw.domain.tool.ToolGateway;
+import com.mwb.ai.claw.domain.tool.ToolPermissionChecker;
 import com.mwb.ai.claw.domain.tool.ToolResult;
 import com.mwb.ai.claw.domain.tool.ToolSpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import javax.annotation.Resource;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -36,6 +39,9 @@ public class ToolGatewayImpl implements ToolGateway, DynamicToolRegistry {
         }
     }
 
+    @Resource
+    private ToolPermissionChecker permissionChecker;
+
     @Override
     public ToolResult execute(String toolName, String argumentsJson) {
         return execute(toolName, argumentsJson, null);
@@ -43,6 +49,10 @@ public class ToolGatewayImpl implements ToolGateway, DynamicToolRegistry {
 
     @Override
     public ToolResult execute(String toolName, String argumentsJson, ProgressCallback callback) {
+        // 静态授权（与人工审批门分层）：无权直接拒绝，不中断 ReAct
+        if (permissionChecker != null && !permissionChecker.isAllowed(AgentScopeContext.get(), toolName)) {
+            return ToolResult.error("无权限调用工具: " + toolName);
+        }
         ToolExecutor executor = executors.get(toolName);
         if (executor == null) {
             return ToolResult.error("工具不存在: " + toolName);

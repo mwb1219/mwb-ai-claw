@@ -3,6 +3,7 @@ package com.mwb.ai.claw.infrastructure.memory.strategy;
 import com.mwb.ai.claw.domain.memory.LayeredMemoryConfig;
 import com.mwb.ai.claw.domain.memory.MemoryPage;
 import com.mwb.ai.claw.domain.memory.MemoryRetriever;
+import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,17 +47,17 @@ public class HybridMemoryRetriever implements MemoryRetriever {
     }
 
     @Override
-    public List<MemoryPage> search(String query, int topK) {
+    public List<MemoryPage> search(AgentScope scope, String query, int topK) {
         String mode = config.getRetriever();
         if ("keyword".equalsIgnoreCase(mode)) {
-            return keywordRetriever.search(query, topK);
+            return keywordRetriever.search(scope, query, topK);
         }
         if ("vector".equalsIgnoreCase(mode)) {
-            return vectorRetriever.search(query, topK);
+            return vectorRetriever.search(scope, query, topK);
         }
         // hybrid（默认）：关键词与向量各自扩召回（topK*3），再 RRF 融合
-        List<MemoryPage> keywordHits = keywordRetriever.search(query, topK * 3);
-        List<MemoryPage> vectorHits = vectorRetriever.search(query, topK * 3);
+        List<MemoryPage> keywordHits = keywordRetriever.search(scope, query, topK * 3);
+        List<MemoryPage> vectorHits = vectorRetriever.search(scope, query, topK * 3);
         return fuse(keywordHits, vectorHits, topK);
     }
 

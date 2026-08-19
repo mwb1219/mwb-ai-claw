@@ -32,6 +32,7 @@ import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
 import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
 import com.mwb.ai.claw.domain.memory.MemoryPage;
+import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.exception.BizException;
 import com.mwb.ai.claw.infrastructure.collaboration.ApprovalRegistry;
 import com.mwb.ai.claw.infrastructure.collaboration.PendingApproval;
@@ -180,14 +181,14 @@ public class TodoDelegateOrchestratorTest {
             // 等待编排进入审批等待：审批通过前无任何子 Agent 被调用，节点处于 paused
             Thread.sleep(400);
             assertTrue("审批前不应执行任何子任务", executionUnit.executed.isEmpty());
-            List<PendingApproval> pending = approvalRegistry.listPending("test-session");
+            List<PendingApproval> pending = approvalRegistry.listPending(AgentScope.defaultScope(), "test-session");
             assertEquals(1, pending.size());
             assertEquals("root", pending.get(0).getLayerKey());
             assertEquals(TodoStatus.PAUSED, pending.get(0).getPlan().get(0).getStatus());
             assertTrue(pending.get(0).getPlan().stream()
                     .allMatch(t -> TodoStatus.PAUSED == t.getStatus()));
 
-            approvalRegistry.approve("test-session", "root");
+            approvalRegistry.approve(AgentScope.defaultScope(), "test-session", "root");
             CollaborationResult cr = f.get(5, TimeUnit.SECONDS);
 
             assertEquals("最终答复: 已汇总", cr.getReply());
@@ -195,7 +196,7 @@ public class TodoDelegateOrchestratorTest {
             assertTrue(cr.getTraceSteps().contains("[Approval] 已批准，继续委派执行"));
             assertTrue("批准后应继续委派执行子任务", executionUnit.executed.contains("子任务 t1"));
             assertTrue(executionUnit.executed.contains("子任务 t2"));
-            assertTrue("决策后节点应从注册表移除", approvalRegistry.listPending("test-session").isEmpty());
+            assertTrue("决策后节点应从注册表移除", approvalRegistry.listPending(AgentScope.defaultScope(), "test-session").isEmpty());
         } finally {
             svc.shutdown();
         }
@@ -211,7 +212,7 @@ public class TodoDelegateOrchestratorTest {
             Future<CollaborationResult> f = svc.submit(
                     () -> orchestrate(1, "abort", "帮我做一个项目", "root", 0, 3));
             Thread.sleep(400);
-            approvalRegistry.reject("test-session", "root");
+            approvalRegistry.reject(AgentScope.defaultScope(), "test-session", "root");
             CollaborationResult cr = f.get(5, TimeUnit.SECONDS);
 
             // 拒绝 → 该层降级直执行（规划 Agent 直接回答，不再委派）
@@ -234,7 +235,7 @@ public class TodoDelegateOrchestratorTest {
         assertEquals("架构师已完成", cr.getReply());
         assertTrue(cr.getTraceSteps().contains("[Approval] 等待审批超时，该层降级直执行"));
         assertFalse("超时后不应委派子任务", executionUnit.executed.contains("子任务 t1"));
-        assertTrue("超时节点应从待审批列表清理", approvalRegistry.listPending("test-session").isEmpty());
+        assertTrue("超时节点应从待审批列表清理", approvalRegistry.listPending(AgentScope.defaultScope(), "test-session").isEmpty());
     }
 
     @Test
@@ -251,15 +252,15 @@ public class TodoDelegateOrchestratorTest {
                     () -> orchestrate(2, "abort", "帮我做一个项目", "all", 0, 3));
             // 根层暂停
             Thread.sleep(400);
-            assertEquals(1, approvalRegistry.listPending("test-session").size());
-            assertEquals("root", approvalRegistry.listPending("test-session").get(0).getLayerKey());
-            approvalRegistry.approve("test-session", "root");
+            assertEquals(1, approvalRegistry.listPending(AgentScope.defaultScope(), "test-session").size());
+            assertEquals("root", approvalRegistry.listPending(AgentScope.defaultScope(), "test-session").get(0).getLayerKey());
+            approvalRegistry.approve(AgentScope.defaultScope(), "test-session", "root");
             // 递归层（t1）再次暂停
             Thread.sleep(400);
-            List<PendingApproval> pending = approvalRegistry.listPending("test-session");
+            List<PendingApproval> pending = approvalRegistry.listPending(AgentScope.defaultScope(), "test-session");
             assertEquals(1, pending.size());
             assertEquals("t1", pending.get(0).getLayerKey());
-            approvalRegistry.approve("test-session", "t1");
+            approvalRegistry.approve(AgentScope.defaultScope(), "test-session", "t1");
 
             CollaborationResult cr = f.get(5, TimeUnit.SECONDS);
 
@@ -472,7 +473,7 @@ public class TodoDelegateOrchestratorTest {
         final Map<String, String> writtenFiles = new HashMap<>();
 
         @Override
-        public Session getOrCreateSession(String sessionId, Agent agent) {
+        public Session getOrCreateSession(AgentScope scope, String sessionId, Agent agent) {
             return null;
         }
 
@@ -508,12 +509,13 @@ public class TodoDelegateOrchestratorTest {
         }
 
         @Override
-        public CollaborationResult runOrchestration(String message, String orchestrationId) {
+        public CollaborationResult runOrchestration(AgentScope scope, String message, String orchestrationId) {
             nestedOrchestrations.add(orchestrationId);
             if ("todo-delegate".equals(orchestrationId) && orchestrator != null) {
                 // 模拟嵌套 delegate：真实进入 orchestrate，ThreadLocal 嵌套调用链应检测到 A→A 循环引用
                 OrchestrationDefinition nestedDef = defs.get(orchestrationId);
                 OrchestrationContext nestedCtx = new OrchestrationContext();
+                nestedCtx.setScope(scope);
                 nestedCtx.setMessage(message);
                 nestedCtx.setSessionId("test-session");
                 nestedCtx.setDefinition(nestedDef);
@@ -540,6 +542,16 @@ public class TodoDelegateOrchestratorTest {
         public Path writeFile(String dir, String fileName, String content) {
             writtenFiles.put(fileName, content);
             return Paths.get(dir, fileName);
+        }
+
+        @Override
+        public void executeWithSessionLock(AgentScope scope, String sessionId, Runnable task) {
+            task.run();
+        }
+
+        @Override
+        public <T> T executeWithSessionLock(AgentScope scope, String sessionId, java.util.function.Supplier<T> task) {
+            return task.get();
         }
 
         /** 取「任务：」后首行（todo 描述 / 根任务消息首行） */

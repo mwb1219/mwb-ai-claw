@@ -3,6 +3,7 @@ package com.mwb.ai.claw.domain.collaboration;
 import com.mwb.ai.claw.domain.core.AgentGateway;
 import com.mwb.ai.claw.domain.core.ProgressCallback;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
+import com.mwb.ai.claw.domain.scope.AgentScope;
 import lombok.Data;
 
 /**
@@ -12,6 +13,9 @@ import lombok.Data;
  */
 @Data
 public class OrchestrationContext {
+
+    /** 请求级租户/用户维度；嵌套编排由上层 ctx 透传（编排器与嵌套编排取 scope 的唯一入口） */
+    private AgentScope scope;
 
     /** 用户消息 */
     private String message;

@@ -24,6 +24,8 @@ import com.mwb.ai.claw.domain.memory.MemoryPageStore;
 import com.mwb.ai.claw.domain.memory.MemoryRetriever;
 import com.mwb.ai.claw.domain.memory.MemorySynthesizer;
 import com.mwb.ai.claw.domain.memory.PageEvictionPolicy;
+import com.mwb.ai.claw.domain.scope.AgentScope;
+import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.memory.strategy.ImportanceEvictionPolicy;
 import com.mwb.ai.claw.infrastructure.memory.strategy.TokenBudgetEvictionPolicy;
@@ -85,14 +87,15 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
 
         MemoryBudget budget = new MemoryBudget(config);
         List<Message> all = session.getMessages();
+        AgentScope scope = session.getScope();
 
         // 1. 跨会话事实页（重要度降序，进入 System 区预算）
-        List<MemoryPage> facts = pageStore.loadFacts();
+        List<MemoryPage> facts = pageStore.loadFacts(scope);
         facts.sort(Comparator.comparingDouble(MemoryPage::getImportance).reversed());
         facts = trimByTokens(facts, budget.getSystemBudget());
 
         // 2. 当前会话摘要页（占用 Memory 区预算）
-        List<MemoryPage> summaries = pageStore.loadSummaries(session.getSessionId());
+        List<MemoryPage> summaries = pageStore.loadSummaries(scope, session.getSessionId());
         int summaryTokens = summaries.stream().mapToInt(TokenEstimator::estimate).sum();
 
         // 3. 工作记忆原文：Memory 区预算扣除摘要后，从最新消息往前取
@@ -106,7 +109,7 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
             String query = latestUserText(all);
             if (query != null && !query.trim().isEmpty()) {
                 int retrievedBudget = Math.max(256, budget.getMemoryBudget() / 5);
-                retrieved = trimByTokens(retriever.search(query.trim(), config.getTopK()), retrievedBudget);
+                retrieved = trimByTokens(retriever.search(scope, query.trim(), config.getTopK()), retrievedBudget);
                 if (!retrieved.isEmpty()) {
                     log.debug("分层记忆: 共享检索换入 {} 条（查询 '{}'）", retrieved.size(), query.trim());
                 }
@@ -126,20 +129,22 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
             return;
         }
         // 提炼（摘要生成）是 LLM 调用，异步执行不阻塞主对话链路；快照消息避免执行期数据漂移
+        // 异步任务不依赖 ThreadLocal，scope 显式透传
         final String sessionId = session.getSessionId();
+        final AgentScope scope = session.getScope();
         final List<Message> snapshot = new ArrayList<>(session.getMessages());
-        Runnable task = () -> doAfterTurn(sessionId, snapshot);
+        Runnable task = () -> doAfterTurn(scope, sessionId, snapshot);
         if (config.isSynthesisAsync()) {
-            synthesisExecutor.submit("afterTurn-" + sessionId, task);
+            synthesisExecutor.submit(scope, "afterTurn-" + sessionId, task);
         } else {
             task.run();
         }
     }
 
     /** 轮次内换页：按可插拔策略判断是否把最旧未摘要块压缩为摘要页 */
-    private void doAfterTurn(String sessionId, List<Message> all) {
+    private void doAfterTurn(AgentScope scope, String sessionId, List<Message> all) {
         int blockSize = config.getSummaryBlockSize();
-        int lastSummarized = lastSummarizedIndex(sessionId);
+        int lastSummarized = lastSummarizedIndex(scope, sessionId);
         EvictionContext ctx = new EvictionContext(all, lastSummarized, TokenEstimator.estimate(all),
                 new MemoryBudget(config).getContextBudget(), blockSize, config.getImportanceThreshold());
         if (!evictionPolicy.shouldEvict(ctx)) {
@@ -147,9 +152,9 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
         }
         int end = Math.min(lastSummarized + blockSize, all.size());
         List<Message> block = new ArrayList<>(all.subList(lastSummarized, end));
-        String summary = synthesizer.summarizeBlock(block);
+        String summary = synthesizer.summarizeBlock(scope, block);
         if (summary != null && !summary.isEmpty()) {
-            pageStore.saveSummary(MemoryPage.summary(
+            pageStore.saveSummary(scope, MemoryPage.summary(
                     "summary-" + sessionId + "-" + lastSummarized,
                     summary, sessionId, lastSummarized, end,
                     TokenEstimator.estimate(summary)));
@@ -164,44 +169,45 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
         }
         // 事实提炼（LLM 调用）异步执行；摘要换页由 afterTurn 负责，此处只提炼事实
         final String sessionId = session.getSessionId();
+        final AgentScope scope = session.getScope();
         final List<Message> snapshot = new ArrayList<>(session.getMessages());
-        Runnable task = () -> doAfterSession(sessionId, snapshot);
+        Runnable task = () -> doAfterSession(scope, sessionId, snapshot);
         if (config.isSynthesisAsync()) {
-            synthesisExecutor.submit("afterSession-" + sessionId, task);
+            synthesisExecutor.submit(scope, "afterSession-" + sessionId, task);
         } else {
             task.run();
         }
     }
 
     /** 会话回合后：归档原文（档案 RAG）+ 提取事实并合并去重（同 key 按重要度/信息量择优，版本自增，时间戳保留最新） */
-    private void doAfterSession(String sessionId, List<Message> all) {
+    private void doAfterSession(AgentScope scope, String sessionId, List<Message> all) {
         // 1. 会话原文增量归档（跨会话档案 RAG 数据源，多 Agent 共享）
         if (config.isArchiveEnabled() && !all.isEmpty()) {
-            archiveMessages(sessionId, all);
+            archiveMessages(scope, sessionId, all);
         }
         // 2. 事实提炼 + merge
-        List<MemoryPage> freshFacts = synthesizer.extractFacts(all);
+        List<MemoryPage> freshFacts = synthesizer.extractFacts(scope, all);
         int saved = 0;
         for (MemoryPage fresh : freshFacts) {
             if (fresh.getImportance() < config.getImportanceThreshold()) {
                 continue;
             }
-            MemoryPage existing = findFact(fresh.getKey());
+            MemoryPage existing = findFact(scope, fresh.getKey());
             MemoryPage merged = synthesizer.mergeFact(existing, fresh);
             if (existing != null) {
-                pageStore.deleteFact(existing.getKey());
+                pageStore.deleteFact(scope, existing.getKey());
             }
             merged.setTokenCount(TokenEstimator.estimate(merged));
-            pageStore.appendFact(merged);
+            pageStore.appendFact(scope, merged);
             saved++;
         }
         log.warn("分层记忆: 会话 {} 提炼结束，新增/更新事实 {} 条", sessionId, saved);
     }
 
     /** 把会话原文按块归档为 ARCHIVE 页（只归档上次之后的新消息，幂等） */
-    private void archiveMessages(String sessionId, List<Message> all) {
+    private void archiveMessages(AgentScope scope, String sessionId, List<Message> all) {
         int blockSize = config.getSummaryBlockSize();
-        int archived = lastArchivedIndex(sessionId);
+        int archived = lastArchivedIndex(scope, sessionId);
         int count = 0;
         int end;
         for (int start = archived; start < all.size(); start += blockSize) {
@@ -211,7 +217,7 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
             MemoryPage page = MemoryPage.archive(
                     "archive-" + sessionId + "-" + start,
                     content, sessionId, start, end, TokenEstimator.estimate(content));
-            pageStore.saveArchive(page);
+            pageStore.saveArchive(scope, page);
             count++;
         }
         if (count > 0) {
@@ -220,8 +226,8 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
     }
 
     /** 已归档的消息边界 = 所有 ARCHIVE 页 blockEnd 的最大值 */
-    private int lastArchivedIndex(String sessionId) {
-        return pageStore.loadArchive(sessionId).stream()
+    private int lastArchivedIndex(AgentScope scope, String sessionId) {
+        return pageStore.loadArchive(scope, sessionId).stream()
                 .mapToInt(MemoryPage::getBlockEnd)
                 .max().orElse(0);
     }
@@ -248,14 +254,15 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
                     String.format("%.2f", importance), config.getImportanceThreshold(), topic);
             return;
         }
+        AgentScope scope = AgentScopeContext.get();
         MemoryPage fresh = MemoryPage.fact(topic, content, importance, null);
         fresh.setTokenCount(TokenEstimator.estimate(fresh));
-        MemoryPage existing = findFact(topic);
+        MemoryPage existing = findFact(scope, topic);
         MemoryPage merged = synthesizer.mergeFact(existing, fresh);
         if (existing != null) {
-            pageStore.deleteFact(existing.getKey());
+            pageStore.deleteFact(scope, existing.getKey());
         }
-        pageStore.appendFact(merged);
+        pageStore.appendFact(scope, merged);
         log.warn("分层记忆: 保存事实 '{}'（重要度 {}）", topic, merged.getImportance());
     }
 
@@ -264,7 +271,7 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
         if (!isEnabled()) {
             return "";
         }
-        List<MemoryPage> facts = pageStore.loadFacts();
+        List<MemoryPage> facts = pageStore.loadFacts(AgentScopeContext.get());
         if (facts.isEmpty()) {
             return "(暂无长期记忆)";
         }
@@ -283,20 +290,20 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
         if (!isEnabled()) {
             return new ArrayList<>();
         }
-        return retriever.search(query, topK);
+        return retriever.search(AgentScopeContext.get(), query, topK);
     }
 
     // ==================== 私有方法 ====================
 
     /** 已摘要的消息边界 = 所有摘要页 blockEnd 的最大值 */
-    private int lastSummarizedIndex(String sessionId) {
-        return pageStore.loadSummaries(sessionId).stream()
+    private int lastSummarizedIndex(AgentScope scope, String sessionId) {
+        return pageStore.loadSummaries(scope, sessionId).stream()
                 .mapToInt(MemoryPage::getBlockEnd)
                 .max().orElse(0);
     }
 
-    private MemoryPage findFact(String key) {
-        return pageStore.loadFacts().stream()
+    private MemoryPage findFact(AgentScope scope, String key) {
+        return pageStore.loadFacts(scope).stream()
                 .filter(f -> key.equals(f.getKey()))
                 .findFirst().orElse(null);
     }

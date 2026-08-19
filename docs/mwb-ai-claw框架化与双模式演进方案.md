@@ -57,12 +57,12 @@ domain 零 Spring 依赖，infrastructure 实现端口（依赖倒置）
 
 | 领域 | 能力 | 关键实现 |
 | ---- | ---- | -------- |
-| 核心域 | ReAct 推理循环（同步 / 流式）、Session 聚合根、多 Agent 路由 | `ReActLoopService` / `Session` / `AgentRouter` |
-| 编排域 | 编排 SPI、意图选择、路由 / 流水线 / 对话式三种编排 | `AgentOrchestrator` / `RoutingOrchestrator` / `PipelineOrchestrator` / `ConversationalOrchestrator` |
+| 核心域 | ReAct 推理循环（同步 / 流式，步数预算自动扩展）、Session 聚合根、多 Agent 路由 | `ReActLoopService` / `Session` / `AgentRouter` |
+| 编排域 | 编排插件 SPI + 注册中心（`OrchestratorRegistry`）、路由 / 对话式 / 委托（Todo）三种编排、协作编排**工具化**（`invoke_discussion` / `invoke_delegate`，主 Agent ReAct 内自主发起） | `AgentOrchestrator` / `OrchestratorRegistry` / `RoutingOrchestrator` / `ConversationalOrchestrator` / `TodoDelegateOrchestrator` |
 | 记忆域 | 五层记忆、Token 预算、动态换页、事实提炼、混合检索 RAG、跨会话档案 | `LayeredMemoryGateway` / `HybridMemoryRetriever` / `VectorMemoryRetriever` |
-| 工具域 | 内置工具（file/shell/http/memory）、MCP 协议（stdio / streamable_http）、安全沙箱 | `ToolExecutor` / `McpClientManager` / `ToolSecurity` |
+| 工具域 | 内置工具（file / shell / http / memory / shell_status）、MCP 协议（stdio / streamable_http）+ 运行时动态注册（`DynamicToolRegistry`）、Shell 审批三档（auto / ask / read-only）、安全沙箱 | `ToolExecutor` / `McpClientManager` / `McpToolRegistrar` / `ToolSecurity` / `ToolApproval` |
 | LLM 域 | OpenAI 兼容 API（同步 / 流式 SSE）、Embedding、独立模型配置 | `LlmGatewayImpl` / `OpenAiEmbeddingGateway` |
-| 多渠道 | REST / SSE / WebSocket / Shell REPL / 前端控制台 | `AgentController` / `AgentWebSocketHandler` / `AgentShell` |
+| 多渠道 | REST / SSE / WebSocket / Shell REPL / 前端控制台；人工审批 API（REST + WS + Shell 命令 `/pending` `/approve` `/reject`） | `AgentController` / `AgentWebSocketHandler` / `ApprovalController` / `AgentShell` |
 | 配置工程 | agents.json / orchestrations.json / mcp-server.json 外部化，`.env` 密钥注入 | `AgentRegistryLoader` / `OrchestrationConfigLoader` / `DotenvEnvironmentPostProcessor` |
 
 ---
@@ -88,9 +88,9 @@ domain 零 Spring 依赖，infrastructure 实现端口（依赖倒置）
 | 持久化 | 仅文件系统，并发不安全（同 session 并发写损坏）、不可横向扩展 | 端口已存在（`SessionGateway` / `MemoryPageStore`），补 JDBC / Redis 实现 + session 级锁 |
 | 可观测性 | 无指标、无 trace、无用量记录 | Micrometer（token / 延迟 / 成本指标）、结构化日志、每次运行用量与成本记录 |
 | 流式可靠性 | SseEmitter 无超时 / 断连清理，无客户端取消 | 客户端取消 → 中断 LLM 调用、断连回收、重试 / 退避（429 / 5xx） |
-| 认证鉴权 | REST API 无鉴权 | API Key / Token 认证、租户级权限、工具级权限（谁能用 shell） |
+| 认证鉴权 | 无静态认证（仅交互式人工审批门：Shell `ask` / delegate `approvalGate`） | API Key / Token 认证、租户级权限、工具级**静态**权限（与人工审批门分层互补，见 Phase A 方案 7.3） |
 | 韧性 | LLM 失败无 fallback | 备用模型路由、token 预算保护、提示词注入防护 |
-| 测试 | 全仓仅 1 个测试文件 | SPI 契约测试、集成测试、示例工程端到端测试、CI |
+| 测试 | 已有 delegate / 协作工具单元测试（约 770 行，`TodoDelegateOrchestratorTest` / `CollaborationToolTest`），缺 SPI 契约 / 集成 / E2E | SPI 契约测试、集成测试、示例工程端到端测试、CI |
 
 ### 3.3 P2 能力增强（可后置）
 

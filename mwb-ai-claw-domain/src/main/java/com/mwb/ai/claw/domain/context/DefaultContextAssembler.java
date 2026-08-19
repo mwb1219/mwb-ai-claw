@@ -9,6 +9,7 @@ import com.mwb.ai.claw.domain.llm.ToolCall;
 import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
 import com.mwb.ai.claw.domain.memory.MemoryPage;
 import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
+import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.domain.skill.Skill;
 import com.mwb.ai.claw.domain.skill.SkillGateway;
 import com.mwb.ai.claw.domain.tool.ToolGateway;
@@ -173,7 +174,7 @@ public class DefaultContextAssembler implements ContextAssembler {
             appendPages(systemPrompt, "历史对话摘要", view.getSummaryPages());
             appendPages(systemPrompt, "相关记忆（检索）", view.getRetrievedPages());
         } else {
-            String memContent = memoryGateway.loadMemory();
+            String memContent = memoryGateway.loadMemory(AgentScopeContext.get());
             if (memContent != null && !memContent.trim().isEmpty()) {
                 systemPrompt.append("\n\n## 长期记忆（跨会话）：\n")
                         .append(memContent);

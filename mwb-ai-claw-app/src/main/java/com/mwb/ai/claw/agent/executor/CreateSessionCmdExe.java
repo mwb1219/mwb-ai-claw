@@ -6,6 +6,7 @@ import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.AgentGateway;
 import com.mwb.ai.claw.domain.memory.MemoryGateway;
 import com.mwb.ai.claw.domain.core.Session;
+import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.dto.CreateSessionCmd;
 import com.mwb.ai.claw.dto.data.SessionDTO;
 import org.springframework.stereotype.Component;
@@ -38,6 +39,8 @@ public class CreateSessionCmdExe {
         Session session = new Session();
         session.setSessionId(UUID.randomUUID().toString().replace("-", ""));
         session.setAgentId(agent.getAgentId());
+        session.setTenantId(AgentScopeContext.get().getTenantId());
+        session.setUserId(AgentScopeContext.get().getUserId());
         session.setTitle(title == null || title.isEmpty() ? "session-" + System.currentTimeMillis() : title);
         return session;
     }

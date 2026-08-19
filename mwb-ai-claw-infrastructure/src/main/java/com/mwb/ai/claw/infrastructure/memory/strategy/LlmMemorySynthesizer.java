@@ -10,6 +10,7 @@ import com.mwb.ai.claw.domain.llm.LlmResponse;
 import com.mwb.ai.claw.domain.memory.LayeredMemoryConfig;
 import com.mwb.ai.claw.domain.memory.MemoryPage;
 import com.mwb.ai.claw.domain.memory.MemorySynthesizer;
+import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.memory.SynthesisCache;
 import com.mwb.ai.claw.infrastructure.util.JsonUtils;
@@ -48,7 +49,7 @@ public class LlmMemorySynthesizer implements MemorySynthesizer {
     }
 
     @Override
-    public String summarizeBlock(List<Message> block) {
+    public String summarizeBlock(AgentScope scope, List<Message> block) {
         StringBuilder sb = new StringBuilder();
         sb.append("请将以下对话历史压缩为简洁的中文摘要，保留关键事实、决策与结论，不要遗漏重要细节：\n\n");
         for (int i = 0; i < block.size(); i++) {
@@ -57,7 +58,7 @@ public class LlmMemorySynthesizer implements MemorySynthesizer {
                     .append(truncate(m.getContent(), 500)).append("\n");
         }
         String cacheKey = "summary:" + digest(sb.toString());
-        String cached = cache.get(cacheKey);
+        String cached = cache.get(scope, cacheKey);
         if (cached != null) {
             return cached;
         }
@@ -66,7 +67,7 @@ public class LlmMemorySynthesizer implements MemorySynthesizer {
             String content = resp.getContent();
             if (content != null) {
                 content = content.trim();
-                cache.put(cacheKey, content);
+                cache.put(scope, cacheKey, content);
                 return content;
             }
             return null;
@@ -77,7 +78,7 @@ public class LlmMemorySynthesizer implements MemorySynthesizer {
     }
 
     @Override
-    public List<MemoryPage> extractFacts(List<Message> messages) {
+    public List<MemoryPage> extractFacts(AgentScope scope, List<Message> messages) {
         if (messages == null || messages.isEmpty()) {
             return new ArrayList<>();
         }
@@ -90,14 +91,14 @@ public class LlmMemorySynthesizer implements MemorySynthesizer {
             sb.append("[").append(m.getRole()).append("] ").append(truncate(m.getContent(), 400)).append("\n");
         }
         String cacheKey = "facts:" + digest(sb.toString());
-        List<MemoryPage> cached = cache.get(cacheKey);
+        List<MemoryPage> cached = cache.get(scope, cacheKey);
         if (cached != null) {
             return cached;
         }
         try {
             LlmResponse resp = llmGateway.chat(simpleRequest(sb.toString()), synthesisModelConfig());
             List<MemoryPage> facts = parseFacts(resp.getContent());
-            cache.put(cacheKey, facts);
+            cache.put(scope, cacheKey, facts);
             return facts;
         } catch (Exception e) {
             log.warn("提取事实失败，已降级跳过: {}", e.getMessage());

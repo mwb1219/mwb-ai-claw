@@ -14,6 +14,7 @@ import com.mwb.ai.claw.domain.collaboration.OrchestrationDefinition;
 import com.mwb.ai.claw.domain.core.AgentGateway;
 import com.mwb.ai.claw.domain.core.ProgressCallback;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
+import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.dto.ChatCmd;
 import com.mwb.ai.claw.dto.SingleResponse;
 import com.mwb.ai.claw.dto.data.AgentErrorCode;
@@ -79,6 +80,7 @@ public class ChatCmdExe {
 
         // 2. 装配编排上下文
         OrchestrationContext ctx = new OrchestrationContext();
+        ctx.setScope(AgentScopeContext.get());
         ctx.setMessage(cmd.getMessage());
         ctx.setSessionId(cmd.getSessionId());
         ctx.setExplicitAgentId(cmd.getAgentId());

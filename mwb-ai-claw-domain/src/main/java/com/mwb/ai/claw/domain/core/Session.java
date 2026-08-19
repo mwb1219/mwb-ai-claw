@@ -1,6 +1,7 @@
 package com.mwb.ai.claw.domain.core;
 
 import com.mwb.ai.claw.domain.llm.ToolCall;
+import com.mwb.ai.claw.domain.scope.AgentScope;
 import lombok.Data;
 
 import java.util.ArrayList;
@@ -19,6 +20,15 @@ public class Session {
     private String title;
     private SessionStatus status;
 
+    /** 归属租户（可空，空 = 默认空间） */
+    private String tenantId;
+
+    /** 归属用户（可空，空 = 默认空间） */
+    private String userId;
+
+    /** 乐观版本号，save 时 +1 */
+    private long version;
+
     /** 创建时间戳 */
     private long createTime = System.currentTimeMillis();
 
@@ -29,6 +39,11 @@ public class Session {
 
     public Session() {
         this.status = SessionStatus.ACTIVE;
+    }
+
+    /** 会话归属的租户/用户维度 */
+    public AgentScope getScope() {
+        return AgentScope.of(tenantId, userId);
     }
 
     public void addUserMessage(String content) {

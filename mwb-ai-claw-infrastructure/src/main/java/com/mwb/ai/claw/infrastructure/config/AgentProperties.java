@@ -138,6 +138,11 @@ public class AgentProperties {
      */
     private ToolSecurityConfig security = new ToolSecurityConfig();
 
+    /**
+     * 存储配置（agent.storage.*）
+     */
+    private StorageConfig storage = new StorageConfig();
+
     @Data
     public static class ToolSecurityConfig {
         /** 是否启用安全沙箱 */
@@ -221,5 +226,17 @@ public class AgentProperties {
 
         /** HTTP 请求允许的 host 模式（空列表表示全部允许） */
         private List<String> httpAllowedHosts = new ArrayList<>();
+    }
+
+    /**
+     * 存储配置：后端类型与会话锁实现选择
+     */
+    @Data
+    public static class StorageConfig {
+        /** 存储后端：file | jdbc | redis（默认 file） */
+        private String type = "file";
+
+        /** 会话锁实现：local | redis（默认 local；type=redis 时默认 redis） */
+        private String lockType = "local";
     }
 }

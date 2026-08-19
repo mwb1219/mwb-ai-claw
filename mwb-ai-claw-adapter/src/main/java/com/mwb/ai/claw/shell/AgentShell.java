@@ -52,6 +52,7 @@ import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
 import com.mwb.ai.claw.domain.memory.MemoryGateway;
 import com.mwb.ai.claw.domain.memory.MemoryPage;
 import com.mwb.ai.claw.domain.memory.MemoryPageStore;
+import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.domain.tool.McpServerConfig;
 import com.mwb.ai.claw.domain.tool.ToolApproval;
 import com.mwb.ai.claw.dto.ApprovalCmd;
@@ -399,7 +400,7 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
             return 0;
         }
         try {
-            Session session = memoryGateway.getSession(sessionId);
+            Session session = memoryGateway.getSession(AgentScope.defaultScope(), sessionId);
             if (session == null) {
                 return 0;
             }
@@ -578,7 +579,7 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
                 println(STYLE_WARN, "会话不存在: " + target);
                 return;
             }
-            Session session = memoryGateway.getSession(resolvedId);
+            Session session = memoryGateway.getSession(AgentScope.defaultScope(), resolvedId);
             session.setTitle(title);
             memoryGateway.saveSession(session);
             println(STYLE_INFO, "已重命名会话 " + resolvedId + " → " + title);
@@ -589,11 +590,11 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
 
     /** 会话 ID 解析：支持精确 ID 或前缀模糊匹配 */
     private String resolveSessionId(String targetId) {
-        Session direct = memoryGateway.getSession(targetId);
+        Session direct = memoryGateway.getSession(AgentScope.defaultScope(), targetId);
         if (direct != null) {
             return targetId;
         }
-        for (Session s : memoryGateway.listSessions()) {
+        for (Session s : memoryGateway.listSessions(AgentScope.defaultScope())) {
             if (s.getSessionId().startsWith(targetId)) {
                 return s.getSessionId();
             }
@@ -794,7 +795,7 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
                 println(STYLE_WARN, "会话不存在: " + target);
                 return;
             }
-            Session session = memoryGateway.getSession(resolvedId);
+            Session session = memoryGateway.getSession(AgentScope.defaultScope(), resolvedId);
             String json = JsonUtils.toJson(session);
             File out = path == null
                     ? new File(System.getProperty("user.home") + File.separator + ".claw/exports", resolvedId + ".json")
@@ -826,7 +827,7 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
                 println(STYLE_WARN, "会话不存在: " + srcId);
                 return;
             }
-            Session src = memoryGateway.getSession(resolvedId);
+            Session src = memoryGateway.getSession(AgentScope.defaultScope(), resolvedId);
             Session copy = new Session();
             copy.setSessionId(UUID.randomUUID().toString());
             copy.setAgentId(src.getAgentId());
@@ -860,7 +861,7 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
             println(STYLE_WARN, "当前无会话，请先发起对话");
             return;
         }
-        Session session = memoryGateway.getSession(sessionId);
+        Session session = memoryGateway.getSession(AgentScope.defaultScope(), sessionId);
         if (session == null) {
             println(STYLE_WARN, "会话不存在: " + sessionId);
             return;
@@ -873,7 +874,7 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
         int keepFrom = messages.size() - COMPACT_KEEP_MESSAGES;
         List<Message> oldBlock = new ArrayList<>(messages.subList(0, keepFrom));
         println(STYLE_INFO, "正在压缩历史上下文（" + oldBlock.size() + " 条消息 → 摘要）…");
-        String summary = llmMemorySynthesizer.summarizeBlock(oldBlock);
+        String summary = llmMemorySynthesizer.summarizeBlock(AgentScope.defaultScope(), oldBlock);
         if (summary == null || summary.trim().isEmpty()) {
             println(STYLE_WARN, "摘要生成失败，未执行压缩");
             return;
@@ -903,7 +904,7 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
             }
             sid = sessionId;
         }
-        Session session = memoryGateway.getSession(sid);
+        Session session = memoryGateway.getSession(AgentScope.defaultScope(), sid);
         if (session == null) {
             println(STYLE_WARN, "会话不存在: " + sid);
             return;
@@ -1023,10 +1024,10 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
                 showMemoryFacts();
                 break;
             case "summaries":
-                showMemoryPages(pageStore.listAllSummaries(), "SUMMARY");
+                showMemoryPages(pageStore.listAllSummaries(AgentScope.defaultScope()), "SUMMARY");
                 break;
             case "archive":
-                showMemoryPages(pageStore.listAllArchive(), "ARCHIVE");
+                showMemoryPages(pageStore.listAllArchive(AgentScope.defaultScope()), "ARCHIVE");
                 break;
             case "search":
                 if (arg == null) {
@@ -1043,9 +1044,9 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
     /** 分层记忆总览：配置 + 各层统计 + 提炼缓存/队列状态 */
     private void showMemoryStats() {
         LayeredMemoryConfig cfg = agentProperties.getMemory();
-        List<MemoryPage> facts = pageStore.loadFacts();
-        List<MemoryPage> summaries = pageStore.listAllSummaries();
-        List<MemoryPage> archives = pageStore.listAllArchive();
+        List<MemoryPage> facts = pageStore.loadFacts(AgentScope.defaultScope());
+        List<MemoryPage> summaries = pageStore.listAllSummaries(AgentScope.defaultScope());
+        List<MemoryPage> archives = pageStore.listAllArchive(AgentScope.defaultScope());
         println(STYLE_PROMPT, "◈ 分层记忆总览 ◈");
         println(STYLE_INFO, String.format("  启用: %s | 检索器: %s | 向量: %s | 档案: %s | 共享: %s | topK: %d",
                 cfg.isEnabled(), cfg.getRetriever(), cfg.isVectorEnabled(),
@@ -1061,7 +1062,7 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
 
     /** 长期记忆事实列表（重要度降序，含版本/时间戳） */
     private void showMemoryFacts() {
-        List<MemoryPage> facts = pageStore.loadFacts();
+        List<MemoryPage> facts = pageStore.loadFacts(AgentScope.defaultScope());
         facts.sort(Comparator.comparingDouble(MemoryPage::getImportance).reversed());
         if (facts.isEmpty()) {
             println(STYLE_INFO, "暂无长期记忆事实");
@@ -1174,7 +1175,7 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
             return;
         }
         try {
-            Session session = memoryGateway.getSession(sessionId);
+            Session session = memoryGateway.getSession(AgentScope.defaultScope(), sessionId);
             if (session == null) {
                 return;
             }
@@ -1747,7 +1748,7 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
             // 会话 ID 补全：/session switch|delete|rename <前缀>
             if (buffer.startsWith("/session") && (buffer.contains("switch") || buffer.contains("delete") || buffer.contains("rename"))) {
                 try {
-                    for (Session s : memoryGateway.listSessions()) {
+                    for (Session s : memoryGateway.listSessions(AgentScope.defaultScope())) {
                         if (s.getSessionId().startsWith(word)) {
                             candidates.add(new Candidate(s.getSessionId()));
                         }

@@ -1,5 +1,6 @@
 package com.mwb.ai.claw.infrastructure.memory;
 
+import com.mwb.ai.claw.domain.scope.AgentScope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -44,14 +45,15 @@ public class MemorySynthesisExecutor {
 
     /**
      * 提交提炼任务（串行执行）。任务内部异常由执行器捕获记录，不影响后续任务。
-     * 队列中已有的同名任务会被移除（只保留最新）。
+     * 队列中已有的同 scope + 同名任务会被移除（只保留最新）。
      */
-    public void submit(String taskName, Runnable task) {
+    public void submit(AgentScope scope, String taskName, Runnable task) {
+        String fullName = (scope != null ? scope.keyPrefix() : "default") + ":" + taskName;
         ThreadPoolExecutor pool = (ThreadPoolExecutor) executor;
-        // 移除队列中同名的旧任务（执行中的任务无法取消，只处理待执行的）
+        // 移除队列中同 scope + 同名的旧任务（执行中的任务无法取消，只处理待执行的）
         pool.getQueue().removeIf(r -> r instanceof NamedTask
-                && taskName.equals(((NamedTask) r).name));
-        executor.submit(new NamedTask(taskName, task));
+                && fullName.equals(((NamedTask) r).name));
+        executor.submit(new NamedTask(fullName, task));
     }
 
     /** 当前排队/执行中的任务数（诊断用） */

@@ -1,5 +1,6 @@
 package com.mwb.ai.claw.infrastructure.memory;
 
+import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,7 +14,8 @@ import java.util.concurrent.atomic.AtomicLong;
  * 提炼结果缓存（Phase 4 成本优化）：按「操作类型 + 输入内容哈希」缓存 summarize/extract 结果。
  * <p>
  * 同一段消息块在重复触发提炼（如 afterTurn 边界漂移、异常重试、多 Agent 共享场景）时直接命中缓存，
- * 避免重复调用 LLM 产生成本。容量由 {@code synthesis-cache-size} 配置，LRU 淘汰；<=0 时关闭。
+ * 避免重复调用 LLM 产生成本。缓存 key 自动带 scope 前缀（scope + contentHash），杜绝跨用户互相命中。
+ * 容量由 {@code synthesis-cache-size} 配置，LRU 淘汰；<=0 时关闭。
  */
 @Component
 public class SynthesisCache {
@@ -44,14 +46,15 @@ public class SynthesisCache {
         return map != null;
     }
 
-    /** 命中返回缓存值，未命中返回 null */
+    /** 命中返回缓存值，未命中返回 null（key 内部拼入 scope 前缀） */
     @SuppressWarnings("unchecked")
-    public <T> T get(String key) {
+    public <T> T get(AgentScope scope, String key) {
         if (map == null) {
             return null;
         }
+        String cacheKey = cacheKey(scope, key);
         synchronized (map) {
-            Object v = map.get(key);
+            Object v = map.get(cacheKey);
             if (v != null) {
                 hits.incrementAndGet();
                 return (T) v;
@@ -62,13 +65,17 @@ public class SynthesisCache {
     }
 
     /** 缓存提炼结果；value 为 null（提炼失败）不缓存，避免与"未命中"混淆 */
-    public void put(String key, Object value) {
+    public void put(AgentScope scope, String key, Object value) {
         if (map == null || key == null || value == null) {
             return;
         }
         synchronized (map) {
-            map.put(key, value);
+            map.put(cacheKey(scope, key), value);
         }
+    }
+
+    private String cacheKey(AgentScope scope, String key) {
+        return (scope != null ? scope.keyPrefix() : "default") + ":" + key;
     }
 
     /** 当前缓存条目数 */

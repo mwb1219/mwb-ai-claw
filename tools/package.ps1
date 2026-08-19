@@ -71,16 +71,56 @@ if ($SkipBuild) {
         Write-Err "缺少 mvn，请先安装 Maven"
         exit 1
     }
-    Write-Info "构建项目（mvn package, 跳过测试）..."
-    Push-Location $ProjectRoot
-    try {
-        & mvn package -pl start -am -DskipTests -q
-        if ($LASTEXITCODE -ne 0) {
-            Write-Err "构建失败"
-            exit 1
+
+    # ---------------- 定位 JDK 1.8 用于编译 ----------------
+    # 优先级: $env:JAVA_HOME > 常见 Windows 安装路径 > 默认 JDK（用 --release 8 交叉编译）
+    $Jdk8Home = ""
+    if ($env:JAVA_HOME) {
+        $jver = & "$env:JAVA_HOME\bin\java" -version 2>&1 | Select-Object -First 1
+        if ($jver -match '"1\.8') { $Jdk8Home = $env:JAVA_HOME }
+    }
+    if (-not $Jdk8Home) {
+        # 常见 Windows JDK 1.8 安装路径
+        $candidates = @(
+            "${env:ProgramFiles}\Java\jdk1.8.0_*",
+            "${env:ProgramFiles(x86)}\Java\jdk1.8.0_*",
+            "${env:ProgramFiles}\Java\jre1.8.0_*"
+        ) | ForEach-Object { Get-Item $_ -ErrorAction SilentlyContinue } | Sort-Object Name -Descending
+        if ($candidates) { $Jdk8Home = $candidates[0].FullName }
+    }
+
+    if ($Jdk8Home) {
+        Write-Info "使用 JDK 1.8 编译: $Jdk8Home"
+        Push-Location $ProjectRoot
+        try {
+            $oldJavaHome = $env:JAVA_HOME
+            $oldPath = $env:PATH
+            $env:JAVA_HOME = $Jdk8Home
+            $env:PATH = "$Jdk8Home\bin;$env:PATH"
+            & mvn package -pl start -am -DskipTests -q
+            $env:JAVA_HOME = $oldJavaHome
+            $env:PATH = $oldPath
+            if ($LASTEXITCODE -ne 0) {
+                Write-Err "构建失败"
+                exit 1
+            }
+        } finally {
+            Pop-Location
         }
-    } finally {
-        Pop-Location
+    } else {
+        # 未找到 JDK 1.8，回退到默认 JDK + --release 8 交叉编译
+        Write-Warn "未找到 JDK 1.8（可设置 `$env:JAVA_HOME 指向 JDK 1.8 以启用原生编译）"
+        Write-Info "使用默认 JDK + --release 8 交叉编译..."
+        Push-Location $ProjectRoot
+        try {
+            & mvn package -pl start -am -DskipTests -q "-Dmaven.compiler.release=8"
+            if ($LASTEXITCODE -ne 0) {
+                Write-Err "构建失败"
+                exit 1
+            }
+        } finally {
+            Pop-Location
+        }
     }
 }
 

@@ -68,6 +68,33 @@ info "版本: $VERSION"
 info "产物目录: $DIST_DIR"
 info "产物包:   $ARCHIVE"
 
+# ---------------- 定位 JDK 1.8 用于编译 ----------------
+# 优先级: 环境变量 JAVA_HOME > macOS java_home -V 枚举 > 常见安装路径
+# 仅接受含 bin/javac 的真实 JDK（排除 JRE/JavaAppletPlugin）
+JDK8_HOME=""
+is_jdk8() {
+    local home="$1"
+    [[ -x "$home/bin/javac" ]] && "$home/bin/java" -version 2>&1 | head -1 | grep -qE '"1\.8|^version "1\.8'
+}
+
+if [[ -n "${JAVA_HOME:-}" ]] && is_jdk8 "$JAVA_HOME"; then
+    JDK8_HOME="$JAVA_HOME"
+elif command -v /usr/libexec/java_home >/dev/null 2>&1; then
+    # macOS: 枚举所有 JDK，筛选 1.8 且含 javac 的（排除 JavaAppletPlugin JRE）
+    # java_home -V 输出格式: '    1.8.0_503 (arm64) "Oracle" ... /Library/Java/.../Home'
+    # 路径可能含空格（如 Internet Plug-Ins），用 awk 取最后一个以 / 开头的字段
+    while IFS= read -r line; do
+        if [[ "$line" == *"1.8"* ]]; then
+            # 取行尾路径（最后一个以 / 开头的连续非空白段）
+            candidate="$(echo "$line" | awk '{for(i=1;i<=NF;i++) if($i ~ /^\//) path=$i} END{print path}')"
+            if [[ -n "$candidate" ]] && is_jdk8 "$candidate"; then
+                JDK8_HOME="$candidate"
+                break
+            fi
+        fi
+    done < <(/usr/libexec/java_home -V 2>&1)
+fi
+
 # ---------------- 构建 ----------------
 JAR=""
 if [[ "$SKIP_BUILD" == "true" ]]; then
@@ -75,11 +102,23 @@ if [[ "$SKIP_BUILD" == "true" ]]; then
 else
     # 前置检查
     command -v mvn >/dev/null 2>&1 || { err "缺少 mvn，请先安装 Maven"; exit 1; }
-    info "构建项目（mvn package, 跳过测试）..."
-    (
-        cd "$PROJECT_ROOT"
-        mvn package -pl start -am -DskipTests -q
-    ) || { err "构建失败"; exit 1; }
+
+    if [[ -n "$JDK8_HOME" ]]; then
+        info "使用 JDK 1.8 编译: $JDK8_HOME"
+        (
+            cd "$PROJECT_ROOT"
+            JAVA_HOME="$JDK8_HOME" PATH="$JDK8_HOME/bin:$PATH" \
+                mvn package -pl start -am -DskipTests -q
+        ) || { err "构建失败"; exit 1; }
+    else
+        # 未找到 JDK 1.8，回退到默认 JDK + --release 8 交叉编译
+        warn "未找到 JDK 1.8（可设置 JAVA_HOME 指向 JDK 1.8 以启用原生编译）"
+        info "使用默认 JDK + --release 8 交叉编译..."
+        (
+            cd "$PROJECT_ROOT"
+            mvn package -pl start -am -DskipTests -q -Dmaven.compiler.release=8
+        ) || { err "构建失败"; exit 1; }
+    fi
 fi
 
 # 定位构建产物（spring-boot-maven-plugin repackage 产出 start-<ver>.jar，

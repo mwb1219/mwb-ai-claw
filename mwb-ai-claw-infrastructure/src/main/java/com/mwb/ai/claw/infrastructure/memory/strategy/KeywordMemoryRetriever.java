@@ -3,6 +3,7 @@ package com.mwb.ai.claw.infrastructure.memory.strategy;
 import com.mwb.ai.claw.domain.memory.MemoryPage;
 import com.mwb.ai.claw.domain.memory.MemoryPageStore;
 import com.mwb.ai.claw.domain.memory.MemoryRetriever;
+import com.mwb.ai.claw.domain.scope.AgentScope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -31,7 +32,7 @@ public class KeywordMemoryRetriever implements MemoryRetriever {
     }
 
     @Override
-    public List<MemoryPage> search(String query, int topK) {
+    public List<MemoryPage> search(AgentScope scope, String query, int topK) {
         if (query == null || query.trim().isEmpty() || topK <= 0) {
             return new ArrayList<>();
         }
@@ -41,9 +42,9 @@ public class KeywordMemoryRetriever implements MemoryRetriever {
         }
 
         List<MemoryPage> candidates = new ArrayList<>();
-        candidates.addAll(pageStore.loadFacts());
-        candidates.addAll(pageStore.listAllSummaries());
-        candidates.addAll(pageStore.listAllArchive());
+        candidates.addAll(pageStore.loadFacts(scope));
+        candidates.addAll(pageStore.listAllSummaries(scope));
+        candidates.addAll(pageStore.listAllArchive(scope));
 
         List<ScoredPage> scored = new ArrayList<>();
         for (MemoryPage page : candidates) {

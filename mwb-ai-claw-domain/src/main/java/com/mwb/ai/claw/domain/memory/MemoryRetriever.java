@@ -1,5 +1,7 @@
 package com.mwb.ai.claw.domain.memory;
 
+import com.mwb.ai.claw.domain.scope.AgentScope;
+
 import java.util.List;
 
 /**
@@ -10,9 +12,10 @@ public interface MemoryRetriever {
     /**
      * 按查询召回最相关的记忆页。
      *
+     * @param scope 租户/用户维度（检索隔离）
      * @param query 查询文本
      * @param topK  召回条数
      * @return 命中的记忆页（FACT / SUMMARY / RETRIEVED）
      */
-    List<MemoryPage> search(String query, int topK);
+    List<MemoryPage> search(AgentScope scope, String query, int topK);
 }

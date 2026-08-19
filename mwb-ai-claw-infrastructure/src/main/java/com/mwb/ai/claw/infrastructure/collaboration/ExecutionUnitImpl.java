@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 import javax.annotation.Resource;
 
@@ -24,6 +25,7 @@ import com.mwb.ai.claw.domain.core.ReActResult;
 import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
 import com.mwb.ai.claw.domain.memory.MemoryGateway;
+import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.dto.data.AgentErrorCode;
 import com.mwb.ai.claw.exception.BizException;
 import com.mwb.ai.claw.infrastructure.config.OrchestrationConfigLoader;
@@ -49,10 +51,14 @@ public class ExecutionUnitImpl implements ExecutionUnit {
     @Resource
     private OrchestratorRegistry orchestratorRegistry;
 
+    @Resource
+    private SessionLockManager sessionLockManager;
+
     @Override
-    public Session getOrCreateSession(String sessionId, Agent agent) {
+    public Session getOrCreateSession(AgentScope scope, String sessionId, Agent agent) {
+        AgentScope effectiveScope = scope != null ? scope : AgentScope.defaultScope();
         if (sessionId != null && !sessionId.trim().isEmpty()) {
-            Session session = memoryGateway.getSession(sessionId);
+            Session session = memoryGateway.getSession(effectiveScope, sessionId);
             if (session == null) {
                 throw new BizException(AgentErrorCode.B_AGENT_SESSION_NOT_FOUND.getErrCode(),
                         "会话不存在: " + sessionId);
@@ -62,6 +68,8 @@ public class ExecutionUnitImpl implements ExecutionUnit {
         Session session = new Session();
         session.setSessionId(UUID.randomUUID().toString().replace("-", ""));
         session.setAgentId(agent.getAgentId());
+        session.setTenantId(effectiveScope.getTenantId());
+        session.setUserId(effectiveScope.getUserId());
         session.setTitle("session-" + System.currentTimeMillis());
         return session;
     }
@@ -123,21 +131,33 @@ public class ExecutionUnitImpl implements ExecutionUnit {
     }
 
     @Override
-    public CollaborationResult runOrchestration(String message, String orchestrationId) {
-        return runOrchestration(message, orchestrationId, null);
+    public CollaborationResult runOrchestration(AgentScope scope, String message, String orchestrationId) {
+        return runOrchestration(scope, message, orchestrationId, null);
     }
 
     @Override
-    public CollaborationResult runOrchestration(String message, String orchestrationId, ProgressCallback callback) {
+    public CollaborationResult runOrchestration(AgentScope scope, String message, String orchestrationId,
+                                                ProgressCallback callback) {
         OrchestrationDefinition definition = orchestrationLoader.get(orchestrationId);
         AgentOrchestrator orchestrator = orchestratorRegistry.resolve(definition);
         // 嵌套上下文：复用全局 Agent 注册表 / 执行单元，独立消息与会话（嵌套编排内部自建临时会话与轨迹）
         OrchestrationContext ctx = new OrchestrationContext();
+        ctx.setScope(scope != null ? scope : AgentScope.defaultScope());
         ctx.setMessage(message);
         ctx.setDefinition(definition);
         ctx.setAgentGateway(agentGateway);
         ctx.setExecutionUnit(this);
         ctx.setCallback(callback);
         return orchestrator.orchestrate(ctx);
+    }
+
+    @Override
+    public void executeWithSessionLock(AgentScope scope, String sessionId, Runnable task) {
+        sessionLockManager.executeWithLock(scope, sessionId, task);
+    }
+
+    @Override
+    public <T> T executeWithSessionLock(AgentScope scope, String sessionId, Supplier<T> task) {
+        return sessionLockManager.executeWithLock(scope, sessionId, task);
     }
 }

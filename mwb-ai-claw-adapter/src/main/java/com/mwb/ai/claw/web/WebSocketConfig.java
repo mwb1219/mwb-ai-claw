@@ -19,9 +19,13 @@ public class WebSocketConfig implements WebSocketConfigurer {
     @Resource
     private AgentWebSocketHandler agentWebSocketHandler;
 
+    @Resource
+    private WsAuthHandshakeInterceptor wsAuthHandshakeInterceptor;
+
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(agentWebSocketHandler, "/ws/agent")
+                .addInterceptors(wsAuthHandshakeInterceptor)
                 .setAllowedOrigins("*");
     }
 }

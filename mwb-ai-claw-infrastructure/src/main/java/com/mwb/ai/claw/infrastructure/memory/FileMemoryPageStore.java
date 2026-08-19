@@ -2,11 +2,13 @@ package com.mwb.ai.claw.infrastructure.memory;
 
 import com.mwb.ai.claw.domain.memory.MemoryPage;
 import com.mwb.ai.claw.domain.memory.MemoryPageStore;
+import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.util.JsonUtils;
 import com.mwb.ai.claw.infrastructure.util.TokenEstimator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
@@ -19,22 +21,27 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
- * 文件版记忆页存储：摘要页存 pages/{sessionId}/summary-{blockStart}.json，事实存 facts.jsonl。
+ * 文件版记忆页存储：摘要页存 pages/[namespace/]{sessionId}/summary-{blockStart}.json，事实存 facts.jsonl。
  * <p>
  * 目录：{memoryDir}/memory（默认 {user.dir}/.agent/memory）。
+ * 多租户模式下按 namespace（tenant/user）分目录隔离；legacy 模式保持原扁平布局。
  */
 @Component
+@ConditionalOnProperty(name = "agent.storage.type", havingValue = "file", matchIfMissing = true)
 public class FileMemoryPageStore implements MemoryPageStore {
 
     private static final Logger log = LoggerFactory.getLogger(FileMemoryPageStore.class);
 
     private final Path memoryDir;
     private final Path pagesDir;
-    private final Path factsFile;
     private final Path archiveDir;
+    private final ConcurrentMap<String, Object> factsLocks = new ConcurrentHashMap<>();
 
     public FileMemoryPageStore(AgentProperties properties) {
         String dir = properties.getMemoryDir();
@@ -44,7 +51,6 @@ public class FileMemoryPageStore implements MemoryPageStore {
         Path agentDir = Paths.get(dir);
         this.memoryDir = agentDir.resolve("memory");
         this.pagesDir = memoryDir.resolve("pages");
-        this.factsFile = memoryDir.resolve("facts.jsonl");
         this.archiveDir = memoryDir.resolve("archive");
     }
 
@@ -53,19 +59,31 @@ public class FileMemoryPageStore implements MemoryPageStore {
         try {
             Files.createDirectories(pagesDir);
             Files.createDirectories(archiveDir);
-            if (!Files.exists(factsFile)) {
-                Files.createFile(factsFile);
-            }
             log.warn("分层记忆存储目录: {}", memoryDir.toAbsolutePath());
         } catch (IOException e) {
             log.error("初始化分层记忆目录失败", e);
         }
     }
 
+    // ==================== scope 目录解析 ====================
+
+    /** namespace 对应的基础目录；legacy（无 namespace）时为根目录 */
+    private Path scopeDir(Path base, AgentScope scope) {
+        String ns = scope != null ? scope.namespace() : null;
+        return ns != null ? base.resolve(ns) : base;
+    }
+
+    private Object factsLock(AgentScope scope) {
+        String key = scope != null ? scope.keyPrefix() : "default";
+        return factsLocks.computeIfAbsent(key, k -> new Object());
+    }
+
+    // ==================== MemoryPageStore 实现 ====================
+
     @Override
-    public void saveSummary(MemoryPage page) {
+    public void saveSummary(AgentScope scope, MemoryPage page) {
         try {
-            Path file = summaryFile(page.getSessionId(), page.getBlockStart());
+            Path file = summaryFile(scope, page.getSessionId(), page.getBlockStart());
             Files.createDirectories(file.getParent());
             Files.write(file, JsonUtils.toJson(page).getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
@@ -74,12 +92,12 @@ public class FileMemoryPageStore implements MemoryPageStore {
     }
 
     @Override
-    public List<MemoryPage> loadSummaries(String sessionId) {
-        Path dir = pagesDir.resolve(sessionId);
+    public List<MemoryPage> loadSummaries(AgentScope scope, String sessionId) {
+        Path dir = scopeDir(pagesDir, scope).resolve(sessionId);
         if (!Files.exists(dir)) {
             return new ArrayList<>();
         }
-        try (java.util.stream.Stream<Path> files = Files.list(dir)) {
+        try (Stream<Path> files = Files.list(dir)) {
             return files.filter(p -> p.getFileName().toString().startsWith("summary-"))
                     .filter(p -> p.toString().endsWith(".json"))
                     .map(p -> {
@@ -101,17 +119,18 @@ public class FileMemoryPageStore implements MemoryPageStore {
     }
 
     @Override
-    public List<MemoryPage> listAllSummaries() {
-        if (!Files.exists(pagesDir)) {
+    public List<MemoryPage> listAllSummaries(AgentScope scope) {
+        Path base = scopeDir(pagesDir, scope);
+        if (!Files.exists(base)) {
             return new ArrayList<>();
         }
         List<MemoryPage> all = new ArrayList<>();
-        try (java.util.stream.Stream<Path> dirs = Files.list(pagesDir)) {
+        try (Stream<Path> dirs = Files.list(base)) {
             for (Path dir : dirs.collect(Collectors.toList())) {
                 if (!Files.isDirectory(dir)) {
                     continue;
                 }
-                all.addAll(loadSummaries(dir.getFileName().toString()));
+                all.addAll(loadSummaries(scope, dir.getFileName().toString()));
             }
         } catch (IOException e) {
             log.warn("列出全部摘要页失败", e);
@@ -120,25 +139,29 @@ public class FileMemoryPageStore implements MemoryPageStore {
     }
 
     @Override
-    public void appendFact(MemoryPage fact) {
-        try {
-            Files.createDirectories(memoryDir);
-            String line = JsonUtils.toJson(fact);
-            Files.write(factsFile, (line + System.lineSeparator()).getBytes(StandardCharsets.UTF_8),
-                    StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-        } catch (IOException e) {
-            log.error("追加事实失败: {}", fact.getKey(), e);
+    public void appendFact(AgentScope scope, MemoryPage fact) {
+        synchronized (factsLock(scope)) {
+            try {
+                Path file = factsFile(scope);
+                Files.createDirectories(file.getParent());
+                String line = JsonUtils.toJson(fact);
+                Files.write(file, (line + System.lineSeparator()).getBytes(StandardCharsets.UTF_8),
+                        StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+            } catch (IOException e) {
+                log.error("追加事实失败: {}", fact.getKey(), e);
+            }
         }
     }
 
     @Override
-    public List<MemoryPage> loadFacts() {
-        if (!Files.exists(factsFile)) {
+    public List<MemoryPage> loadFacts(AgentScope scope) {
+        Path file = factsFile(scope);
+        if (!Files.exists(file)) {
             return new ArrayList<>();
         }
         List<MemoryPage> facts = new ArrayList<>();
         try {
-            for (String line : Files.readAllLines(factsFile, StandardCharsets.UTF_8)) {
+            for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
                 if (line == null || line.trim().isEmpty()) {
                     continue;
                 }
@@ -155,20 +178,22 @@ public class FileMemoryPageStore implements MemoryPageStore {
     }
 
     @Override
-    public void deleteFact(String key) {
-        List<MemoryPage> facts = loadFacts().stream()
-                .filter(f -> !key.equals(f.getKey()))
-                .collect(Collectors.toList());
-        rewriteFacts(facts);
+    public void deleteFact(AgentScope scope, String key) {
+        synchronized (factsLock(scope)) {
+            List<MemoryPage> facts = loadFacts(scope).stream()
+                    .filter(f -> !key.equals(f.getKey()))
+                    .collect(Collectors.toList());
+            rewriteFacts(scope, facts);
+        }
     }
 
     @Override
-    public void deleteSessionPages(String sessionId) {
-        Path dir = pagesDir.resolve(sessionId);
+    public void deleteSessionPages(AgentScope scope, String sessionId) {
+        Path dir = scopeDir(pagesDir, scope).resolve(sessionId);
         if (!Files.exists(dir)) {
             return;
         }
-        try (java.util.stream.Stream<Path> files = Files.list(dir)) {
+        try (Stream<Path> files = Files.list(dir)) {
             for (Path p : files.collect(Collectors.toList())) {
                 Files.deleteIfExists(p);
             }
@@ -178,9 +203,9 @@ public class FileMemoryPageStore implements MemoryPageStore {
     }
 
     @Override
-    public void saveArchive(MemoryPage page) {
+    public void saveArchive(AgentScope scope, MemoryPage page) {
         try {
-            Path dir = archiveDir.resolve(page.getSessionId());
+            Path dir = scopeDir(archiveDir, scope).resolve(page.getSessionId());
             Files.createDirectories(dir);
             Path file = dir.resolve("archive-" + page.getBlockStart() + ".json");
             Files.write(file, JsonUtils.toJson(page).getBytes(StandardCharsets.UTF_8));
@@ -190,12 +215,12 @@ public class FileMemoryPageStore implements MemoryPageStore {
     }
 
     @Override
-    public List<MemoryPage> loadArchive(String sessionId) {
-        Path dir = archiveDir.resolve(sessionId);
+    public List<MemoryPage> loadArchive(AgentScope scope, String sessionId) {
+        Path dir = scopeDir(archiveDir, scope).resolve(sessionId);
         if (!Files.exists(dir)) {
             return new ArrayList<>();
         }
-        try (java.util.stream.Stream<Path> files = Files.list(dir)) {
+        try (Stream<Path> files = Files.list(dir)) {
             return files.filter(p -> p.getFileName().toString().startsWith("archive-"))
                     .filter(p -> p.toString().endsWith(".json"))
                     .map(p -> {
@@ -217,17 +242,18 @@ public class FileMemoryPageStore implements MemoryPageStore {
     }
 
     @Override
-    public List<MemoryPage> listAllArchive() {
-        if (!Files.exists(archiveDir)) {
+    public List<MemoryPage> listAllArchive(AgentScope scope) {
+        Path base = scopeDir(archiveDir, scope);
+        if (!Files.exists(base)) {
             return new ArrayList<>();
         }
         List<MemoryPage> all = new ArrayList<>();
-        try (java.util.stream.Stream<Path> dirs = Files.list(archiveDir)) {
+        try (Stream<Path> dirs = Files.list(base)) {
             for (Path dir : dirs.collect(Collectors.toList())) {
                 if (!Files.isDirectory(dir)) {
                     continue;
                 }
-                all.addAll(loadArchive(dir.getFileName().toString()));
+                all.addAll(loadArchive(scope, dir.getFileName().toString()));
             }
         } catch (IOException e) {
             log.warn("列出全部归档块失败", e);
@@ -236,12 +262,12 @@ public class FileMemoryPageStore implements MemoryPageStore {
     }
 
     @Override
-    public void deleteSessionArchive(String sessionId) {
-        Path dir = archiveDir.resolve(sessionId);
+    public void deleteSessionArchive(AgentScope scope, String sessionId) {
+        Path dir = scopeDir(archiveDir, scope).resolve(sessionId);
         if (!Files.exists(dir)) {
             return;
         }
-        try (java.util.stream.Stream<Path> files = Files.list(dir)) {
+        try (Stream<Path> files = Files.list(dir)) {
             for (Path p : files.collect(Collectors.toList())) {
                 Files.deleteIfExists(p);
             }
@@ -250,18 +276,28 @@ public class FileMemoryPageStore implements MemoryPageStore {
         }
     }
 
-    private Path summaryFile(String sessionId, int blockStart) {
-        return pagesDir.resolve(sessionId).resolve("summary-" + blockStart + ".json");
+    // ==================== 工具方法 ====================
+
+    private Path summaryFile(AgentScope scope, String sessionId, int blockStart) {
+        return scopeDir(pagesDir, scope).resolve(sessionId).resolve("summary-" + blockStart + ".json");
     }
 
-    private void rewriteFacts(List<MemoryPage> facts) {
+    /** legacy 模式下保持 memory/facts.jsonl 原路径，多租户下为 memory/facts/{namespace}/facts.jsonl */
+    private Path factsFile(AgentScope scope) {
+        String ns = scope != null ? scope.namespace() : null;
+        return ns != null ? memoryDir.resolve("facts").resolve(ns).resolve("facts.jsonl")
+                : memoryDir.resolve("facts.jsonl");
+    }
+
+    private void rewriteFacts(AgentScope scope, List<MemoryPage> facts) {
         try {
-            Files.createDirectories(memoryDir);
+            Path file = factsFile(scope);
+            Files.createDirectories(file.getParent());
             StringBuilder sb = new StringBuilder();
             for (MemoryPage fact : facts) {
                 sb.append(JsonUtils.toJson(fact)).append(System.lineSeparator());
             }
-            Files.write(factsFile, sb.toString().getBytes(StandardCharsets.UTF_8));
+            Files.write(file, sb.toString().getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
             log.error("重写事实文件失败", e);
         }

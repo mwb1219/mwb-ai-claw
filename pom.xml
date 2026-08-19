@@ -34,7 +34,7 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>${lombok.version}</version>
+            <!-- 版本由 dependencyManagement 统一管理（覆盖 BOM 默认，见下） -->
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -84,6 +84,12 @@
                 <version>${spring-boot.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <!-- 覆盖 Lombok 版本以兼容 JDK 21 及新版语言服务器编译器（1.18.30 会触发 lombok.javac.Javac 初始化失败） -->
+            <dependency>
+                <groupId>org.projectlombok</groupId>
+                <artifactId>lombok</artifactId>
+                <version>${lombok.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

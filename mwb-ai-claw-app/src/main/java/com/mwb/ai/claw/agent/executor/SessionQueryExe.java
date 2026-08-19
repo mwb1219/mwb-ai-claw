@@ -5,6 +5,7 @@ import com.mwb.ai.claw.exception.BizException;
 import com.mwb.ai.claw.agent.assembler.SessionAssembler;
 import com.mwb.ai.claw.domain.memory.MemoryGateway;
 import com.mwb.ai.claw.domain.core.Session;
+import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.dto.data.AgentErrorCode;
 import com.mwb.ai.claw.dto.data.SessionDTO;
 import org.springframework.stereotype.Component;
@@ -21,7 +22,7 @@ public class SessionQueryExe {
     private MemoryGateway memoryGateway;
 
     public SingleResponse<SessionDTO> execute(String sessionId) {
-        Session session = memoryGateway.getSession(sessionId);
+        Session session = memoryGateway.getSession(AgentScopeContext.get(), sessionId);
         if (session == null) {
             throw new BizException(AgentErrorCode.B_AGENT_SESSION_NOT_FOUND.getErrCode(), "会话不存在: " + sessionId);
         }

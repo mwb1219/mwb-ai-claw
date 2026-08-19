@@ -6,6 +6,7 @@ import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.ModelConfig;
 import com.mwb.ai.claw.domain.core.AgentGateway;
 import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
+import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
@@ -57,13 +58,13 @@ public class AgentGatewayImpl implements AgentGateway {
         return agents;
     }
 
-    /** 构建默认 Agent（基于 agent.* 单 Agent 配置） */
+    /** 构建默认 Agent（基于 agent.* 单 Agent 配置）；AGENT.md 按当前 scope 加载 */
     private Agent buildDefaultAgent() {
         Agent agent = new Agent();
         agent.setAgentId(agentProperties.getAgentId());
         agent.setName(agentProperties.getName());
         agent.setSystemPrompt(agentProperties.getSystemPrompt());
-        agent.setAgentInstructions(longTermMemoryGateway.loadAgentInstructions());
+        agent.setAgentInstructions(longTermMemoryGateway.loadAgentInstructions(AgentScopeContext.get()));
         agent.setModelConfig(buildModelConfig(agentProperties.getModel(), agentProperties.getBaseUrl(),
                 agentProperties.getApiKey(), agentProperties.getTemperature(), agentProperties.getMaxTokens()));
         agent.setToolNames(agentProperties.getTools());
@@ -80,7 +81,7 @@ public class AgentGatewayImpl implements AgentGateway {
                 ? config.getSystemPrompt() : agentProperties.getSystemPrompt());
         agent.setDescription(config.getDescription());
         agent.setKeywords(config.getKeywords());
-        agent.setAgentInstructions(longTermMemoryGateway.loadAgentInstructions());
+        agent.setAgentInstructions(longTermMemoryGateway.loadAgentInstructions(AgentScopeContext.get()));
         // 模型字段合并：Agent 显式配置 > 默认配置
         agent.setModelConfig(buildModelConfig(
                 config.getModel() != null ? config.getModel() : agentProperties.getModel(),

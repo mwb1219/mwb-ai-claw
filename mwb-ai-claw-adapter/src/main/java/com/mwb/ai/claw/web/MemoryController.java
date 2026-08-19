@@ -20,6 +20,8 @@ import com.mwb.ai.claw.domain.memory.LayeredMemoryConfig;
 import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
 import com.mwb.ai.claw.domain.memory.MemoryPage;
 import com.mwb.ai.claw.domain.memory.MemoryPageStore;
+import com.mwb.ai.claw.domain.scope.AgentScope;
+import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.memory.MemorySynthesisExecutor;
 import com.mwb.ai.claw.infrastructure.memory.SynthesisCache;
@@ -61,9 +63,10 @@ public class MemoryController {
     public SingleResponse<Map<String, Object>> overview() {
         Map<String, Object> result = new LinkedHashMap<>();
         LayeredMemoryConfig cfg = agentProperties.getMemory();
-        List<MemoryPage> facts = pageStore.loadFacts();
-        List<MemoryPage> summaries = pageStore.listAllSummaries();
-        List<MemoryPage> archives = pageStore.listAllArchive();
+        AgentScope scope = AgentScopeContext.get();
+        List<MemoryPage> facts = pageStore.loadFacts(scope);
+        List<MemoryPage> summaries = pageStore.listAllSummaries(scope);
+        List<MemoryPage> archives = pageStore.listAllArchive(scope);
 
         result.put("enabled", cfg.isEnabled());
         result.put("config", configSnapshot(cfg));
@@ -80,7 +83,7 @@ public class MemoryController {
      */
     @GetMapping("/facts")
     public SingleResponse<List<MemoryPage>> facts() {
-        List<MemoryPage> facts = pageStore.loadFacts();
+        List<MemoryPage> facts = pageStore.loadFacts(AgentScopeContext.get());
         facts.sort(Comparator.comparingDouble(MemoryPage::getImportance).reversed());
         return SingleResponse.of(facts);
     }
@@ -91,8 +94,9 @@ public class MemoryController {
     @GetMapping("/summaries")
     public SingleResponse<List<MemoryPage>> summaries(
             @RequestParam(required = false) String sessionId) {
+        AgentScope scope = AgentScopeContext.get();
         List<MemoryPage> pages = (sessionId == null || sessionId.trim().isEmpty())
-                ? pageStore.listAllSummaries() : pageStore.loadSummaries(sessionId);
+                ? pageStore.listAllSummaries(scope) : pageStore.loadSummaries(scope, sessionId);
         return SingleResponse.of(pages);
     }
 
@@ -102,8 +106,9 @@ public class MemoryController {
     @GetMapping("/archive")
     public SingleResponse<List<MemoryPage>> archive(
             @RequestParam(required = false) String sessionId) {
+        AgentScope scope = AgentScopeContext.get();
         List<MemoryPage> pages = (sessionId == null || sessionId.trim().isEmpty())
-                ? pageStore.listAllArchive() : pageStore.loadArchive(sessionId);
+                ? pageStore.listAllArchive(scope) : pageStore.loadArchive(scope, sessionId);
         return SingleResponse.of(pages);
     }
 

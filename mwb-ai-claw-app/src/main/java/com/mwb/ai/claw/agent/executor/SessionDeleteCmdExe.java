@@ -3,6 +3,7 @@ package com.mwb.ai.claw.agent.executor;
 import com.mwb.ai.claw.dto.SingleResponse;
 import com.mwb.ai.claw.exception.BizException;
 import com.mwb.ai.claw.domain.memory.MemoryGateway;
+import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.dto.data.AgentErrorCode;
 import org.springframework.stereotype.Component;
 
@@ -18,11 +19,11 @@ public class SessionDeleteCmdExe {
     private MemoryGateway memoryGateway;
 
     public SingleResponse<Void> execute(String sessionId) {
-        if (memoryGateway.getSession(sessionId) == null) {
+        if (memoryGateway.getSession(AgentScopeContext.get(), sessionId) == null) {
             throw new BizException(AgentErrorCode.B_AGENT_SESSION_NOT_FOUND.getErrCode(),
                     "会话不存在: " + sessionId);
         }
-        memoryGateway.deleteSession(sessionId);
+        memoryGateway.deleteSession(AgentScopeContext.get(), sessionId);
         return SingleResponse.buildSuccess();
     }
 }

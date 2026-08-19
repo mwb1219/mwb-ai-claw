@@ -16,6 +16,7 @@ import com.mwb.ai.claw.domain.core.ProgressCallback;
 import com.mwb.ai.claw.domain.core.ReActResult;
 import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
+import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.domain.tool.ToolResult;
 import com.mwb.ai.claw.domain.tool.ToolSpec;
 
@@ -104,7 +105,7 @@ public class CollaborationToolTest {
         boolean failNext;
 
         @Override
-        public Session getOrCreateSession(String sessionId, Agent agent) {
+        public Session getOrCreateSession(AgentScope scope, String sessionId, Agent agent) {
             return null;
         }
 
@@ -135,7 +136,7 @@ public class CollaborationToolTest {
         }
 
         @Override
-        public CollaborationResult runOrchestration(String message, String orchestrationId) {
+        public CollaborationResult runOrchestration(AgentScope scope, String message, String orchestrationId) {
             lastMessage = message;
             lastOrchestrationId = orchestrationId;
             if (failNext) {
@@ -144,6 +145,16 @@ public class CollaborationToolTest {
             CollaborationResult cr = new CollaborationResult();
             cr.setReply("delegate-reply");
             return cr;
+        }
+
+        @Override
+        public void executeWithSessionLock(AgentScope scope, String sessionId, Runnable task) {
+            task.run();
+        }
+
+        @Override
+        public <T> T executeWithSessionLock(AgentScope scope, String sessionId, java.util.function.Supplier<T> task) {
+            return task.get();
         }
     }
 }

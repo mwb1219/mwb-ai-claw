@@ -4,6 +4,7 @@ import com.mwb.ai.claw.dto.SingleResponse;
 import com.mwb.ai.claw.agent.assembler.SessionAssembler;
 import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.memory.MemoryGateway;
+import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.dto.data.SessionDTO;
 import org.springframework.stereotype.Component;
 
@@ -21,7 +22,7 @@ public class SessionListQryExe {
     private MemoryGateway memoryGateway;
 
     public SingleResponse<List<SessionDTO>> execute() {
-        List<Session> sessions = memoryGateway.listSessions();
+        List<Session> sessions = memoryGateway.listSessions(AgentScopeContext.get());
         List<SessionDTO> dtos = new ArrayList<>();
         for (Session session : sessions) {
             dtos.add(SessionAssembler.toDTO(session));

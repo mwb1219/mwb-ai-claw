@@ -1,20 +1,13 @@
 package com.mwb.ai.claw.web;
 
-import com.mwb.ai.claw.dto.SingleResponse;
-import com.mwb.ai.claw.agent.ApprovalService;
-import com.mwb.ai.claw.agent.executor.ChatCmdExe;
-import com.mwb.ai.claw.api.AgentServiceI;
-import com.mwb.ai.claw.dto.ApprovalCmd;
-import com.mwb.ai.claw.dto.ChatCmd;
-import com.mwb.ai.claw.dto.CreateSessionCmd;
-import com.mwb.ai.claw.dto.data.ChatResponseDTO;
-import com.mwb.ai.claw.dto.data.PendingApprovalDTO;
-import com.mwb.ai.claw.dto.data.SessionDTO;
-import com.mwb.ai.claw.domain.core.ProgressCallback;
-import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
-import com.mwb.ai.claw.web.dto.WsEvent;
-import com.mwb.ai.claw.web.dto.WsRequest;
+import java.io.IOException;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+import javax.annotation.PreDestroy;
+import javax.annotation.Resource;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
@@ -24,12 +17,23 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
-import javax.annotation.PreDestroy;
-import javax.annotation.Resource;
-import java.io.IOException;
-import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import com.mwb.ai.claw.agent.ApprovalService;
+import com.mwb.ai.claw.agent.executor.ChatCmdExe;
+import com.mwb.ai.claw.api.AgentServiceI;
+import com.mwb.ai.claw.domain.core.ProgressCallback;
+import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
+import com.mwb.ai.claw.domain.scope.AgentScope;
+import com.mwb.ai.claw.domain.scope.AgentScopeContext;
+import com.mwb.ai.claw.dto.ApprovalCmd;
+import com.mwb.ai.claw.dto.ChatCmd;
+import com.mwb.ai.claw.dto.CreateSessionCmd;
+import com.mwb.ai.claw.dto.SingleResponse;
+import com.mwb.ai.claw.dto.data.ChatResponseDTO;
+import com.mwb.ai.claw.dto.data.PendingApprovalDTO;
+import com.mwb.ai.claw.dto.data.SessionDTO;
+import com.mwb.ai.claw.infrastructure.util.JsonUtils;
+import com.mwb.ai.claw.web.dto.WsEvent;
+import com.mwb.ai.claw.web.dto.WsRequest;
 
 /**
  * Agent WebSocket 处理器：接收 JSON 消息，执行 ReAct 循环并通过 WebSocket 推送流式结果。
@@ -79,6 +83,10 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
                 payload.length() > 300 ? payload.substring(0, 300) + "..." : payload);
 
         executor.execute(() -> {
+            // 业务线程从握手 attributes 解析 scope 写 AgentScopeContext（覆盖 chat/approve/reject/pending_tasks 四类消息），
+            // 供 ChatCmdExe 装配 ctx 与 ApprovalService 定位审批节点使用。
+            Object scopeAttr = session.getAttributes().get(WsAuthHandshakeInterceptor.SCOPE_ATTR);
+            AgentScopeContext.set(scopeAttr instanceof AgentScope ? (AgentScope) scopeAttr : AgentScope.defaultScope());
             try {
                 WsRequest req = JsonUtils.fromJson(payload, WsRequest.class);
                 String type = req.getType() != null ? req.getType() : "chat";
@@ -104,6 +112,8 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
                     sendEvent(session, "error", "消息处理异常: " + e.getMessage());
                     sendEvent(session, "done", null);
                 } catch (Exception ignored) {}
+            } finally {
+                AgentScopeContext.clear();
             }
         });
     }

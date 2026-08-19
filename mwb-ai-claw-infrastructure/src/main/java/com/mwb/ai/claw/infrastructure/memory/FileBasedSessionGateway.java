@@ -2,10 +2,12 @@ package com.mwb.ai.claw.infrastructure.memory;
 
 import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.memory.MemoryGateway;
+import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.util.JsonUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
@@ -19,14 +21,18 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.stream.Stream;
 
 /**
- * 文件持久化版会话存储：每个会话保存为 .agent/sessions/<sessionId>.json。
+ * 文件持久化版会话存储：每个会话保存为 .agent/sessions/[tenant/user/]<sessionId>.json。
  * <p>
  * 内存缓存 + 文件持久化，实现跨重启的会话隔离与持久化。
+ * 目录按租户/用户维度隔离：scope 化后会话文件位于 &lt;namespace&gt;/&lt;sessionId&gt;.json，
+ * 未启用多租户（legacy 模式）时仍位于 sessions/&lt;sessionId&gt;.json，保持向后兼容。
  * 替代原先纯内存的 {@link com.mwb.ai.claw.infrastructure.memory.MemoryGatewayImpl}。
  */
 @Component("fileBasedSessionGateway")
+@ConditionalOnProperty(name = "agent.storage.type", havingValue = "file", matchIfMissing = true)
 public class FileBasedSessionGateway implements MemoryGateway {
 
     private static final Logger log = LoggerFactory.getLogger(FileBasedSessionGateway.class);
@@ -46,20 +52,11 @@ public class FileBasedSessionGateway implements MemoryGateway {
     public void init() {
         try {
             Files.createDirectories(sessionsDir);
-            // 启动时加载所有已有会话到缓存
-            java.util.stream.Stream<Path> files = Files.list(sessionsDir);
-            try {
-                files.filter(p -> p.toString().endsWith(".json")).forEach(p -> {
-                    try {
-                        String json = new String(Files.readAllBytes(p), StandardCharsets.UTF_8);
-                        Session session = JsonUtils.fromJson(json, Session.class);
-                        cache.put(session.getSessionId(), session);
-                    } catch (Exception e) {
-                        log.warn("加载会话文件失败: {} -> {}", p.getFileName(), e.getMessage());
-                    }
-                });
-            } finally {
-                files.close();
+            // 启动时加载所有已有会话到缓存（递归子目录以支持多租户布局）
+            try (Stream<Path> files = Files.walk(sessionsDir)) {
+                files.filter(Files::isRegularFile)
+                        .filter(p -> p.toString().endsWith(".json"))
+                        .forEach(this::loadSessionFile);
             }
             log.info("会话存储已初始化: 目录={}, 已加载 {} 个会话",
                     sessionsDir.toAbsolutePath(), cache.size());
@@ -68,14 +65,28 @@ public class FileBasedSessionGateway implements MemoryGateway {
         }
     }
 
+    private void loadSessionFile(Path p) {
+        try {
+            String json = new String(Files.readAllBytes(p), StandardCharsets.UTF_8);
+            Session session = JsonUtils.fromJson(json, Session.class);
+            cache.put(cacheKey(session.getTenantId(), session.getUserId(), session.getSessionId()), session);
+        } catch (Exception e) {
+            log.warn("加载会话文件失败: {} -> {}", p.getFileName(), e.getMessage());
+        }
+    }
+
     // ==================== MemoryGateway 实现 ====================
+
+    private static String cacheKey(String tenantId, String userId, String sessionId) {
+        return AgentScope.of(tenantId, userId).keyPrefix() + ":" + sessionId;
+    }
 
     @Override
     public void saveSession(Session session) {
-        cache.put(session.getSessionId(), session);
-        Path file = sessionFile(session.getSessionId());
+        cache.put(cacheKey(session.getTenantId(), session.getUserId(), session.getSessionId()), session);
+        Path file = sessionFile(AgentScope.of(session.getTenantId(), session.getUserId()), session.getSessionId());
         try {
-            Files.createDirectories(sessionsDir);
+            Files.createDirectories(file.getParent());
             String json = JsonUtils.toJson(session);
             Files.write(file, json.getBytes(StandardCharsets.UTF_8));
             log.debug("会话已持久化: {} ({} bytes)", session.getSessionId(), json.length());
@@ -85,20 +96,22 @@ public class FileBasedSessionGateway implements MemoryGateway {
     }
 
     @Override
-    public Session getSession(String sessionId) {
-        Session cached = cache.get(sessionId);
+    public Session getSession(AgentScope scope, String sessionId) {
+        String key = cacheKey(scope != null ? scope.getTenantId() : null,
+                scope != null ? scope.getUserId() : null, sessionId);
+        Session cached = cache.get(key);
         if (cached != null) {
             return cached;
         }
         // 缓存未命中，尝试从文件加载
-        Path file = sessionFile(sessionId);
+        Path file = sessionFile(scope, sessionId);
         if (!Files.exists(file)) {
             return null;
         }
         try {
             String json = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
             Session session = JsonUtils.fromJson(json, Session.class);
-            cache.put(sessionId, session);
+            cache.put(key, session);
             return session;
         } catch (IOException e) {
             log.warn("从文件加载会话失败: {} -> {}", sessionId, e.getMessage());
@@ -107,17 +120,24 @@ public class FileBasedSessionGateway implements MemoryGateway {
     }
 
     @Override
-    public List<Session> listSessions() {
-        List<Session> list = new ArrayList<>(cache.values());
+    public List<Session> listSessions(AgentScope scope) {
+        String prefix = (scope != null ? scope.keyPrefix() : "default") + ":";
+        List<Session> list = new ArrayList<>();
+        cache.forEach((k, v) -> {
+            if (k.startsWith(prefix)) {
+                list.add(v);
+            }
+        });
         // 按更新时间倒序
         list.sort(Comparator.comparingLong(Session::getUpdateTime).reversed());
         return list;
     }
 
     @Override
-    public void deleteSession(String sessionId) {
-        cache.remove(sessionId);
-        Path file = sessionFile(sessionId);
+    public void deleteSession(AgentScope scope, String sessionId) {
+        cache.remove(cacheKey(scope != null ? scope.getTenantId() : null,
+                scope != null ? scope.getUserId() : null, sessionId));
+        Path file = sessionFile(scope, sessionId);
         try {
             Files.deleteIfExists(file);
             log.info("会话已删除: {}", sessionId);
@@ -128,7 +148,12 @@ public class FileBasedSessionGateway implements MemoryGateway {
 
     // ==================== 工具方法 ====================
 
-    private Path sessionFile(String sessionId) {
-        return sessionsDir.resolve(sessionId + ".json");
+    private Path sessionFile(AgentScope scope, String sessionId) {
+        Path base = sessionsDir;
+        String ns = scope != null ? scope.namespace() : null;
+        if (ns != null) {
+            base = base.resolve(ns);
+        }
+        return base.resolve(sessionId + ".json");
     }
 }

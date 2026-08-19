@@ -580,7 +580,24 @@ agent:
     tool-timeout-seconds: 30                 # 超时后转为后台任务（shell_status 查询 / 终止）
     max-output-length: 10000
     http-allowed-hosts: []
+
+  # 存储后端（PhaseA 服务端生产化：会话 / 记忆页 / 长期记忆三端口可插拔）
+  storage:
+    type: file                 # 存储后端：file（默认，本地 .agent 目录）| jdbc（需 schema.sql 建表）| redis
+    lock-type: local           # 会话锁实现：local（默认，JVM 内 ReentrantLock）| redis（SET NX PX + Lua，多实例）
+
+  # 请求鉴权（默认关闭；服务端多租户隔离时开启）
+  auth:
+    enabled: false             # 是否启用 API Key 鉴权
+    header: X-API-Key          # 请求头名；同时支持 Authorization: Bearer <key> 与 SSE ?apiKey=
+    api-keys:                  # apiKey -> 租户/用户 映射（决定数据隔离维度 AgentScope）
+      tenant-a:
+        user-1: sk-tenant-a-user-1
+    default-user: ""           # 识别失败时的兜底用户（空=拒绝请求）
+    tool-permissions: {}       # 工具级静态授权：toolName -> 允许的 apiKey 列表（缺省全部允许）
 ```
+
+> **存储与鉴权**：`agent.storage.type` 切换后端时保持存储端口语义不变（文件/JDBC/Redis 三实现按条件装配，默认文件模式零配置迁移）；`agent.auth.enabled=true` 后，REST 请求（Header / Authorization / SSE `?apiKey=`）与 WebSocket 握手统一鉴权，校验通过后以 (tenantId, userId) 维度隔离会话、记忆与审批节点。
 
 ### 6.3 Agent 注册表（agents.json）与编排注册表（orchestrations.json）
 
@@ -768,6 +785,7 @@ MCP Server 配置独立在 `mcp-server.json`（与 Cursor / Claude 的 mcp.json 
 | 输出截断    | 工具输出限制 10000 字符，防止撑爆上下文（截断前先脱敏）                 |
 | 敏感信息脱敏 | shell 输出与工具入参中的密钥（`sk-` / `api_key=` / `token:` / `Bearer` / `AKIA`）自动打码 |
 | HTTP 限制 | 可配置允许的 host 列表，阻止 SSRF                                    |
+| API Key 鉴权 | `agent.auth.enabled=true` 时：REST（Header / Authorization / SSE `?apiKey=`）与 WS 握手统一校验，未授权返回 401；工具级静态授权 `agent.auth.tool-permissions`，无权调用返回 `ToolResult.error` 不中断 ReAct |
 
 所有安全违规均捕获为 `SecurityException`，返回 `ToolResult.error("安全拦截: ...")`，不会中断 ReAct 循环。
 
@@ -781,7 +799,7 @@ MCP Server 配置独立在 `mcp-server.json`（与 Cursor / Claude 的 mcp.json 
 | 工具协议     | MCP (Model Context Protocol)                        | stdio / streamable\_http（SSE 兼容） |
 | Shell 终端 | JLine 3.20                                          | ANSI 着色、命令历史、行编辑、多行输入、Tab 补全                 |
 | 序列化      | Jackson                                             | Session JSON 持久化                 |
-| 持久化      | 本地文件 (.agent/ 目录)                                   | 会话文件 + 长期记忆文件                    |
+| 持久化      | 本地文件 (.agent/ 目录，默认) / JDBC（H2·MySQL）/ Redis                | 会话 + 记忆页 + 长期记忆三端口可插拔（`agent.storage.type`） |
 | 前端       | 原生 HTML/CSS/JS                                      | 无框架依赖，可直接打开                      |
 
 ## 九、开发指南

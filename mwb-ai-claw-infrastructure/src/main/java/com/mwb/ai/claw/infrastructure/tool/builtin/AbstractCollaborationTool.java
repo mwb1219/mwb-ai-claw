@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.mwb.ai.claw.domain.collaboration.CollaborationResult;
 import com.mwb.ai.claw.domain.collaboration.ExecutionUnit;
 import com.mwb.ai.claw.domain.core.ProgressCallback;
+import com.mwb.ai.claw.domain.scope.AgentScope;
+import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.domain.tool.ToolExecutor;
 import com.mwb.ai.claw.domain.tool.ToolResult;
 import com.mwb.ai.claw.domain.tool.ToolSpec;
@@ -61,7 +63,9 @@ public abstract class AbstractCollaborationTool implements ToolExecutor {
             if (callback != null) {
                 callback.onProgress("[Orchestration] 发起协作编排: " + orchestrationId());
             }
-            CollaborationResult result = executionUnit.runOrchestration(message.trim(), orchestrationId(), callback);
+            // ReAct 调用发生在请求线程内，scope 取自当前请求上下文（嵌套编排 ctx 内部透传）
+            AgentScope scope = AgentScopeContext.get();
+            CollaborationResult result = executionUnit.runOrchestration(scope, message.trim(), orchestrationId(), callback);
             return ToolResult.success(result.getReply());
         } catch (Exception e) {
             return ToolResult.error("协作编排执行失败: " + e.getMessage());

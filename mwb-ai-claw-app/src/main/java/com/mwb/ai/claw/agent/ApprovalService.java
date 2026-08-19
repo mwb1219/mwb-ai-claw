@@ -1,5 +1,7 @@
 package com.mwb.ai.claw.agent;
 
+import com.mwb.ai.claw.domain.scope.AgentScope;
+import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.dto.ApprovalCmd;
 import com.mwb.ai.claw.dto.SingleResponse;
 import com.mwb.ai.claw.dto.data.AgentErrorCode;
@@ -30,10 +32,10 @@ public class ApprovalService {
     @Resource
     private ApprovalRegistry approvalRegistry;
 
-    /** 列出待审批节点（可按会话过滤；空=全部） */
+    /** 列出待审批节点（可按会话过滤；空=全部；仅当前请求 scope 维度下的节点） */
     public SingleResponse<List<PendingApprovalDTO>> pendingTasks(String sessionId) {
         List<PendingApprovalDTO> result = new ArrayList<>();
-        for (PendingApproval pa : approvalRegistry.listPending(sessionId)) {
+        for (PendingApproval pa : approvalRegistry.listPending(AgentScopeContext.get(), sessionId)) {
             result.add(toDTO(pa));
         }
         return SingleResponse.of(result);
@@ -55,9 +57,10 @@ public class ApprovalService {
                     "layerKey 不能为空");
         }
         String sessionId = cmd.getSessionId() == null ? "" : cmd.getSessionId();
+        AgentScope scope = AgentScopeContext.get();
         boolean done = approved
-                ? approvalRegistry.approve(sessionId, cmd.getLayerKey().trim())
-                : approvalRegistry.reject(sessionId, cmd.getLayerKey().trim());
+                ? approvalRegistry.approve(scope, sessionId, cmd.getLayerKey().trim())
+                : approvalRegistry.reject(scope, sessionId, cmd.getLayerKey().trim());
         if (!done) {
             return SingleResponse.buildFailure(AgentErrorCode.B_AGENT_CONFIG_ERROR.getErrCode(),
                     "待审批节点不存在或已处理: " + sessionId + "/" + cmd.getLayerKey());

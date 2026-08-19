@@ -4,6 +4,20 @@
 spring:
   profiles:
     active: web
+  # ================= 数据源（agent.storage.type=jdbc 时生效） =================
+  # 默认：嵌入式 H2（MySQL 兼容模式，可直接执行 MySQL 语法 schema.sql，数据重启清空，仅联调用）
+  # 生产 MySQL：设置环境变量 DB_URL / DB_USERNAME / DB_PASSWORD / DB_DRIVER，
+  #   并先执行 start/src/main/resources/schema.sql 建表（或设 SQL_INIT_MODE=always 自动初始化）
+  datasource:
+    url: ${DB_URL:jdbc:h2:mem:clawdb;MODE=MySQL;DB_CLOSE_DELAY=-1}
+    username: ${DB_USERNAME:sa}
+    password: ${DB_PASSWORD:}
+    driver-class-name: ${DB_DRIVER:org.h2.Driver}
+  sql:
+    init:
+      # embedded=仅嵌入式库执行（默认 H2）；always=每次启动执行（MySQL 首次建表）；never=关闭
+      mode: ${SQL_INIT_MODE:embedded}
+      schema-locations: classpath:schema.sql
 
 project:
   name: start
