@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import com.alibaba.cola.dto.SingleResponse;
+import com.mwb.ai.claw.dto.SingleResponse;
 import com.mwb.ai.claw.agent.executor.ChatCmdExe;
 import com.mwb.ai.claw.api.AgentServiceI;
 import com.mwb.ai.claw.domain.core.ProgressCallback;

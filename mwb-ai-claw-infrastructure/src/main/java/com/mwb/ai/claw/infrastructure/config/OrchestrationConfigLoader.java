@@ -1,6 +1,6 @@
 package com.mwb.ai.claw.infrastructure.config;
 
-import com.alibaba.cola.exception.BizException;
+import com.mwb.ai.claw.exception.BizException;
 import com.mwb.ai.claw.domain.collaboration.AgentOrchestrator;
 import com.mwb.ai.claw.domain.collaboration.OrchestrationDefinition;
 import com.mwb.ai.claw.dto.data.AgentErrorCode;

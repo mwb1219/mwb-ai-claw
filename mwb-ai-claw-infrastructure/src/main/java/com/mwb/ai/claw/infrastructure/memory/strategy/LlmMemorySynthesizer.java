@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
@@ -133,7 +134,7 @@ public class LlmMemorySynthesizer implements MemorySynthesizer {
         LlmRequest request = new LlmRequest();
         request.setTemperature(0.3);
         request.setMaxTokens(1024);
-        request.setMessages(List.of(
+        request.setMessages(Arrays.asList(
                 LlmMessage.system("你是记忆提炼引擎，输出客观、精炼。"),
                 LlmMessage.user(userContent)));
         return request;

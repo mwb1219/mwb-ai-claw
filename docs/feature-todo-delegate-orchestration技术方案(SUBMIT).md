@@ -4,10 +4,9 @@
 > 文档编号：feature-todo-delegate-orchestration
 > 关联文档：`feature-config-orchestration-separation技术方案(SUBMIT).md`（编排插件化基线）、`feature-agent-collaboration-pipeline-conversational技术方案(Deprecated).md`（协作模式设计基线）
 
-> **实施状态：待评审（未实施）** ⏳
-> - 本文档仅描述技术方案与代码设计，尚未进入实现
-> - 实现时按「7. 实施步骤」顺序推进，并以「8. 测试计划」作为验收标准
-> - **实现完成后必须同步变更**：本文档实施状态、`README.md`、`mwb-ai-claw技术方案.md` 及 `tools/` 脚本（见 §7.1 核查结论）
+> **实施状态：已实施** ✅
+> - 实现已按本文档落地，核心差异见「7.2 实施结论（已完成）」
+> - 同步变更已一并完成：`README.md`、`mwb-ai-claw技术方案.md`、`tools/install.sh` 帮助文案（见 §7.1）
 
 ## 1. 背景与目标
 
@@ -112,12 +111,12 @@ flowchart TD
 
 ## 4. 详细设计
 
-### 4.1 数据模型（domain 层新增）
+### 4.1 数据模型（实施落位：infrastructure/collaboration 层，与 `PipelineStage` / `ConversationDefinition` 同级；方案原写 domain 层，实施时按现有类型化解析模型的存放约定调整）
 
 #### 4.1.1 TodoDefinition（单个待办项）
 
 ```java
-package com.mwb.ai.claw.domain.collaboration;
+package com.mwb.ai.claw.infrastructure.collaboration;
 
 import lombok.Data;
 
@@ -150,7 +149,7 @@ public class TodoDefinition {
 #### 4.1.2 DelegateDefinition（编排配置）
 
 ```java
-package com.mwb.ai.claw.domain.collaboration;
+package com.mwb.ai.claw.infrastructure.collaboration;
 
 import lombok.Data;
 
@@ -186,6 +185,9 @@ public class DelegateDefinition {
 
     /** 汇总结果传递：text（直接拼入汇总 prompt，默认）| file（落盘传路径） */
     private String resultPass;
+
+    /** 产物落盘目录（resultPass=file 时使用，默认 orchestration-artifacts） */
+    private String workdir;
 }
 ```
 
@@ -250,6 +252,10 @@ private NodeResult executeNode(OrchestrationContext ctx, DelegateDefinition def,
     if (todos == null || todos.isEmpty()) {
         return directExecute(ctx, def, task, plannerAgentId, depth);   // 降级直执行
     }
+    // 1.1 单 todo 自执行优化：仅 1 个 todo 且 agentId 为规划者自身 → 直接直执行，避免无谓递归
+    if (todos.size() == 1 && todos.get(0).getAgentId().equals(plannerAgentId)) {
+        return directExecute(ctx, def, task, plannerAgentId, depth);
+    }
     // 2. 委派：拓扑分层 → Wave 并行 / 串行
     List<List<TodoDefinition>> waves = topoSortWaves(todos);
     Map<String, NodeResult> results = new LinkedHashMap<>();           // 保持声明顺序
@@ -285,17 +291,19 @@ private NodeResult runTodo(OrchestrationContext ctx, DelegateDefinition def,
 复用 `ConversationalOrchestrator` 的线程池模式（daemon 线程，随 JVM 退出）：
 
 ```java
-private static final ExecutorService DELEGATE_POOL = Executors.newFixedThreadPool(
-        DEFAULT_CONCURRENCY, r -> {
-            Thread t = new Thread(r, "delegate-wave");
-            t.setDaemon(true);
-            return t;
-        });
+// 每次 orchestrate() 新建 daemon 线程池（并发数=concurrency），编排结束 shutdown()
+private ExecutorService newDelegatePool(int concurrency) {
+    return Executors.newFixedThreadPool(concurrency, r -> {
+        Thread t = new Thread(r, "delegate-wave");
+        t.setDaemon(true);
+        return t;
+    });
+}
 ```
 
 - 并发数 = `concurrency`（默认 4）；
 - 并行 Wave 的流式回调传 `null`（避免多线程交错输出终端），串行执行传 `ctx.getStreamCallback()`；
-- 使用 `CompletableFuture.allOf(...).join()` 等待整波完成，结果按声明顺序回填 `LinkedHashMap`。
+- 使用 `CompletableFuture.allOf(...).join()` 等待整波完成，结果按声明顺序回填 `LinkedHashMap`；异常经 `AtomicReference<Throwable>` 收集后统一抛出。
 
 ### 4.4 汇总阶段（Summarize）
 
@@ -332,8 +340,8 @@ private static final ExecutorService DELEGATE_POOL = Executors.newFixedThreadPoo
 [Plan] 架构师: 拆解为 3 个 todo: t1, t2, t3
 [Todo:t1] 编码专家: <结果截断 80 字>
 [Plan:t1] 编码专家: 拆解为 2 个 todo: t1-1, t1-2
-[Todo:t1-1] 信息检索专家: ...
-[Todo:t1-2] 编码专家: ...
+[Todo:t1/t1-1] 信息检索专家: ...
+[Todo:t1/t1-2] 编码专家: ...
 [Summarize:t1] 编码专家: ...
 [Todo:t2] 信息检索专家: ...
 [Summarize] 架构师: <最终答复截断 80 字>
@@ -376,8 +384,8 @@ public class TodoDelegateOrchestrator implements AgentOrchestrator {
 
 | 层 | 文件 | 改动 |
 |----|------|------|
-| domain/collaboration | `TodoDefinition.java` | **新增**：规划产物模型 |
-| domain/collaboration | `DelegateDefinition.java` | **新增**：delegate 编排配置模型 |
+| infrastructure/collaboration | `TodoDefinition.java` | **新增**：规划产物模型（实施落位 infrastructure 层，与 `PipelineStage` / `ConversationDefinition` 同级） |
+| infrastructure/collaboration | `DelegateDefinition.java` | **新增**：delegate 编排配置模型 |
 | infrastructure/collaboration/strategy | `TodoDelegateOrchestrator.java` | **新增**：delegate 编排插件（规划 / 拓扑排序 / 并行执行 / 递归委托 / 汇总） |
 | infrastructure/collaboration | `ConversationDefinition.java` 同类位置 | 无改动（参考其类型化解析模式） |
 | start/resources | `orchestrations.json` | **新增** `todo-delegate` 条目（type=delegate） |
@@ -449,7 +457,7 @@ mwb-ai-claw --agent.orchestration=todo-delegate
 
 ## 7. 实施步骤
 
-1. **domain 层**：新增 `TodoDefinition` / `DelegateDefinition`（含默认值方法，如 `maxDepthOrDefault()`）；
+1. **数据模型层**：新增 `TodoDefinition` / `DelegateDefinition`（实施落位 infrastructure/collaboration，含默认值方法，如 `maxDepthOrDefault()`）；
 2. **infrastructure/collaboration/strategy**：实现 `TodoDelegateOrchestrator`：
    - `validate()`：启动期校验（plannerAgentId / maxTodos / maxDepth / concurrency / onFailure / resultPass / agents 存在性）；
    - 规划协议解析（JSON 提取 → 反序列化 → 校验 → 重试 → 降级直执行）；
@@ -469,10 +477,31 @@ mwb-ai-claw --agent.orchestration=todo-delegate
 
 | 脚本 | 编排相关引用 | 是否需要调整 |
 |------|------------|------------|
-| `tools/install.sh` | 支持 `--orchestration <id>`（透传 `--agent.orchestration`），帮助文案示例为「routing \| code-review-pipeline \| team-discussion 等」 | 功能无需改动；**建议**在帮助文案示例中补充 `todo-delegate`（纯文档性） |
+| `tools/install.sh` | 支持 `--orchestration <id>`（透传 `--agent.orchestration`），帮助文案示例为「routing \| code-review-pipeline \| team-discussion 等」 | 功能无需改动；帮助文案示例已补充 `todo-delegate`（已完成） |
 | `tools/install.ps1` | 无编排引用（仅审批模式处理） | 无需调整 |
 | `tools/setup.sh` / `setup.ps1` | 无编排引用 | 无需调整 |
 | `tools/package.sh` / `package.ps1` | 无编排引用（打包逻辑） | 无需调整 |
+
+### 7.2 实施结论（已完成）
+
+**落地文件**
+
+| 层 | 文件 | 说明 |
+|----|------|------|
+| infrastructure/collaboration | `TodoDefinition.java` | 规划产物模型（todoId / title / description / agentId / dependsOn） |
+| infrastructure/collaboration | `DelegateDefinition.java` | delegate 编排配置模型（plannerAgentId / maxTodos / maxDepth / parallel / concurrency / onFailure / retries / thinking / resultPass / workdir + `xxxOrDefault()`） |
+| infrastructure/collaboration/strategy | `TodoDelegateOrchestrator.java` | delegate 编排插件（规划→委派→汇总，Kahn 拓扑分层 + Wave 并行 + 递归委托 + 容错降级） |
+| start/resources | `orchestrations.json` | 新增 `todo-delegate` 条目（type=delegate，含 10 个意图关键词） |
+| infrastructure/src/test | `TodoDelegateOrchestratorTest.java` | fake AgentGateway / ExecutionUnit 单元测试 4 例 |
+
+**与方案的差异（实施时调整，均已落实）**
+
+1. **模型层位置**：方案 §4.1 原写「domain 层新增」，实施按现有 `PipelineStage` / `ConversationDefinition` 的存放约定放入 **infrastructure/collaboration**（同包，注册中心不感知结构，无功能影响）；
+2. **单 todo 自执行优化**（方案 §4.2 规划 Prompt「可直接完成的简单任务，输出单个 todo（agentId 为自己）」的落点）：规划产物若只有 1 个 todo 且 agentId 为规划者自身，直接「直执行」完成，不再绕一圈规划→委派→汇总，接近直执行成本（见 §9 风险表末行）；
+3. **依赖注入**：方案 §8 测试计划「依赖结果注入其 prompt」落地为将已完成 todo 结果（截断）拼入子 todo 的 prompt 上下文；
+4. **线程池生命周期**：每次 `orchestrate()` 新建 daemon 线程池（并发数=concurrency）并在编排结束 `shutdown()`，避免静态池全局膨胀（与 conversational 复用同模式但实例级管理）。
+
+**验收结果**：`mvn test` 全绿（9 例通过，含本特性 4 例：依赖排序与并行 / 递归再委托层级标签 `[Todo:t1/t1-1]` / 非 JSON 降级直执行 / 依赖环回退串行），启动校验与现有 routing / pipeline / conversational 回归不受影响。
 
 ## 8. 测试计划
 
@@ -505,11 +534,130 @@ mwb-ai-claw --agent.orchestration=todo-delegate
 | 规划 Agent 能力不足拆解不合理 | plannerAgentId 可配置（默认 architect），可切换 planner Agent |
 | 每层规划额外消耗一轮 LLM 调用 | `maxDepth=1` 可关闭递归；简单任务规划 Agent 会输出单 todo 自执行，近似直执行成本 |
 
-## 10. 后续演进（预留）
+## 10. 后续演进（已实施 ✅，2026-08-19）
 
-- **规划产物落盘**：plan.json 写入 `orchestration-artifacts`，支持轨迹追溯与可视化面板；
-- **Todo 状态机 + 人工审批门禁**：`paused → approved → running → done`，关键节点人工确认后再委托；
-- **动态规划（Plan-Do-Reflect）**：执行中根据中间结果调整后续 Todo（当前为静态 DAG）；
-- **上下文压缩**：子结果向量化检索 top-k 注入汇总（结合分层记忆）；
-- **委托结果沉淀记忆**：子任务结论写入分层记忆 FACT，供后续任务复用；
-- **编排嵌套组合**：允许 delegate 的某个 Todo 显式引用 pipeline / conversational 编排执行。
+> 本节 6 项演进原为「预留」清单，均已按 §11 分阶段计划（P0 数据底座 / P1 交互与上下文 / P2 智能与组合）实施完成；技术方案、落地说明与验收结果见 §11.2 / §11.3 / §11.4。
+
+- **规划产物落盘**：plan.json 写入 `orchestration-artifacts`，支持轨迹追溯与可视化面板 → **已实施 ✅**（见 §11.2 P0-1 / P0-2）
+- **Todo 状态机 + 人工审批门禁**：`paused → approved → running → done`，关键节点人工确认后再委托 → **已实施 ✅**（见 §11.3 P1-1 ~ P1-4）
+- **动态规划（Plan-Do-Reflect）**：执行中根据中间结果调整后续 Todo → **已实施 ✅**（见 §11.4 P2-1 / P2-2）
+- **上下文压缩**：子结果相关性 top-k 注入汇总（控制上下文成本）→ **已实施 ✅**（见 §11.3 P1-5）
+- **委托结果沉淀记忆**：子任务结论写入分层记忆 FACT，供后续任务复用 → **已实施 ✅**（见 §11.2 P0-3）
+- **编排嵌套组合**：允许 delegate 的某个 Todo 显式引用 pipeline / conversational / delegate 自身编排执行（嵌套调用链防环）→ **已实施 ✅**（见 §11.4 P2-3 / P2-4）
+
+## 11. 后续演进实施计划（已全部落地 ✅）
+
+> 将 §10 的 6 项演进按「依赖关系 + 风险 + 收益」归并为 3 个阶段（P0 → P2）分步推进。每阶段独立可交付、可验收；前序阶段产物是后续阶段的数据底座，避免返工。
+
+### 11.1 阶段总览
+
+| 阶段 | 演进项 | 依赖 | 核心价值 |
+|------|--------|------|----------|
+| P0 数据底座 | ① 规划产物落盘 ② 委托结果沉淀记忆 | 无（基于已实施 delegate 基线） | 全链路可追溯；子结论可复用 |
+| P1 交互与上下文 | ③ Todo 状态机 + 人工审批门禁 ④ 上下文压缩 | 依赖 P0-①（plan.json 持久化） | 可控性 + 上下文成本 |
+| P2 智能与组合 | ⑤ 动态规划（Plan-Do-Reflect）⑥ 编排嵌套组合 | 依赖 P1-③（状态机）+ P0 | 动态调整 + 跨编排复用 |
+
+依赖说明：⑤ 调整 Todo 需状态机支撑暂停/替换；③ 的门禁需要 ① 持久化的 plan 状态；④ 的检索源复用 ① 的落盘结果与 `resultPass=file` 链路。
+
+### 11.2 P0 数据底座（已实施 ✅，2026-08-19）
+
+**目标**：delegate 编排全过程可追溯（plan.json + 各层结果落盘），子任务结论进入分层记忆可复用；不改动执行语义。
+
+| # | 任务 | 涉及文件 | 要点 |
+|---|------|----------|------|
+| P0-1 | 规划产物落盘 plan.json | `TodoDelegateOrchestrator`、`DelegateDefinition`（复用现有 `workdir`） | 每层规划成功后写 `plan-{layerPath}.json`（含 todos 快照）；汇总后写 `result-{layerPath}.txt`；trace 追加「plan 已落盘: 路径」 |
+| P0-2 | 产物目录隔离与幂等 | 同上 + `ExecutionUnitImpl.writeArtifact` | 同次编排按 `{sessionId}/{时间戳}` 子目录隔离；重复执行覆盖同名文件；目录不存在自动创建 |
+| P0-3 | 委托结果沉淀记忆 | `TodoDelegateOrchestrator`（汇总后经记忆网关写 FACT） | 每个叶子 todo 完成后写入 FACT：`{todoId}/{title}/{结论截断}/{父任务}`；按 todoId 幂等去重 |
+| P0-4 | 轨迹补全 | `CollaborationResult.traceSteps` | 落盘与记忆写入均追加 trace 行，前端现有渲染零改动 |
+
+**验收标准**
+- 执行一次 delegate 编排后，`workdir` 下存在 `plan-*.json` 与 `result-*.txt`，内容与 trace 一致；
+- 分层记忆检索「某子任务结论」可召回对应 FACT，重复执行不产生重复 FACT；
+- 现有 4 个 delegate 单测 + 全量 `mvn test` 回归通过。
+
+**落地说明（已完成）**
+
+| 改动点 | 说明 |
+|--------|------|
+| `ExecutionUnit.writeFile(dir, fileName, content)` | domain 接口 + `ExecutionUnitImpl` 新增：按精确文件名落盘（目录自动创建、同名覆盖），供 plan/result 落盘使用 |
+| 产物目录隔离 | `orchestrate()` 计算 `{workdir}/{sessionId}/{时间戳}` 根目录传入 `DelegateExecutor`；重复编排进入不同时间戳子目录（幂等不冲突）；`resultPass=file` 的子结果落盘同步改用隔离目录 |
+| plan.json 落盘 | `plan()` 成功后写 `plan-{layerPath}.json`（todos 快照；层级路径平铺为 `t1-t1-1`），trace 追加「规划产物已落盘: 路径」 |
+| result.txt 落盘 | `summarize()` 取得答复后写 `result-{layerPath}.txt`，trace 追加「汇总结果已落盘: 路径」 |
+| FACT 沉淀 | 叶子 todo 完成后 `LayeredMemoryGateway.saveFact("delegate-todo:{todoPath}", "{todoId}/{title}/结论:{截断 500}/{任务:{截断 200}}", 1.0)`；topic 含层级路径幂等去重；记忆未启用 / 未注入时静默跳过，失败仅告警不影响编排；trace 追加「结论已沉淀记忆」 |
+| 单元测试 | `TodoDelegateOrchestratorTest` 新增 `testP0_persistArtifactsAndFacts`（断言 plan.json/result.txt 落盘、落盘与沉淀轨迹、t1/t2 的 FACT topic 与内容），fake 扩展 `writeFile` 记录 + `FakeLayeredMemoryGateway` 记录 saveFact |
+
+**验收结果**：infrastructure 模块全量测试 exit 0（TodoDelegateOrchestratorTest 5 例 + RuleBasedAgentRouterTest 5 例全绿）；既有 4 例 delegate 单测回归通过（落盘/记忆为可选增强，未配置或失败时行为不变）。
+
+### 11.3 P1 交互与上下文（已实施 ✅，2026-08-19）
+
+**目标**：引入 Todo 生命周期状态机与人工审批门禁（关键节点可暂停人工确认），并对汇总注入做相关性 top-k 压缩，控制上下文成本。
+
+| # | 任务 | 涉及文件 | 要点 |
+|---|------|----------|------|
+| P1-1 | Todo 状态机模型 | 新增 `TodoStatus`（enum：paused / approved / running / done / failed）；`TodoDefinition` 增加 `status` 字段 | 状态流转：paused→approved→running→done；失败→failed（按 `onFailure` 策略继续或终止） |
+| P1-2 | 审批门禁定义 | `DelegateDefinition` 增加 `approvalGate`（`none`（默认）/ `root`（仅根规划）/ `all`（每层））与 `approvalTimeoutMs` | 命中门禁的层：规划完成后置 paused 并抛出「等待审批」信号，不进入委派 |
+| P1-3 | 审批 API | app 层新增 `pendingTasks` / `approve` / `reject` 接口（REST + WebSocket + Shell 命令） | 按 `{sessionId}/{layerPath}` 定位暂停节点；approve → 状态机推进继续执行；reject → 回退直执行或终止 |
+| P1-4 | 执行引擎挂起/恢复 | `TodoDelegateOrchestrator.executeNode` | 检测到 paused 节点时中断当前线程等待（异步任务 + 轮询 / `CompletableFuture` 挂起），审批完成后从断点继续 |
+| P1-5 | 上下文压缩（top-k 检索） | 复用分层记忆 `VectorMemoryRetriever` / `EmbeddingGateway` | 汇总阶段不全量注入：子结果先写临时页，检索与父任务最相关 top-k（默认 3，可配置）注入汇总 prompt；`resultPass=file` 链路保留 |
+
+**验收标准**
+- 配置 `approvalGate=root` 后，根规划完成即暂停，审批通过前无任何子 Agent 被调用；
+- approve / reject 后编排正确继续或终止，状态机日志完整；
+- 汇总 prompt 注入的子结果数 ≤ top-k，且质量不劣于全量注入（人工对比 3 例）；
+- 单测新增：状态流转、门禁挂起/恢复、top-k 截断。
+
+**风险与降级**：挂起/恢复依赖线程模型——同步 `orchestrate` 需改为「异步任务 + 状态查询」两段式（审批后由任务驱动继续），`ChatCmdExe` 需适配返回「等待审批」中间态；若影响面过大，P1-2/3/4 降级为「记录审批日志 + 提供人工重跑入口」，不与编排执行内联。
+
+**落地说明（已完成）**
+
+| 改动点 | 说明 |
+|--------|------|
+| `TodoStatus` 状态机 | infrastructure/collaboration 新增 enum（paused / approved / running / done / failed）；`TodoDefinition` 增加 `status` 字段；`runTodo` 执行前置 running、完成后置 done / failed（skip 失败标记）；门禁层 plan 快照在等待期间保持 paused，批准后置 approved |
+| 审批门禁配置 | `DelegateDefinition` 增加 `approvalGate`（none 默认 / root / all）与 `approvalTimeoutMs`（默认 0=无限等待）、`topK`（默认 3）及 `xxxOrDefault()`；`validate()` 增加 approvalGate ∈ {none,root,all} 与 topK ≥ 1 校验 |
+| 挂起/恢复模型 | **保持同步 `orchestrate` 主链路零改动**（未改两段式）：新增 `ApprovalRegistry` + `PendingApproval`（`CompletableFuture` 挂起），`executeNode` 规划完成后命中门禁即注册节点、todos 置 paused、trace 推送「等待人工审批: {sessionId}/{layerKey}」并 `await(timeout)` 阻塞；approve → 置 approved 继续委派；reject / 超时 → 该层降级直执行（trace 注明「审批已拒绝 / 等待审批超时，该层降级直执行」）；决策后节点自动从注册表移除（幂等）。`ChatCmdExe` / `AgentController` 同步链路零改动 |
+| 审批 API | client 新增 `ApprovalCmd` / `PendingApprovalDTO`；app 新增 `ApprovalService`（pendingTasks / approve / reject）；adapter 新增 `ApprovalController`（`GET /agent/pending-tasks`、`POST /agent/approve`、`POST /agent/reject`）+ `AgentWebSocketHandler` 扩展消息类型（approve / reject / pending_tasks，`WsRequest` 增加 `layerKey`） |
+| top-k 上下文压缩 | 汇总阶段 text 模式且子结果数 > topK 时，按子结果与父任务文本的字符 bigram 覆盖率降序取 top-k 注入，trace 输出「子结果已按相关性压缩至 top-N」；topK ≥ 子结果数时全量注入（行为与 P0 前一致）；`resultPass=file` 链路保留（注入文件路径） |
+| orchestrations.json | `todo-delegate` 配置新增 `approvalGate: none`、`approvalTimeoutMs: 0`、`topK: 3`（均为默认值，未配置时行为与既有 delegate 完全一致） |
+| 单元测试 | `TodoDelegateOrchestratorTest` 新增 5 例：root 门禁审批前无子 Agent 调用且 plan 处于 paused、批准后恢复执行并清空注册表 / 拒绝降级直执行 / 超时降级直执行 / all 门禁逐层暂停（root → t1）逐层批准到叶子 / top-k 只注入最相关子结果且 topK ≥ 数量时全量注入 |
+
+**实施结论与差异**：挂起/恢复未按「两段式异步 + 状态查询」改造主链路，而是采用「编排线程内 `CompletableFuture` 阻塞等待 + 审批 API 决策唤醒」——同步 `orchestrate` 语义与 `ChatCmdExe` 零改动，审批等待期间 SSE / 同步请求保持连接（由 `approvalTimeoutMs` 兜底防悬挂）；top-k 相关性未依赖向量检索（记忆未启用时亦可用），采用父任务与子结果字符 bigram 覆盖率本地打分，`resultPass=file` 链路保留。Shell 模式审批交互补充：普通对话改由后台 daemon 线程执行（REPL 主循环不阻塞），命中门禁等待期间可用 `/pending` / `/approve` / `/reject` 决策唤醒；`/approve` / `/reject` 的 sessionId 可选（编排首次创建会话时 shell 的 sessionId 可能未同步，以 `/pending` 输出为准）；`planMode` 分支保持同步（与审批门禁同用场景建议 `approvalGate=none` 或使用 Web 模式）。
+
+**验收结果**：`mvn test` 全量 exit 0（15 例全绿：TodoDelegateOrchestratorTest 10 例【既有 5 + P1 新增 5】+ RuleBasedAgentRouterTest 5 例）；approvalGate=none（默认）时既有 delegate 测试全部回归通过（门禁为可选增强，未配置不暂停、top-k 不压缩）。Shell 审批命令为终端交互（无单测），`mvn -pl mwb-ai-claw-adapter -am compile` 编译通过。
+
+### 11.4 P2 智能与组合（已实施 ✅，2026-08-19）
+
+**目标**：规划不再静态——执行中根据中间结果调整剩余 Todo；并支持 Todo 级嵌套复用其他编排。
+
+| # | 任务 | 涉及文件 | 要点 |
+|---|------|----------|------|
+| P2-1 | 动态规划（Plan-Do-Reflect） | `TodoDelegateOrchestrator`、plan.json 读写 | 首个 Wave 执行完成后，规划 Agent 结合已得结果对剩余 Todo 做一次 re-plan（新增/删除/调整后续 Wave）；受 `maxTodos` / `maxDepth` 与 `replanRounds`（默认 1）限制 |
+| P2-2 | Re-plan 协议 | 复用 §4.2 规划协议 + `adjust` 动作 | 规划输出支持 `{"todos": [...], "adjust": [{"todoId","action":"keep\|drop\|modify","description"}]}`，仅作用于未执行 Wave |
+| P2-3 | 编排嵌套组合 | 新增 `ExecutionUnit.runOrchestration(message, orchestrationId)`（或经 `OrchestratorRegistry` 按 id 调起） | Todo 配置支持 `orchestrationId` 字段（可引用 pipeline / conversational / delegate 自身；防环：禁止引用当前任务树祖先层） |
+| P2-4 | 嵌套上下文与结果回传 | `TodoDelegateOrchestrator` | 嵌套编排返回的 `CollaborationResult.reply` 作为该 Todo 结果参与上层汇总；trace 层级标签沿用 `[Todo:t1/...]` |
+
+**验收标准**
+- 场景：规划 5 个 todo，首个 Wave 执行后 re-plan 将第 4 个 todo 拆为 2 个，最终执行 6 个节点且结果正确汇总；
+- 嵌套编排：delegate 的某 todo 指定 pipeline 编排执行，产物回传正确；循环引用（A→B→A）启动校验报错；
+- 全量回归 + 新增单测：re-plan 调整、嵌套调用、循环引用检测。
+
+**落地说明（已完成）**
+
+| 改动点 | 说明 |
+|--------|------|
+| 配置扩展 | `DelegateDefinition` 新增 `replanRounds`（默认 0=不启用，§11.5 兼容约束；`validate` 校验 ≥ 0）；`TodoDefinition` 新增 `orchestrationId`（可空）；`orchestrations.json` 的 todo-delegate 增加 `replanRounds: 0` |
+| P2-1 动态规划 | `executeNode` 委派改为 Wave 循环：每个 Wave 执行完成后，若仍有剩余 Wave 且 `replanUsed < replanRounds`，规划者结合已得结果与剩余 Todo 做一次 re-plan；调整成功则以新剩余 Wave 继续，失败保持原剩余；re-plan 后 todo 的 `dependsOn` 可引用已完成 todo（视为已满足，不重新执行），拓扑排序对集合外依赖跳过，支持把单个 todo 拆为多个 |
+| P2-2 Re-plan 协议 | 新增 `replan()` + `parseReplan()`：规划输出支持完整 `{"todos":[...]}` 替换剩余，或 `{"adjust":[{"todoId","action":"keep|drop|modify","description"}]}` 增量调整；过滤未知依赖引用、受 `maxTodos` 截断；调整后的剩余 todo 写 `plan-{layerPath}.json` 并输出 `[Replan]` 轨迹（含「N → M」数量变化） |
+| P2-3 编排嵌套组合 | `ExecutionUnit` 新增 `runOrchestration(message, orchestrationId)`（domain 接口 + `ExecutionUnitImpl` 装配嵌套上下文：复用 Agent 注册表 / 执行单元，按 id 解析定义并调起插件）；`runTodo` 中 todo 配置 `orchestrationId` 时优先走嵌套编排分支（pipeline / conversational / delegate 自身），否则按既有递归 / 直执行 |
+| P2-3 防环 | `orchestrate()` 入口用线程级嵌套调用链（`ThreadLocal<Deque>`）检测：进入时 push 编排 id、退出时 pop（配对清理，并行 Wave 线程各自独立）；嵌套进入时若 id 已在链中（A→B→A）立即抛 `BizException`「编排循环引用」终止——因 todo 由 LLM 运行时生成，防环在运行时按调用链检测而非启动期静态校验 |
+| P2-4 嵌套上下文与结果回传 | 嵌套编排返回的 `CollaborationResult.reply` 作为该 Todo 结果参与本层汇总（`resultPass=file/text` 均生效）；trace 沿用 `[Todo:{todoPath}] 嵌套编排 {id} 完成: ...` 层级标签；嵌套 todo 结论同样沉淀分层记忆 FACT |
+| 单元测试 | `TodoDelegateOrchestratorTest` 新增 5 例：首波后 re-plan 把第 4 个 todo 拆为 2 个（5→6 节点，含依赖顺序断言）/ adjust 协议 keep-drop-modify 生效 / replanRounds=0（默认）不触发 / todo 指定 pipeline 嵌套编排且结果注入汇总 prompt / todo 嵌套 delegate 自身（A→A）触发循环引用终止 |
+
+**实施结论与差异**：`replanRounds` 默认值按 §11.5 兼容约束取 **0（不启用）**（§11.4 表格草稿的「默认 1」以兼容性约束为准，未配置时行为与既有 delegate 完全一致）；嵌套调起采用文档首选方案 `ExecutionUnit.runOrchestration`（而非编排器内注入注册表）；防环因 todo 运行时生成，落地为「运行时嵌套调用链检测」（`ThreadLocal<Deque>` 记录当前线程编排 id 栈），无法在启动期静态校验，配置层 `validate()` 仅校验 `replanRounds` 与既有字段。
+
+**验收结果**：`mvn test` 全量 exit 0（20 例全绿：TodoDelegateOrchestratorTest 15 例【既有 5 + P0 1 + P1 5 + P2 新增 4】+ RuleBasedAgentRouterTest 5 例）；`orchestrations.json` JSON 校验通过；replanRounds=0（默认）与未配置 `orchestrationId` 时既有 delegate 测试全部回归通过（re-plan 与嵌套均为可选增强）。
+
+### 11.5 里程碑与回归约束
+
+- **阶段合入门槛**：`mvn test` 全绿 + `orchestrations.json` 启动校验通过 + README / 技术方案文档同步（沿用本特性「实施必须同步文档」约定）；
+- **P0 为一切前置**：P1-③ 与 P2-⑤ 若遇实现阻力，均可以「独立 API 版」降级交付，不阻塞其他阶段；
+- **兼容性**：新增配置字段全部带默认值（`approvalGate=none`、`replanRounds=0`、`topK=3`），未配置时行为与当前 delegate 完全一致，既有编排不受影响。

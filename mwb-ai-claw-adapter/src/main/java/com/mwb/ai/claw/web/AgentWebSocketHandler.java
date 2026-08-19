@@ -1,11 +1,14 @@
 package com.mwb.ai.claw.web;
 
-import com.alibaba.cola.dto.SingleResponse;
+import com.mwb.ai.claw.dto.SingleResponse;
+import com.mwb.ai.claw.agent.ApprovalService;
 import com.mwb.ai.claw.agent.executor.ChatCmdExe;
 import com.mwb.ai.claw.api.AgentServiceI;
+import com.mwb.ai.claw.dto.ApprovalCmd;
 import com.mwb.ai.claw.dto.ChatCmd;
 import com.mwb.ai.claw.dto.CreateSessionCmd;
 import com.mwb.ai.claw.dto.data.ChatResponseDTO;
+import com.mwb.ai.claw.dto.data.PendingApprovalDTO;
 import com.mwb.ai.claw.dto.data.SessionDTO;
 import com.mwb.ai.claw.domain.core.ProgressCallback;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
@@ -24,6 +27,7 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 import javax.annotation.PreDestroy;
 import javax.annotation.Resource;
 import java.io.IOException;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -58,6 +62,9 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
     @Resource
     private ChatCmdExe chatCmdExe;
 
+    @Resource
+    private ApprovalService approvalService;
+
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
     @Override
@@ -76,11 +83,20 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
                 WsRequest req = JsonUtils.fromJson(payload, WsRequest.class);
                 String type = req.getType() != null ? req.getType() : "chat";
 
-                if ("chat".equals(type)) {
-                    handleChat(session, req);
-                } else {
-                    sendEvent(session, "error", "不支持的消息类型: " + type);
-                    sendEvent(session, "done", null);
+                switch (type) {
+                    case "chat":
+                        handleChat(session, req);
+                        break;
+                    case "approve":
+                    case "reject":
+                        handleApproval(session, req, type);
+                        break;
+                    case "pending_tasks":
+                        handlePendingTasks(session, req);
+                        break;
+                    default:
+                        sendEvent(session, "error", "不支持的消息类型: " + type);
+                        sendEvent(session, "done", null);
                 }
             } catch (Exception e) {
                 log.error("WebSocket 消息处理异常: id={}, err={}", session.getId(), e.getMessage(), e);
@@ -90,6 +106,32 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
                 } catch (Exception ignored) {}
             }
         });
+    }
+
+    /**
+     * 人工审批（approve / reject）：将决策写入待审批注册表，唤醒等待中的编排线程继续。
+     */
+    private void handleApproval(WebSocketSession session, WsRequest req, String type) throws IOException {
+        ApprovalCmd cmd = new ApprovalCmd();
+        cmd.setSessionId(req.getSessionId());
+        cmd.setLayerKey(req.getLayerKey());
+        SingleResponse<Void> resp = "approve".equals(type)
+                ? approvalService.approve(cmd) : approvalService.reject(cmd);
+        if (resp.isSuccess()) {
+            sendEvent(session, "approval", ("approve".equals(type) ? "已批准" : "已拒绝") + ": " + req.getLayerKey());
+        } else {
+            sendEvent(session, "error", resp.getErrMessage());
+        }
+        sendEvent(session, "done", null);
+    }
+
+    /**
+     * 待审批节点列表：以 JSON 文本返回 [{sessionId, layerKey, task, todoCount, createdAt}...]。
+     */
+    private void handlePendingTasks(WebSocketSession session, WsRequest req) throws IOException {
+        SingleResponse<List<PendingApprovalDTO>> resp = approvalService.pendingTasks(req.getSessionId());
+        sendEvent(session, "approval", JsonUtils.toJson(resp.getData()));
+        sendEvent(session, "done", null);
     }
 
     /**

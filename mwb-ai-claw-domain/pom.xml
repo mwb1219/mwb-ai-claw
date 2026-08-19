@@ -18,17 +18,6 @@
             <artifactId>mwb-ai-claw-client</artifactId>
         </dependency>
 
-        <!-- COLA components -->
-        <dependency>
-            <groupId>com.alibaba.cola</groupId>
-            <artifactId>cola-component-domain-starter</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.alibaba.cola</groupId>
-            <artifactId>cola-component-exception</artifactId>
-        </dependency>
-        <!-- COLA components End-->
-
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>

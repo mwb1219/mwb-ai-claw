@@ -1,7 +1,7 @@
 package com.mwb.ai.claw.agent.executor;
 
-import com.alibaba.cola.dto.SingleResponse;
-import com.alibaba.cola.exception.BizException;
+import com.mwb.ai.claw.dto.SingleResponse;
+import com.mwb.ai.claw.exception.BizException;
 import com.mwb.ai.claw.domain.collaboration.AgentOrchestrator;
 import com.mwb.ai.claw.domain.collaboration.CollaborationResult;
 import com.mwb.ai.claw.domain.collaboration.ExecutionUnit;

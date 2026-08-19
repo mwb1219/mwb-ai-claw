@@ -1,7 +1,6 @@
 package com.mwb.ai.claw.agent;
 
-import com.alibaba.cola.dto.SingleResponse;
-import com.alibaba.cola.catchlog.CatchAndLog;
+import com.mwb.ai.claw.dto.SingleResponse;
 import com.mwb.ai.claw.api.AgentServiceI;
 import com.mwb.ai.claw.agent.executor.ChatCmdExe;
 import com.mwb.ai.claw.agent.executor.CreateSessionCmdExe;
@@ -21,7 +20,6 @@ import java.util.List;
  * Agent 应用服务实现：委托给各命令/查询执行器。
  */
 @Service
-@CatchAndLog
 public class AgentServiceImpl implements AgentServiceI {
 
     @Resource

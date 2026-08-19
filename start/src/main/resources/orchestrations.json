@@ -59,6 +59,30 @@
           "thinking": false
         }
       }
+    },
+    {
+      "id": "todo-delegate",
+      "type": "delegate",
+      "description": "主 Agent 思考规划并拆解为 Todo 列表，委托子 Agent 执行；子 Agent 可递归再委托，逐层汇总。适用于复杂、多步骤、跨领域任务",
+      "keywords": ["规划并实现", "复杂任务", "任务拆解", "分步骤", "分步完成", "多步骤", "拆解并执行", "团队协作", "分工完成", "整体规划"],
+      "agents": ["architect", "coder", "researcher", "reviewer"],
+      "config": {
+        "delegate": {
+          "plannerAgentId": "architect",
+          "maxTodos": 8,
+          "maxDepth": 2,
+          "parallel": true,
+          "concurrency": 4,
+          "onFailure": "abort",
+          "retries": 1,
+          "thinking": false,
+          "resultPass": "text",
+          "approvalGate": "none",
+          "approvalTimeoutMs": 0,
+          "topK": 3,
+          "replanRounds": 0
+        }
+      }
     }
   ]
 }

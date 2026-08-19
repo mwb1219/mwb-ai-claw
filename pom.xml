@@ -16,8 +16,6 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <maven.deploy.skip>true</maven.deploy.skip>
 
-        <cola.components.version>5.0.0</cola.components.version>
-
         <spring-boot.version>2.7.2</spring-boot.version>
         <!-- 覆盖 Lombok 版本以兼容 JDK 21 及新版语言服务器编译器（1.18.30 会触发 lombok.javac.Javac 初始化失败） -->
         <lombok.version>1.18.46</lombok.version>
@@ -80,13 +78,6 @@
             </dependency>
             <!--Project modules End-->
 
-            <dependency>
-                <groupId>com.alibaba.cola</groupId>
-                <artifactId>cola-components-bom</artifactId>
-                <version>${cola.components.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>

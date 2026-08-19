@@ -1,12 +1,12 @@
 package com.mwb.ai.claw.domain.collaboration;
 
+import java.nio.file.Path;
+
 import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.ProgressCallback;
 import com.mwb.ai.claw.domain.core.ReActResult;
 import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
-
-import java.nio.file.Path;
 
 /**
  * 公共执行单元：编排器复用的执行原语（ReActLoopService + 会话 + 记忆 + 产物落盘）。
@@ -44,4 +44,17 @@ public interface ExecutionUnit {
      * 将阶段产物落盘到工作目录，返回文件路径。
      */
     Path writeArtifact(String workdir, String stageId, String content);
+
+    /**
+     * 将文本以精确文件名写入指定目录（目录不存在自动创建，同名文件覆盖），返回文件路径。
+     * 供编排器按规范文件名落盘（如 delegate 编排的 plan.json / result.txt）。
+     */
+    Path writeFile(String dir, String fileName, String content);
+
+    /**
+     * 嵌套调起一个编排（按编排 id 从注册中心解析定义并执行），返回其协作结果。
+     * 供编排器在 Todo 上嵌套组合其他编排（delegate 的 todo 可引用 pipeline / conversational / delegate 自身），
+     * 返回结果 reply 作为该 Todo 的产出参与上层汇总。防环由各编排插件自身保证（如 delegate 的嵌套调用链检测）。
+     */
+    CollaborationResult runOrchestration(String message, String orchestrationId);
 }

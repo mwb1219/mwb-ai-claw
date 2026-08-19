@@ -246,7 +246,7 @@ mwb-ai-claw — Agent Shell 命令行客户端
     -V, --version              显示版本号并退出
         --approval-mode <模式>    审批模式: auto | ask(默认) | read-only
         --model <模型名>          覆盖默认模型（等价 --agent.model=xxx）
-        --orchestration <id>     覆盖默认编排（routing | code-review-pipeline | team-discussion 等）
+        --orchestration <id>     覆盖默认编排（routing | code-review-pipeline | team-discussion | todo-delegate 等）
         --session <会话id>        恢复指定会话进入交互（等价 --resume）
         --prompt <文本>           单轮非交互问答（等价 -p）
         --resume <会话id>         恢复指定会话进入交互

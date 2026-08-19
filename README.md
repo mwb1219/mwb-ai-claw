@@ -133,7 +133,7 @@
 - [x] 配置与编排分离：`agents.json`（Agent 注册表，跨编排复用）+ `orchestrations.json`（编排注册表 + 意图元数据），彻底废弃旧 `{mode}-agents.json` 与 `agent.mode`
 - [x] 编排插件化（SPI）：`AgentOrchestrator` 接口（`type`/`validate`/`orchestrate`），`OrchestratorRegistry` 自动收集注册，新增编排零主链路改动
 - [x] 意图驱动选择：`OrchestrationSelector` 选编排 → 编排内部选 Agent（三层决策分离）；优先级：显式指定 > 规则意图匹配 > 默认兜底
-- [x] 内置编排：`RoutingOrchestrator`（单专家独立处理，默认兜底）+ `PipelineOrchestrator`（多阶段流水线 analyze→implement→review，产物 text/file 传递，失败 abort/continue）+ `ConversationalOrchestrator`（多方专家多轮讨论，首轮并行观点→讨论轮串行回应→收敛，支持 consensus / moderator / best 三种收敛策略）
+- [x] 内置编排：`RoutingOrchestrator`（单专家独立处理，默认兜底）+ `PipelineOrchestrator`（多阶段流水线 analyze→implement→review，产物 text/file 传递，失败 abort/continue）+ `ConversationalOrchestrator`（多方专家多轮讨论，首轮并行观点→讨论轮串行回应→收敛，支持 consensus / moderator / best 三种收敛策略）+ `TodoDelegateOrchestrator`（主 Agent 思考→规划 Todo 列表→委托子 Agent 执行，子 Agent 可递归再委托，无依赖 Todo 并行执行、依赖 Todo 分层推进，逐层汇总返回；产物按 `{workdir}/{sessionId}/{时间戳}` 隔离落盘 plan.json/result.txt，叶子结论沉淀分层记忆 FACT；支持人工审批门禁 `approvalGate=root/all`（REST/WebSocket 审批 API 或 Shell 命令 `/pending` `/approve <layerKey>` `/reject <layerKey>`，拒绝或超时降级直执行）、汇总 top-k 上下文压缩、`replanRounds` 动态规划（首波执行后结合已得结果调整剩余 Todo，keep/drop/modify 协议）与 Todo 级编排嵌套组合（`orchestrationId` 可引用 pipeline/conversational/delegate，嵌套调用链防环 A→B→A））
 - [x] 流水线阶段类型化：`PipelineStage` 实体类解析 stages（`thinking` 开关 / `pass` / `onFailure` / 空回复重试）
 - [x] 对话式定义类型化：`ConversationDefinition` 实体类解析 conversation 配置（`rounds` / `participants` / `moderator` / `convergence` / `visibleHistory` / `thinking`）
 - [x] 思考模式控制：阶段/参与者级 `thinking: false` 关闭推理（DeepSeek 思考模式会吃满输出预算导致正文为空）
@@ -143,7 +143,7 @@
 
 - [x] Skill 定义标准：`skills/<name>/SKILL.md`（YAML frontmatter：`name` / `description` + Markdown 指令正文）+ 可选 `resources/` 资源目录，遵循 Agent Skills 开放标准
 - [x] 渐进式披露（三层）：L1 技能清单（name + description）常驻 system prompt → L2 `use_skill` 工具按需加载 SKILL.md 全文 → L3 资源经 `$SKILL_DIR` 按需读取，控制 token 成本
-- [x] 零侵入扩展：新增技能 = 放目录重启即可，所有 Agent（routing / pipeline / conversational 任意编排内）自动可用，主链路零改动
+- [x] 零侵入扩展：新增技能 = 放目录重启即可，所有 Agent（routing / pipeline / conversational / delegate 任意编排内）自动可用，主链路零改动
 - [x] `use_skill` 注册为全局工具（对齐 MCP 工具），技能清单由 `DefaultContextAssembler` 注入 system prompt
 - [x] 启动校验：技能 name / description 缺失、name 与目录不一致、name 重复 → 启动报错
 - [x] 内置 12 个技能（classpath 模板）：`code-review`、`project-structure-analysis`、`unit-test-writing`、`git-workflow`、`ddd-modeling`、`tech-design-doc`、`web-research`、`database-design`、`doc-writing-guide`、`markdown-diagramming`、`doc-review`、`example-skill`（详见 `docs/feature-skill-support技术方案(SUBMIT).md` §6.2）
@@ -267,11 +267,14 @@ infrastructure/
 │   ├── OrchestratorRegistry      # 编排插件注册中心（SPI 自动收集）
 │   ├── PipelineStage             # 流水线阶段实体（类型化解析 stages）
 │   ├── ConversationDefinition    # 对话式定义（类型化解析 config.conversation）
+│   ├── DelegateDefinition        # 委托编排定义（类型化解析 config.delegate）
+│   ├── TodoDefinition            # 委托编排规划产物（Todo 任务项）
 │   ├── ExecutionUnitImpl         # 执行原语实现（临时会话/产物落盘）
 │   └── strategy/                 # 编排 / 选择策略实现（SPI 插件）
 │       ├── RoutingOrchestrator       # 路由编排（单专家独立处理，默认兜底）
 │       ├── PipelineOrchestrator      # 流水线编排（阶段接力）
 │       ├── ConversationalOrchestrator # 对话式编排（多专家多轮讨论 + 收敛）
+│       ├── TodoDelegateOrchestrator  # 委托编排（规划 Todo → 委派子 Agent，可递归 + 并行）
 │       ├── RuleBasedOrchestrationSelector # 关键词意图选择器（命中数最多者胜出）
 │       └── LlmOrchestrationSelector     # LLM 意图选择器（llm 模式：语义优先 + 规则兜底，@Primary）
 └── config/
@@ -660,7 +663,7 @@ Agent 配置与编排定义完全解耦，分两个独立文件存放（`start/s
 | 字段           | 必填 | 说明                                        |
 | ------------ | -- | ----------------------------------------- |
 | `id`         | 是  | 编排标识（意图命中 / 显式指定 / 默认兜底均引用此 id）        |
-| `type`       | 是  | 编排插件类型：`routing` / `pipeline`（已注册 SPI，可扩展） |
+| `type`       | 是  | 编排插件类型：`routing` / `pipeline` / `conversational` / `delegate`（已注册 SPI，可扩展） |
 | `description` | 否 | 编排能力描述                                  |
 | `keywords`   | 否  | 意图关键词（命中数最多者胜出；**兜底编排不设 keywords 不参与竞争**） |
 | `agents`     | 否  | 该编排涉及 Agent 列表（启动校验引用存在性）               |
@@ -693,6 +696,9 @@ java -jar start/target/start-*.jar --spring.profiles.active=shell
 
 # 修改默认兜底编排 / 选择器
 java -jar start/target/start-*.jar --agent.orchestration=code-review-pipeline --agent.orchestration-selector=rule
+
+# 默认使用委托编排（主 Agent 规划 Todo 拆解任务，委托子 Agent 并行/递归执行）
+java -jar start/target/start-*.jar --agent.orchestration=todo-delegate
 
 # 启用 LLM 语义意图选择（LLM 优先 + 规则兜底；如「Kafka 还是 RabbitMQ」无需关键词即可命中 team-discussion）
 java -jar start/target/start-*.jar --agent.orchestration-selector=llm

@@ -8,7 +8,7 @@ import lombok.Data;
 @Data
 public class WsRequest {
 
-    /** 消息类型：chat */
+    /** 消息类型：chat | approve | reject | pending_tasks */
     private String type;
 
     /** 用户消息内容 */
@@ -19,4 +19,7 @@ public class WsRequest {
 
     /** Agent ID（可选） */
     private String agentId;
+
+    /** 审批层级标识（approve / reject 时必填：根层 "root"，子层为 todoId 路径如 "t1/t1-1"） */
+    private String layerKey;
 }

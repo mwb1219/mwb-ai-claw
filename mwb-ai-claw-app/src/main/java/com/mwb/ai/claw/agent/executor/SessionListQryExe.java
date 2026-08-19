@@ -1,6 +1,6 @@
 package com.mwb.ai.claw.agent.executor;
 
-import com.alibaba.cola.dto.SingleResponse;
+import com.mwb.ai.claw.dto.SingleResponse;
 import com.mwb.ai.claw.agent.assembler.SessionAssembler;
 import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.memory.MemoryGateway;

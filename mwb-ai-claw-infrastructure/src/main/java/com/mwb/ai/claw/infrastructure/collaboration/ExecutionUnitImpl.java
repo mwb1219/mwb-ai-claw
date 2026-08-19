@@ -1,7 +1,23 @@
 package com.mwb.ai.claw.infrastructure.collaboration;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.UUID;
+
+import javax.annotation.Resource;
+
+import org.springframework.stereotype.Component;
+
+import com.mwb.ai.claw.domain.collaboration.AgentOrchestrator;
+import com.mwb.ai.claw.domain.collaboration.CollaborationResult;
 import com.mwb.ai.claw.domain.collaboration.ExecutionUnit;
+import com.mwb.ai.claw.domain.collaboration.OrchestrationContext;
+import com.mwb.ai.claw.domain.collaboration.OrchestrationDefinition;
 import com.mwb.ai.claw.domain.core.Agent;
+import com.mwb.ai.claw.domain.core.AgentGateway;
 import com.mwb.ai.claw.domain.core.ProgressCallback;
 import com.mwb.ai.claw.domain.core.ReActLoopService;
 import com.mwb.ai.claw.domain.core.ReActResult;
@@ -9,16 +25,8 @@ import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
 import com.mwb.ai.claw.domain.memory.MemoryGateway;
 import com.mwb.ai.claw.dto.data.AgentErrorCode;
-import com.alibaba.cola.exception.BizException;
-import org.springframework.stereotype.Component;
-
-import javax.annotation.Resource;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.UUID;
+import com.mwb.ai.claw.exception.BizException;
+import com.mwb.ai.claw.infrastructure.config.OrchestrationConfigLoader;
 
 /**
  * 公共执行单元实现：封装主会话 / 临时会话执行与产物落盘。
@@ -31,6 +39,15 @@ public class ExecutionUnitImpl implements ExecutionUnit {
 
     @Resource
     private ReActLoopService reActLoopService;
+
+    @Resource
+    private AgentGateway agentGateway;
+
+    @Resource
+    private OrchestrationConfigLoader orchestrationLoader;
+
+    @Resource
+    private OrchestratorRegistry orchestratorRegistry;
 
     @Override
     public Session getOrCreateSession(String sessionId, Agent agent) {
@@ -89,5 +106,32 @@ public class ExecutionUnitImpl implements ExecutionUnit {
             throw new BizException(AgentErrorCode.B_AGENT_CONFIG_ERROR.getErrCode(),
                     "流水线产物落盘失败: " + stageId + " - " + e.getMessage());
         }
+    }
+
+    @Override
+    public Path writeFile(String dir, String fileName, String content) {
+        try {
+            Path directory = Paths.get(dir).toAbsolutePath().normalize();
+            Files.createDirectories(directory);
+            Path file = directory.resolve(fileName);
+            Files.write(file, content.getBytes(StandardCharsets.UTF_8));
+            return file;
+        } catch (IOException e) {
+            throw new BizException(AgentErrorCode.B_AGENT_CONFIG_ERROR.getErrCode(),
+                    "编排产物落盘失败: " + fileName + " - " + e.getMessage());
+        }
+    }
+
+    @Override
+    public CollaborationResult runOrchestration(String message, String orchestrationId) {
+        OrchestrationDefinition definition = orchestrationLoader.get(orchestrationId);
+        AgentOrchestrator orchestrator = orchestratorRegistry.resolve(definition);
+        // 嵌套上下文：复用全局 Agent 注册表 / 执行单元，独立消息与会话（嵌套编排内部自建临时会话与轨迹）
+        OrchestrationContext ctx = new OrchestrationContext();
+        ctx.setMessage(message);
+        ctx.setDefinition(definition);
+        ctx.setAgentGateway(agentGateway);
+        ctx.setExecutionUnit(this);
+        return orchestrator.orchestrate(ctx);
     }
 }

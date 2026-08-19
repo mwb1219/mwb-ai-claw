@@ -1,6 +1,6 @@
 package com.mwb.ai.claw.infrastructure.collaboration.strategy;
 
-import com.alibaba.cola.exception.BizException;
+import com.mwb.ai.claw.exception.BizException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.mwb.ai.claw.domain.collaboration.AgentOrchestrator;
 import com.mwb.ai.claw.domain.collaboration.CollaborationResult;

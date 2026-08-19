@@ -8,7 +8,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  *
  * @author Frank Zhang
  */
-@SpringBootApplication(scanBasePackages = {"com.mwb.ai.claw", "com.alibaba.cola"})
+@SpringBootApplication(scanBasePackages = {"com.mwb.ai.claw"})
 public class Application {
 
     public static void main(String[] args) {

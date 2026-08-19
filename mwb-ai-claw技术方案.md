@@ -27,7 +27,7 @@ mwb-ai-claw 正是在此背景下诞生的 **Java 版智能体 Agent 框架**，
 | **ReAct 推理** | 思考→行动→观察迭代 | `ReActLoopService` 驱动 LLM 自主决策工具调用 |
 | **工具生态** | 标准化工具接入 | 内置工具（file/shell/http/memory）+ MCP 协议（stdio/HTTP）+ SPI 扩展 |
 | **分层记忆** | 突破上下文窗口 | 五层记忆（指令→Hot→Summary→Fact→Archive）+ Token 预算 + 检索召回 |
-| **多 Agent 编排** | 专家协作 | 编排 SPI（routing/pipeline/conversational）+ 配置与编排分离 + 意图驱动选择 |
+| **多 Agent 编排** | 专家协作 | 编排 SPI（routing/pipeline/conversational/delegate）+ 配置与编排分离 + 意图驱动选择 |
 | **多模型适配** | 兼容主流 LLM | OpenAI 兼容 API（DeepSeek/通义千问等）+ 流式 SSE 解析 + 独立模型配置 |
 | **架构质量** | 高可扩展、可测试 | 整洁架构 + DDD 分层 + 六边形端口适配器 + 依赖倒置 |
 
@@ -65,7 +65,7 @@ mwb-ai-claw-parent (pom)
 | 子域 | 职责 | 核心类型 |
 | ---- | ---- | -------- |
 | **core 核心域** | Agent/Session/Message 聚合、ReAct 引擎、路由 | `Session`、`Agent`、`Message`、`ReActLoopService`、`ModelConfig`、`ReActResult` |
-| **collaboration 编排域** | 多 Agent 协作编排（SPI 插件化） | `OrchestrationDefinition`、`AgentOrchestrator`、`OrchestrationSelector`、`ExecutionUnit`、`CollaborationResult` |
+| **collaboration 编排域** | 多 Agent 协作编排（SPI 插件化） | `OrchestrationDefinition`、`AgentOrchestrator`、`OrchestrationSelector`、`ExecutionUnit`、`CollaborationResult`、`TodoDefinition`、`DelegateDefinition` |
 | **context 上下文工程域** | 上下文统一组装与消息清洗 | `ContextAssembler` |
 | **llm LLM 域** | 大模型调用抽象（端口） | `LlmGateway`、`EmbeddingGateway`、`LlmRequest/Response`、`LlmStreamCallback` |
 | **tool 工具域** | 工具执行抽象与安全 | `ToolGateway`、`ToolExecutor`、`ToolSpec`、`ToolResult` |
@@ -710,7 +710,7 @@ DOMAIN ..> AGENT_IMPL : AgentGateway
         -List~String~ agents
     }
     note right of OrchestrationDefinition
-      type: routing | pipeline | conversational
+      type: routing | pipeline | conversational | delegate
       config 由插件自行解释
     end note
     ' OrchestrationContext <<ValueObject>>
@@ -1381,7 +1381,7 @@ C-->>C: CollaborationResult(reply=结论, agentId=moderator)
 **编排 SPI（`AgentOrchestrator`）**：
 - 实现类通过 `type()` 声明编排类型标识，注册中心在启动期自动收集。
 - 新增编排方式仅需：(1) 实现接口并注册为 Spring Bean；(2) 在 `orchestrations.json` 增加一条定义。
-- 内置实现：`RoutingOrchestrator`（路由，单 Agent 独立处理）、`PipelineOrchestrator`（流水线，多阶段接力）、`ConversationalOrchestrator`（对话式，多方多轮讨论 + 收敛）。
+- 内置实现：`RoutingOrchestrator`（路由，单 Agent 独立处理）、`PipelineOrchestrator`（流水线，多阶段接力）、`ConversationalOrchestrator`（对话式，多方多轮讨论 + 收敛）、`TodoDelegateOrchestrator`（委托式，规划 Todo → 委派子 Agent，可递归 + 并行）。
 
 **流水线编排（`PipelineOrchestrator`）**：
 - 阶段定义（`PipelineStage`）从编排定义的宽松 `config` Map 解析，注册中心不感知具体编排结构。
@@ -1395,6 +1395,16 @@ C-->>C: CollaborationResult(reply=结论, agentId=moderator)
 - 执行流程：首轮（并行，`CompletableFuture` + 线程池）各参与者独立产出观点 → 讨论轮（串行）按 `visibleHistory` 截断注入其他参与者发言并互相回应 → 收敛产出最终结论。
 - 收敛策略：`moderator`（默认，仲裁 Agent 汇总全部发言）、`consensus`（发言含共识信号词数 ≥ `minConsensus` 提前终止，取支持最多的发言）、`best`（解析「置信度: 0.x」标注取最高）。
 - 参与者与收敛 Agent 均通过临时会话执行（上下文隔离，不入库）；`thinking` 覆盖与空回复重试同流水线。
+
+**委托编排（`TodoDelegateOrchestrator`）**：
+- 定义（`DelegateDefinition`）从编排定义的 `config.delegate` Map 解析：`plannerAgentId` / `maxTodos` / `maxDepth` / `parallel` / `concurrency` / `onFailure` / `retries` / `thinking` / `resultPass` / `workdir`。
+- 执行流程：**规划（Plan）** → 主 Agent 思考并输出 Todo 列表（结构化 JSON：`todoId` / `title` / `description` / `agentId` / `dependsOn`）→ **委派（Execute）** → 对 Todo 做 Kahn 拓扑分层，无依赖组为 Wave 并行执行（`CompletableFuture` + 线程池），依赖 Todo 分层推进、结果注入下游 prompt → **汇总（Summarize）** → 各 Todo 结果（截断或落盘）交给规划 Agent 输出整体结论。
+- 递归委托：子 Agent 执行 Todo 时若 `depth + 1 < maxDepth` 可再规划子 Todo 并委托下一级（任务树），到达深度上限的节点直接执行。
+- 容错：规划输出非 JSON 重试一次后降级「直执行」；依赖环检测回退声明顺序串行；todo 失败按 `onFailure: abort / skip` 处理；空回复复用「请直接输出完整回答」重试；未知 agentId 回退默认 Agent。
+- 约束：`maxDepth` / `maxTodos` 硬限制；`concurrency` 控制并行度（默认 4）；线程池每次编排实例级创建与释放。
+- 数据底座：规划 / 汇总产物按 `{workdir}/{sessionId}/{时间戳}` 隔离落盘（`plan-{layerPath}.json` / `result-{layerPath}.txt`），叶子 todo 结论经 `LayeredMemoryGateway.saveFact` 沉淀 FACT（topic 含层级路径幂等去重），落盘与沉淀全程追加轨迹。
+- 交互与上下文（P1）：Todo 生命周期状态机（`TodoStatus`：paused → approved → running → done / failed）；人工审批门禁 `approvalGate`（`none` / `root` / `all`，命中层规划完成后经 `ApprovalRegistry` 注册并暂停等待，REST / WebSocket 审批 API 或 Shell 命令（`/pending [sessionId]` 查询、`/approve <layerKey> [sessionId]` 批准、`/reject <layerKey> [sessionId]` 拒绝；shell 普通对话改后台线程执行，等待审批期间 REPL 仍可接收决策命令）按 `{sessionId}/{layerKey}` approve / reject，拒绝或超时降级直执行）；汇总阶段子结果按与父任务相关性 bigram 打分取 top-k（默认 3）注入，控制上下文成本。
+- 智能与组合（P2）：动态规划 `replanRounds`（默认 0 不启用；每个 Wave 执行完成后规划者结合已得结果对剩余 Todo 做 re-plan，支持完整 `todos` 替换或 `adjust` keep/drop/modify 增量协议，仅作用于未执行 Wave，调整后写 `plan-*.json` 并输出 `[Replan]` 轨迹）；Todo 级编排嵌套组合（`TodoDefinition.orchestrationId` 可引用 pipeline / conversational / delegate 自身，经 `ExecutionUnit.runOrchestration` 按 id 调起，嵌套 `CollaborationResult.reply` 回传参与本层汇总；防环用线程级嵌套调用链 `ThreadLocal<Deque>` 检测，A→B→A 循环引用运行时抛业务异常终止）。
 
 ---
 
@@ -1902,7 +1912,7 @@ stop
 2. **L2 指令层**：LLM 判定任务匹配某技能描述时，调用 `use_skill(name)` 工具（全局工具，对齐 MCP，对所有 Agent 可见）按需加载 `SKILL.md` 全文，作为 tool 消息注入上下文继续 ReAct 推理。
 3. **L3 资源层**：`SKILL.md` 正文中的 `$SKILL_DIR` 占位符由 `use_skill` 替换为技能目录绝对路径，脚本 / 参考文档 / 模板经既有 file / shell 工具按路径读取执行。
 
-**与现有能力的关系**：工具（ToolExecutor / MCP）解决「能做什么」（always-on），技能解决「该怎么做」（on-demand）；技能只是指令注入，执行仍走工具沙箱（shell 白名单 / 路径限制 / 超时 / 截断），无特权提升；与编排（routing / pipeline / conversational）正交——任意编排内 Agent 均可用技能，与记忆可叠加（技能可引导读写记忆）。
+**与现有能力的关系**：工具（ToolExecutor / MCP）解决「能做什么」（always-on），技能解决「该怎么做」（on-demand）；技能只是指令注入，执行仍走工具沙箱（shell 白名单 / 路径限制 / 超时 / 截断），无特权提升；与编排（routing / pipeline / conversational / delegate）正交——任意编排内 Agent 均可用技能，与记忆可叠加（技能可引导读写记忆）。
 
 **配置**：`agent.skills-enabled`（总开关，默认 true，关闭后不加载技能、不注册 use_skill）、`agent.skills-dir`（技能根目录，默认 `${user.dir}/skills`）。内置 12 个技能位于 `start/src/main/resources/skills/` 作为 classpath 模板兜底：`code-review`（代码审查）、`project-structure-analysis`（项目结构分析）、`unit-test-writing`（单元测试编写）、`git-workflow`（Git 提交流程）、`ddd-modeling`（DDD 领域建模）、`tech-design-doc`（技术方案编写）、`web-research`（联网调研，配合 tavily MCP）、`database-design`（数据库设计）、`doc-writing-guide`（文档写作规范）、`markdown-diagramming`（mermaid 图表规范）、`doc-review`（文档审查与一致性）、`example-skill`（周报生成示例）。
 

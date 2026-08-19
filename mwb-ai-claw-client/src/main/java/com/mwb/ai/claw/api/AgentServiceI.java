@@ -1,6 +1,6 @@
 package com.mwb.ai.claw.api;
 
-import com.alibaba.cola.dto.SingleResponse;
+import com.mwb.ai.claw.dto.SingleResponse;
 import com.mwb.ai.claw.dto.ChatCmd;
 import com.mwb.ai.claw.dto.CreateSessionCmd;
 import com.mwb.ai.claw.dto.data.ChatResponseDTO;

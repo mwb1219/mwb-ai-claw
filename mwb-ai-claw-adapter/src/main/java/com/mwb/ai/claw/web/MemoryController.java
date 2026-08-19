@@ -1,6 +1,7 @@
 package com.mwb.ai.claw.web;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -14,7 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.alibaba.cola.dto.SingleResponse;
+import com.mwb.ai.claw.dto.SingleResponse;
 import com.mwb.ai.claw.domain.memory.LayeredMemoryConfig;
 import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
 import com.mwb.ai.claw.domain.memory.MemoryPage;
@@ -67,9 +68,10 @@ public class MemoryController {
         result.put("enabled", cfg.isEnabled());
         result.put("config", configSnapshot(cfg));
         result.put("stats", layerStats(facts, summaries, archives));
-        result.put("synthesis", Map.of(
-                "cache", synthesisCache.stats(),
-                "pendingTasks", synthesisExecutor.pendingCount()));
+        Map<String, Object> synthesis = new LinkedHashMap<>();
+        synthesis.put("cache", synthesisCache.stats());
+        synthesis.put("pendingTasks", synthesisExecutor.pendingCount());
+        result.put("synthesis", synthesis);
         return SingleResponse.of(result);
     }
 
@@ -89,7 +91,7 @@ public class MemoryController {
     @GetMapping("/summaries")
     public SingleResponse<List<MemoryPage>> summaries(
             @RequestParam(required = false) String sessionId) {
-        List<MemoryPage> pages = (sessionId == null || sessionId.isBlank())
+        List<MemoryPage> pages = (sessionId == null || sessionId.trim().isEmpty())
                 ? pageStore.listAllSummaries() : pageStore.loadSummaries(sessionId);
         return SingleResponse.of(pages);
     }
@@ -100,7 +102,7 @@ public class MemoryController {
     @GetMapping("/archive")
     public SingleResponse<List<MemoryPage>> archive(
             @RequestParam(required = false) String sessionId) {
-        List<MemoryPage> pages = (sessionId == null || sessionId.isBlank())
+        List<MemoryPage> pages = (sessionId == null || sessionId.trim().isEmpty())
                 ? pageStore.listAllArchive() : pageStore.loadArchive(sessionId);
         return SingleResponse.of(pages);
     }
@@ -146,9 +148,9 @@ public class MemoryController {
                                            List<MemoryPage> summaries,
                                            List<MemoryPage> archives) {
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("facts", List.of(count(facts), tokens(facts)));
-        m.put("summaries", List.of(count(summaries), tokens(summaries)));
-        m.put("archives", List.of(count(archives), tokens(archives)));
+        m.put("facts", Arrays.asList(count(facts), tokens(facts)));
+        m.put("summaries", Arrays.asList(count(summaries), tokens(summaries)));
+        m.put("archives", Arrays.asList(count(archives), tokens(archives)));
         // 按会话聚合（跨会话档案分布）
         Map<String, Integer> bySession = new LinkedHashMap<>();
         for (MemoryPage p : archives) {

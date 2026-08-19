@@ -16,6 +16,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import javax.annotation.Resource;
 
@@ -37,8 +39,11 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
-import com.alibaba.cola.dto.SingleResponse;
+import com.mwb.ai.claw.dto.SingleResponse;
+import com.mwb.ai.claw.agent.ApprovalService;
 import com.mwb.ai.claw.agent.executor.ChatCmdExe;
+import com.mwb.ai.claw.dto.ApprovalCmd;
+import com.mwb.ai.claw.dto.data.PendingApprovalDTO;
 import com.mwb.ai.claw.api.AgentServiceI;
 import com.mwb.ai.claw.domain.core.Message;
 import com.mwb.ai.claw.domain.core.ProgressCallback;
@@ -115,9 +120,16 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
     @Resource
     private McpClientManager mcpClientManager;
 
+    @Resource
+    private ApprovalService approvalService;
+
     private Terminal terminal;
     private LineReader reader;
-    private String sessionId;
+    private volatile String sessionId;
+    /** 后台对话执行器（daemon）：delegate 编排命中审批门禁等待期间，REPL 主循环仍可接收 /pending /approve /reject */
+    private ExecutorService chatExecutor;
+    /** 当前是否有对话在后台执行 */
+    private volatile boolean chatInProgress = false;
     private boolean streamMode = true;    // 默认流式模式
     private boolean verbose = false;      // 默认观察结果缩写展示（/trace 切换完整显示）
     private String defaultAgentId;        // --agent 指定默认专家（每次对话显式路由到该 Agent）
@@ -172,6 +184,11 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
         }
         initTerminal();
         loadCustomCommands();
+        chatExecutor = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "agent-shell-chat");
+            t.setDaemon(true);
+            return t;
+        });
         restoreLastSession();
         if (opts.bgPrompt != null && !opts.bgPrompt.trim().isEmpty()) {
             startBackgroundAgent(opts.bgPrompt);
@@ -454,6 +471,15 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
                 }
                 createSession();
                 printBanner();
+                break;
+            case "/pending":
+                handleApprovalPending(arg1);
+                break;
+            case "/approve":
+                handleApprovalDecide(true, arg1, arg2);
+                break;
+            case "/reject":
+                handleApprovalDecide(false, arg1, arg2);
                 break;
             case "/exit":
             case "/quit":
@@ -1087,7 +1113,21 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
             chatOnce("用户已批准上述方案，请按方案开始执行。");
             return;
         }
-        chatOnce(message);
+        if (chatInProgress) {
+            println(STYLE_WARN, "当前有对话执行中（或等待审批决策）。可用 /pending 查看、/approve 或 /reject 处理 delegate 审批门禁。");
+            return;
+        }
+        // 后台执行对话：delegate 编排命中审批门禁等待期间，REPL 主循环仍可接收 /pending /approve /reject
+        chatInProgress = true;
+        chatExecutor.submit(() -> {
+            try {
+                chatOnce(message);
+            } finally {
+                chatInProgress = false;
+                println(STYLE_INFO, "");
+                println(STYLE_INFO, "（对话结束）");
+            }
+        });
     }
 
     /** 发送一次对话（同步/流式）并自动生成会话标题 */
@@ -1431,6 +1471,9 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
         println(STYLE_INFO, "  /memory archive        查看跨会话档案块");
         println(STYLE_INFO, "  /memory search <q>     检索记忆召回调试");
         println(STYLE_INFO, "  /clear                 清屏并重置上下文（新建会话）");
+        println(STYLE_INFO, "  /pending [sessionId]   列出待审批节点（delegate 编排审批门禁）");
+        println(STYLE_INFO, "  /approve <layerKey> [sessionId]  批准该层计划，继续委派执行");
+        println(STYLE_INFO, "  /reject <layerKey> [sessionId]   拒绝该层计划（降级直执行）");
         println(STYLE_INFO, "  /exit, /quit           退出");
         if (!customCommands.isEmpty()) {
             println(STYLE_INFO, "");
@@ -1450,6 +1493,67 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
                 + "（auto=自动执行 / ask=询问确认 / read-only=只读）");
         println(STYLE_INFO, "  会话: " + (sessionId == null ? "自动创建" : sessionId));
         println(STYLE_INFO, "");
+    }
+
+    // ==================== 审批门禁（delegate 编排人工审批） ====================
+
+    /**
+     * 列出待审批节点（delegate 编排人工审批门禁）。
+     * 不传 sessionId 时列出全部（推荐：编排首次创建会话时 shell 的 sessionId 可能尚未同步）；
+     * 传入时按会话过滤。
+     */
+    private void handleApprovalPending(String sessionId) {
+        String sid = (sessionId == null || sessionId.trim().isEmpty()) ? null : sessionId.trim();
+        SingleResponse<List<PendingApprovalDTO>> resp = approvalService.pendingTasks(sid);
+        if (!resp.isSuccess()) {
+            println(STYLE_ERROR, "查询待审批节点失败: " + resp.getErrMessage());
+            return;
+        }
+        List<PendingApprovalDTO> list = resp.getData();
+        if (list == null || list.isEmpty()) {
+            println(STYLE_INFO, "无待审批节点");
+            return;
+        }
+        println(STYLE_INFO, "待审批节点（delegate 编排门禁）:");
+        for (PendingApprovalDTO dto : list) {
+            String shortSid = dto.getSessionId() == null ? "?" : dto.getSessionId();
+            if (shortSid.length() > 8) {
+                shortSid = shortSid.substring(0, 8);
+            }
+            println(STYLE_APPROVAL, String.format("  [%s] 会话=%s 层=%s todo数=%d 注册于 %tF %<tT",
+                    shortSid, dto.getSessionId(), dto.getLayerKey(), dto.getTodoCount(), dto.getCreatedAt()));
+            if (dto.getTask() != null && !dto.getTask().trim().isEmpty()) {
+                println(STYLE_INFO, "    任务: " + abbreviate(dto.getTask(), 80));
+            }
+            if (dto.getTodoTitles() != null && !dto.getTodoTitles().isEmpty()) {
+                println(STYLE_INFO, "    计划: " + String.join(" | ", dto.getTodoTitles()));
+            }
+            println(STYLE_INFO, "    决策: /approve " + dto.getLayerKey() + " " + dto.getSessionId()
+                    + " 或 /reject " + dto.getLayerKey() + " " + dto.getSessionId());
+        }
+    }
+
+    /**
+     * 审批决策（approve / reject）：
+     * layerKey 必填；sessionId 可选（默认当前会话——编排首次创建会话时 shell 可能未同步，
+     * 请使用 /pending 输出的真实 sessionId）。
+     */
+    private void handleApprovalDecide(boolean approved, String layerKey, String sessionId) {
+        if (layerKey == null || layerKey.trim().isEmpty()) {
+            println(STYLE_WARN, "用法: /" + (approved ? "approve" : "reject") + " <layerKey> [sessionId]");
+            return;
+        }
+        String sid = (sessionId == null || sessionId.trim().isEmpty()) ? this.sessionId : sessionId.trim();
+        ApprovalCmd cmd = new ApprovalCmd();
+        cmd.setSessionId(sid);
+        cmd.setLayerKey(layerKey.trim());
+        SingleResponse<Void> resp = approved ? approvalService.approve(cmd) : approvalService.reject(cmd);
+        if (resp.isSuccess()) {
+            println(STYLE_INFO, "已" + (approved ? "批准" : "拒绝") + "该层计划: " + layerKey.trim());
+        } else {
+            println(STYLE_ERROR, (approved ? "批准" : "拒绝") + "失败: " + resp.getErrMessage()
+                    + "（可用 /pending 查看当前待审批节点）");
+        }
     }
 
     // ==================== 命令审批（ToolApproval） ====================
@@ -1612,7 +1716,8 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
             "/fork ", "/plan", "/mcp", "/mcp list", "/mcp connect ", "/mcp disconnect ",
             "/agent", "/agent list", "/agent attach ",
             "/memory", "/memory stats", "/memory facts", "/memory summaries",
-            "/memory archive", "/memory search ", "/compact", "/cost", "/clear", "/exit", "/quit");
+            "/memory archive", "/memory search ", "/compact", "/cost", "/clear",
+            "/pending", "/approve ", "/reject ", "/exit", "/quit");
 
     /** 终端补全器：斜杠命令 / 会话 ID（switch/delete/rename 场景）/ 文件路径 */
     private final class ShellCompleter implements Completer {
