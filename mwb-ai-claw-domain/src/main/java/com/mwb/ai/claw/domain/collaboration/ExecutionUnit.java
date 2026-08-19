@@ -13,8 +13,8 @@ import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
  * <p>
  * 由 infrastructure 层实现，封装：
  * - 主会话的获取/创建与 ReAct 执行（routing 使用）；
- * - 临时会话的一次性 Agent 执行（pipeline 阶段 / conversational 参与者使用）；
- * - 流水线文件产物的落盘。
+ * - 临时会话的一次性 Agent 执行（conversational 参与者使用）；
+ * - 协作产物文件的落盘。
  */
 public interface ExecutionUnit {
 
@@ -36,7 +36,7 @@ public interface ExecutionUnit {
 
     /**
      * 用一段提示词驱动单个 Agent 执行一次 ReAct（临时会话，不入库），返回最终回复。
-     * {@code streamCallback} 非空时按流式执行（token 实时回调），供 pipeline 阶段 / conversational 串行轮使用。
+     * {@code streamCallback} 非空时按流式执行（token 实时回调），供 conversational 串行轮使用。
      */
     String runAgent(String prompt, Agent agent, ProgressCallback callback, LlmStreamCallback streamCallback);
 
@@ -53,8 +53,16 @@ public interface ExecutionUnit {
 
     /**
      * 嵌套调起一个编排（按编排 id 从注册中心解析定义并执行），返回其协作结果。
-     * 供编排器在 Todo 上嵌套组合其他编排（delegate 的 todo 可引用 pipeline / conversational / delegate 自身），
+     * 供编排器在 Todo 上嵌套组合其他编排（delegate 的 todo 可引用 conversational / delegate 自身），
      * 返回结果 reply 作为该 Todo 的产出参与上层汇总。防环由各编排插件自身保证（如 delegate 的嵌套调用链检测）。
      */
     CollaborationResult runOrchestration(String message, String orchestrationId);
+
+    /**
+     * 嵌套调起一个编排并回传进度（供协作工具等 ReAct 内调用场景实时推送协作进度）。
+     * 默认实现不转发进度，仅委托无回调版本；需要进度推送的实现（ExecutionUnitImpl）覆盖此方法。
+     */
+    default CollaborationResult runOrchestration(String message, String orchestrationId, ProgressCallback callback) {
+        return runOrchestration(message, orchestrationId);
+    }
 }

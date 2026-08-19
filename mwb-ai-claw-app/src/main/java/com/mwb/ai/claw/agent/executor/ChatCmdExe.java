@@ -1,33 +1,35 @@
 package com.mwb.ai.claw.agent.executor;
 
-import com.mwb.ai.claw.dto.SingleResponse;
-import com.mwb.ai.claw.exception.BizException;
+import javax.annotation.Resource;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+
 import com.mwb.ai.claw.domain.collaboration.AgentOrchestrator;
 import com.mwb.ai.claw.domain.collaboration.CollaborationResult;
 import com.mwb.ai.claw.domain.collaboration.ExecutionUnit;
 import com.mwb.ai.claw.domain.collaboration.OrchestrationContext;
 import com.mwb.ai.claw.domain.collaboration.OrchestrationDefinition;
-import com.mwb.ai.claw.domain.collaboration.OrchestrationSelector;
 import com.mwb.ai.claw.domain.core.AgentGateway;
 import com.mwb.ai.claw.domain.core.ProgressCallback;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
 import com.mwb.ai.claw.dto.ChatCmd;
+import com.mwb.ai.claw.dto.SingleResponse;
 import com.mwb.ai.claw.dto.data.AgentErrorCode;
 import com.mwb.ai.claw.dto.data.ChatResponseDTO;
+import com.mwb.ai.claw.exception.BizException;
 import com.mwb.ai.claw.infrastructure.collaboration.OrchestratorRegistry;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.config.OrchestrationConfigLoader;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Component;
-
-import javax.annotation.Resource;
 
 /**
- * 对话执行器（编排分发器）：选择编排 → 装配上下文 → 委托编排插件执行。
+ * 对话执行器（编排分发器）：装配上下文 → 委托编排插件执行。
  * <p>
- * 编排选择优先级：显式指定（ChatCmd.orchestrationId） > 意图选择（OrchestrationSelector） > 默认编排（agent.orchestration）。
- * 具体编排逻辑（路由 / 流水线 / 对话式）由 AgentOrchestrator 插件实现。
+ * 编排选择：显式指定（ChatCmd.orchestrationId）优先，未指定回退默认编排（agent.orchestration，默认 routing）。
+ * 多 Agent 协作编排（conversational / delegate）不再由消息前置意图路由选择，
+ * 而是封装为协作工具（invoke_discussion / invoke_delegate），由主 Agent 在 ReAct 中自主调用。
+ * 具体编排逻辑由 AgentOrchestrator 插件实现。
  */
 @Component
 public class ChatCmdExe {
@@ -39,9 +41,6 @@ public class ChatCmdExe {
 
     @Resource
     private OrchestrationConfigLoader orchestrationLoader;
-
-    @Resource
-    private OrchestrationSelector orchestrationSelector;
 
     @Resource
     private OrchestratorRegistry orchestratorRegistry;
@@ -72,7 +71,7 @@ public class ChatCmdExe {
             throw new BizException(AgentErrorCode.B_AGENT_CONFIG_ERROR.getErrCode(), "消息内容不能为空");
         }
 
-        // 1. 选择编排：显式指定 > 意图选择 > 默认
+        // 1. 选择编排：显式指定 > 默认（协作编排由主 Agent 经 invoke_* 工具自主发起，不再预选）
         String orchestrationId = resolveOrchestrationId(cmd);
         OrchestrationDefinition definition = orchestrationLoader.get(orchestrationId);
         log.info("编排选择: orchestrationId={}, 会话={}, 消息={}", orchestrationId,
@@ -107,15 +106,11 @@ public class ChatCmdExe {
     }
 
     /**
-     * 编排选择：显式指定优先，其次意图匹配（未命中返回 null），最后回退默认编排。
+     * 编排选择：显式指定优先，未指定回退默认编排（agent.orchestration）。
      */
     private String resolveOrchestrationId(ChatCmd cmd) {
         if (cmd.getOrchestrationId() != null && !cmd.getOrchestrationId().trim().isEmpty()) {
             return cmd.getOrchestrationId().trim();
-        }
-        String matched = orchestrationSelector.select(cmd.getMessage(), orchestrationLoader.loadDefinitions());
-        if (matched != null && !matched.trim().isEmpty()) {
-            return matched;
         }
         return agentProperties.getOrchestration();
     }

@@ -39,11 +39,8 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
-import com.mwb.ai.claw.dto.SingleResponse;
 import com.mwb.ai.claw.agent.ApprovalService;
 import com.mwb.ai.claw.agent.executor.ChatCmdExe;
-import com.mwb.ai.claw.dto.ApprovalCmd;
-import com.mwb.ai.claw.dto.data.PendingApprovalDTO;
 import com.mwb.ai.claw.api.AgentServiceI;
 import com.mwb.ai.claw.domain.core.Message;
 import com.mwb.ai.claw.domain.core.ProgressCallback;
@@ -57,9 +54,12 @@ import com.mwb.ai.claw.domain.memory.MemoryPage;
 import com.mwb.ai.claw.domain.memory.MemoryPageStore;
 import com.mwb.ai.claw.domain.tool.McpServerConfig;
 import com.mwb.ai.claw.domain.tool.ToolApproval;
+import com.mwb.ai.claw.dto.ApprovalCmd;
 import com.mwb.ai.claw.dto.ChatCmd;
 import com.mwb.ai.claw.dto.CreateSessionCmd;
+import com.mwb.ai.claw.dto.SingleResponse;
 import com.mwb.ai.claw.dto.data.ChatResponseDTO;
+import com.mwb.ai.claw.dto.data.PendingApprovalDTO;
 import com.mwb.ai.claw.dto.data.SessionDTO;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.memory.MemorySynthesisExecutor;
@@ -367,6 +367,15 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
     }
 
     private String buildPrompt() {
+        if (chatInProgress) {
+            // 对话后台执行中（含 delegate 审批门禁等待）：显示执行状态，仅接收管理/审批命令
+            return new AttributedStringBuilder()
+                    .style(STYLE_WARN)
+                    .append("⏳ 执行中… ")
+                    .style(STYLE_INFO)
+                    .append("(/pending /approve /reject 审批，回车忽略) ")
+                    .toAnsi();
+        }
         String prefix = streamMode ? "⚡ " : "▶ ";
         String sid = sessionId == null ? "" : "[" + sessionId.substring(0, 8) + "] ";
         int ctx = estimateContextTokens();
@@ -410,6 +419,15 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
     // ==================== 命令分发 ====================
 
     private void processInput(String input) {
+        if (chatInProgress) {
+            // 对话执行中（含 delegate 审批门禁等待）：仅放行管理/审批命令，普通消息提示等待
+            if (!input.startsWith("/")) {
+                println(STYLE_WARN, "对话执行中，请等待其完成后再输入。可用 /pending 查看、/approve 或 /reject 处理 delegate 审批门禁。");
+                return;
+            }
+            handleCommand(input);
+            return;
+        }
         if (input.startsWith("/")) {
             handleCommand(input);
         } else if (input.startsWith("!")) {
@@ -1125,7 +1143,7 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
             } finally {
                 chatInProgress = false;
                 println(STYLE_INFO, "");
-                println(STYLE_INFO, "（对话结束）");
+                println(STYLE_INFO, "（对话结束，按回车返回输入）");
             }
         });
     }

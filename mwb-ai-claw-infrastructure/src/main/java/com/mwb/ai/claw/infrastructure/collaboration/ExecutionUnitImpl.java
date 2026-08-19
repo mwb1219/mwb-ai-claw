@@ -124,6 +124,11 @@ public class ExecutionUnitImpl implements ExecutionUnit {
 
     @Override
     public CollaborationResult runOrchestration(String message, String orchestrationId) {
+        return runOrchestration(message, orchestrationId, null);
+    }
+
+    @Override
+    public CollaborationResult runOrchestration(String message, String orchestrationId, ProgressCallback callback) {
         OrchestrationDefinition definition = orchestrationLoader.get(orchestrationId);
         AgentOrchestrator orchestrator = orchestratorRegistry.resolve(definition);
         // 嵌套上下文：复用全局 Agent 注册表 / 执行单元，独立消息与会话（嵌套编排内部自建临时会话与轨迹）
@@ -132,6 +137,7 @@ public class ExecutionUnitImpl implements ExecutionUnit {
         ctx.setDefinition(definition);
         ctx.setAgentGateway(agentGateway);
         ctx.setExecutionUnit(this);
+        ctx.setCallback(callback);
         return orchestrator.orchestrate(ctx);
     }
 }

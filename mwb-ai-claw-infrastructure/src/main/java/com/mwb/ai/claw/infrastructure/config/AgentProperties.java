@@ -28,7 +28,7 @@ public class AgentProperties {
     public void printStartupConfig() {
         log.info("Agent 默认配置: id={}, name={}, model={}, baseUrl={}, apiKey={}, temperature={}, maxTokens={}, maxSteps={}, maxStepsExtension={}",
                 agentId, name, model, baseUrl, mask(apiKey), temperature, maxTokens, maxSteps, maxStepsExtension);
-        log.info("编排配置: 默认编排={}, 编排选择器={}", orchestration, orchestrationSelector);
+        log.info("编排配置: 默认编排={}", orchestration);
         log.info("记忆/技能配置: 记忆目录={}, 技能开关={}, 技能目录={}", memoryDir, skillsEnabled, skillsDir);
         log.info("工具配置: tools={}", tools);
         log.info("专家 Agent 配置: 共 {} 个（{}）", agents.size(),
@@ -70,11 +70,8 @@ public class AgentProperties {
     /** ReAct 步数扩展系数：初始预算用尽且工具链未完成时自动扩展，硬上限 = maxSteps × 系数（默认 2.0，>1 生效） */
     private double maxStepsExtension = 2.0;
 
-    /** 默认编排 id（意图未命中时的兜底，引用 orchestrations.json 中的 id），默认 routing */
+    /** 默认编排 id（引用 orchestrations.json 中的 id；多 Agent 协作编排经 invoke_* 工具由主 Agent 自主发起），默认 routing */
     private String orchestration = "routing";
-
-    /** 编排选择器：rule（关键词匹配，默认）| llm（LLM 语义选择优先，规则兜底） */
-    private String orchestrationSelector = "rule";
 
     /** 长期记忆目录（AGENT.md / MEMORY.md 存放位置，默认 ${user.dir}/.agent） */
     private String memoryDir = "";

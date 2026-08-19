@@ -3,7 +3,7 @@ package com.mwb.ai.claw.domain.collaboration;
 /**
  * 编排插件 SPI：编排方式的可插拔实现。
  * <p>
- * 实现类通过 {@link #type()} 声明自己的编排类型标识（如 routing / pipeline / conversational），
+ * 实现类通过 {@link #type()} 声明自己的编排类型标识（如 routing / conversational / delegate），
  * 由注册中心在启动期收集注册。新增编排方式无需改动主链路，仅需：
  * 1. 实现本接口并注册为 Spring Bean；
  * 2. 在 orchestrations.json 增加一条 {@link OrchestrationDefinition}（type 指向该类型）。

@@ -333,7 +333,7 @@ public class TodoDelegateOrchestrator implements AgentOrchestrator {
             String todoPath = path.isEmpty() ? todo.getTodoId() : path + "/" + todo.getTodoId();
             NodeResult result;
             if (todo.getOrchestrationId() != null && !todo.getOrchestrationId().trim().isEmpty()) {
-                // P2-3 编排嵌套组合：该 Todo 委托给指定编排执行（pipeline / conversational / delegate 自身）
+                // P2-3 编排嵌套组合：该 Todo 委托给指定编排执行（conversational / delegate 自身）
                 result = runNestedOrchestration(todo, subTask, todoPath);
                 persistTodoFact(todo, todoPath, result);
             } else if (depth + 1 < def.maxDepthOrDefault()) {

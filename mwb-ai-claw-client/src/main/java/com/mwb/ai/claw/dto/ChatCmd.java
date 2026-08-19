@@ -14,7 +14,7 @@ public class ChatCmd {
     /** Agent 标识，为空则使用默认 Agent */
     private String agentId;
 
-    /** 编排 id（显式指定协作编排，优先于意图选择；为空则按意图自动选择，未命中回退默认编排） */
+    /** 编排 id（显式指定协作编排；为空则使用默认编排 agent.orchestration，多 Agent 协作经 invoke_* 工具由主 Agent 自主发起） */
     private String orchestrationId;
 
     /** 用户输入消息 */

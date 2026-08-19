@@ -11,13 +11,13 @@ import java.util.List;
 @Data
 public class CollaborationResult {
 
-    /** 最终回复（routing=单 Agent 回复；pipeline=末阶段回复；conversational=收敛结论） */
+    /** 最终回复（routing=单 Agent 回复；conversational=收敛结论；delegate=汇总结论） */
     private String reply;
 
     /** 主导 Agent id */
     private String agentId;
 
-    /** 会话 id（routing 使用主会话；pipeline 阶段为临时会话，最终为主会话） */
+    /** 会话 id（routing 使用主会话；协作编排为临时会话，最终为主会话） */
     private String sessionId;
 
     /** 实际使用的编排 id */

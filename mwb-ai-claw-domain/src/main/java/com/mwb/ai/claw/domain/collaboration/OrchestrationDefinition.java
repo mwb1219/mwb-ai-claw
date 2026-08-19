@@ -1,18 +1,18 @@
 package com.mwb.ai.claw.domain.collaboration;
 
-import lombok.Data;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import lombok.Data;
+
 /**
  * 编排定义：orchestrations.json 中的一条编排（Agent 配置与编排解耦）。
  * <p>
- * - {@code id}：编排 id（意图选择器返回 / ChatCmd 显式指定引用）；
- * - {@code type}：编排插件类型（routing | pipeline | conversational，由 AgentOrchestrator.type() 匹配）；
- * - {@code description} / {@code keywords}：意图匹配元数据（供规则 / LLM 选择器判断用户意图）；
+ * - {@code id}：编排 id（ChatCmd 显式指定 / 协作工具 invoke_* 引用）；
+ * - {@code type}：编排插件类型（routing | conversational | delegate，由 AgentOrchestrator.type() 匹配）；
+ * - {@code description} / {@code keywords}：编排能力描述与参考关键词（供编排清单展示；协作工具描述会引用）；
  * - {@code config}：宽松编排参数，由对应插件自行解释（插件化核心：注册中心与定义模型不感知具体编排结构）。
  */
 @Data
@@ -21,7 +21,7 @@ public class OrchestrationDefinition {
     /** 编排 id（全局唯一） */
     private String id;
 
-    /** 编排插件类型：routing | pipeline | conversational */
+    /** 编排插件类型：routing | conversational | delegate */
     private String type;
 
     /** 能力描述（供 LLM 选择器语义判断） */

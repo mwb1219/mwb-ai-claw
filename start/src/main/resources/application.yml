@@ -14,10 +14,8 @@ agent:
   agent-id: default
   name: mwb-ai-claw
   system-prompt: 你是 mwb-ai-claw 智能助手。当需要时可以调用工具来完成任务，完成后给出简洁回复。
-  # 默认编排 id（意图未命中时的兜底，引用 orchestrations.json 中的 id）
+  # 默认编排 id（引用 orchestrations.json 中的 id；多 Agent 协作编排经 invoke_* 工具由主 Agent 自主发起）
   orchestration: routing
-  # 编排选择器：rule（关键词匹配，默认）| llm（LLM 语义选择优先，基于编排 description，未命中/失败时规则兜底）
-  orchestration-selector: llm
   # 模型配置通过环境变量（.env / 系统环境变量）注入，避免密钥泄露
   model: ${DEFAULT_MODEL:deepseek-chat}
   base-url: ${DEFAULT_BASE_URL:https://api.deepseek.com}

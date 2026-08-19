@@ -32,6 +32,6 @@ public class TodoDefinition {
     /** 生命周期状态（P1：审批门禁下 paused→approved→running→done；失败→failed；未启用门禁时执行中直接置 running/done） */
     private TodoStatus status;
 
-    /** 嵌套编排 id（P2：可空；配置后该 Todo 委托给指定编排执行——pipeline / conversational / delegate 自身，结果回传参与本层汇总） */
+    /** 嵌套编排 id（P2：可空；配置后该 Todo 委托给指定编排执行——conversational / delegate 自身，结果回传参与本层汇总） */
     private String orchestrationId;
 }

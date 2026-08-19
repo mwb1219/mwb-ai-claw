@@ -46,8 +46,8 @@
 │   Gateway 接口：LlmGateway / ToolGateway / MemoryGateway    │
 │                 LongTermMemoryGateway / AgentGateway        │
 │   collaboration：OrchestrationDefinition / OrchestrationContext│
-│                 OrchestrationSelector / AgentOrchestrator   │
-│                 CollaborationResult / ExecutionUnit         │
+│                 AgentOrchestrator / CollaborationResult     │
+│                 ExecutionUnit                                │
 │   值对象：ToolSpec / ToolResult / ToolCall / LlmMessage      │
 │   回调接口：ProgressCallback / LlmStreamCallback            │
 └─────────────────────────────────────────────────────────────┘
@@ -61,8 +61,8 @@
 │   config：AgentProperties / AgentRegistryLoader             │
 │           / OrchestrationConfigLoader                       │
 │   collaboration：OrchestratorRegistry / ExecutionUnitImpl   │
-│           / RoutingOrchestrator / PipelineOrchestrator      │
-│           / RuleBasedOrchestrationSelector / PipelineStage  │
+│           / RoutingOrchestrator / TodoDelegateOrchestrator  │
+│           / 协作工具(invoke_*)                              │
 │   security：ToolSecurity（命令白名单/路径限制/超时控制）       │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -132,9 +132,8 @@
 
 - [x] 配置与编排分离：`agents.json`（Agent 注册表，跨编排复用）+ `orchestrations.json`（编排注册表 + 意图元数据），彻底废弃旧 `{mode}-agents.json` 与 `agent.mode`
 - [x] 编排插件化（SPI）：`AgentOrchestrator` 接口（`type`/`validate`/`orchestrate`），`OrchestratorRegistry` 自动收集注册，新增编排零主链路改动
-- [x] 意图驱动选择：`OrchestrationSelector` 选编排 → 编排内部选 Agent（三层决策分离）；优先级：显式指定 > 规则意图匹配 > 默认兜底
-- [x] 内置编排：`RoutingOrchestrator`（单专家独立处理，默认兜底）+ `PipelineOrchestrator`（多阶段流水线 analyze→implement→review，产物 text/file 传递，失败 abort/continue）+ `ConversationalOrchestrator`（多方专家多轮讨论，首轮并行观点→讨论轮串行回应→收敛，支持 consensus / moderator / best 三种收敛策略）+ `TodoDelegateOrchestrator`（主 Agent 思考→规划 Todo 列表→委托子 Agent 执行，子 Agent 可递归再委托，无依赖 Todo 并行执行、依赖 Todo 分层推进，逐层汇总返回；产物按 `{workdir}/{sessionId}/{时间戳}` 隔离落盘 plan.json/result.txt，叶子结论沉淀分层记忆 FACT；支持人工审批门禁 `approvalGate=root/all`（REST/WebSocket 审批 API 或 Shell 命令 `/pending` `/approve <layerKey>` `/reject <layerKey>`，拒绝或超时降级直执行）、汇总 top-k 上下文压缩、`replanRounds` 动态规划（首波执行后结合已得结果调整剩余 Todo，keep/drop/modify 协议）与 Todo 级编排嵌套组合（`orchestrationId` 可引用 pipeline/conversational/delegate，嵌套调用链防环 A→B→A））
-- [x] 流水线阶段类型化：`PipelineStage` 实体类解析 stages（`thinking` 开关 / `pass` / `onFailure` / 空回复重试）
+- [x] 编排选择两层化：显式指定（`orchestrationId`）> 默认编排（`agent.orchestration`，默认 `routing`）；多 Agent 协作编排封装为全局协作工具（`invoke_discussion` / `invoke_delegate`），由主 Agent 在 ReAct 推理中自主发起，废弃消息前置意图路由（`OrchestrationSelector`）
+- [x] 内置编排：`RoutingOrchestrator`（单专家独立处理，默认兜底）+ `ConversationalOrchestrator`（多方专家多轮讨论，首轮并行观点→讨论轮串行回应→收敛，支持 consensus / moderator / best 三种收敛策略）+ `TodoDelegateOrchestrator`（主 Agent 思考→规划 Todo 列表→委托子 Agent 执行，子 Agent 可递归再委托，无依赖 Todo 并行执行、依赖 Todo 分层推进，逐层汇总返回；产物按 `{workdir}/{sessionId}/{时间戳}` 隔离落盘 plan.json/result.txt，叶子结论沉淀分层记忆 FACT；支持人工审批门禁 `approvalGate=root/all`（REST/WebSocket 审批 API 或 Shell 命令 `/pending` `/approve <layerKey>` `/reject <layerKey>`，拒绝或超时降级直执行）、汇总 top-k 上下文压缩、`replanRounds` 动态规划（首波执行后结合已得结果调整剩余 Todo，keep/drop/modify 协议）与 Todo 级编排嵌套组合（`orchestrationId` 可引用 conversational/delegate，嵌套调用链防环 A→B→A））
 - [x] 对话式定义类型化：`ConversationDefinition` 实体类解析 conversation 配置（`rounds` / `participants` / `moderator` / `convergence` / `visibleHistory` / `thinking`）
 - [x] 思考模式控制：阶段/参与者级 `thinking: false` 关闭推理（DeepSeek 思考模式会吃满输出预算导致正文为空）
 - [x] 启动校验：编排 id 唯一、type 已注册、引用的 agentId 存在于注册表
@@ -143,7 +142,7 @@
 
 - [x] Skill 定义标准：`skills/<name>/SKILL.md`（YAML frontmatter：`name` / `description` + Markdown 指令正文）+ 可选 `resources/` 资源目录，遵循 Agent Skills 开放标准
 - [x] 渐进式披露（三层）：L1 技能清单（name + description）常驻 system prompt → L2 `use_skill` 工具按需加载 SKILL.md 全文 → L3 资源经 `$SKILL_DIR` 按需读取，控制 token 成本
-- [x] 零侵入扩展：新增技能 = 放目录重启即可，所有 Agent（routing / pipeline / conversational / delegate 任意编排内）自动可用，主链路零改动
+- [x] 零侵入扩展：新增技能 = 放目录重启即可，所有 Agent（routing / conversational / delegate 任意编排内）自动可用，主链路零改动
 - [x] `use_skill` 注册为全局工具（对齐 MCP 工具），技能清单由 `DefaultContextAssembler` 注入 system prompt
 - [x] 启动校验：技能 name / description 缺失、name 与目录不一致、name 重复 → 启动报错
 - [x] 内置 12 个技能（classpath 模板）：`code-review`、`project-structure-analysis`、`unit-test-writing`、`git-workflow`、`ddd-modeling`、`tech-design-doc`、`web-research`、`database-design`、`doc-writing-guide`、`markdown-diagramming`、`doc-review`、`example-skill`（详见 `docs/feature-skill-support技术方案(SUBMIT).md` §6.2）
@@ -198,7 +197,6 @@ domain/
 │   ├── OrchestrationDefinition.java # 编排定义（id/type/keywords/config/agents）
 │   ├── OrchestrationContext.java    # 编排上下文（消息/会话/网关/执行单元/回调）
 │   ├── AgentOrchestrator.java       # 编排插件 SPI（type/validate/orchestrate）
-│   ├── OrchestrationSelector.java   # 编排选择 SPI（意图 → 编排 id）
 │   ├── CollaborationResult.java     # 编排结果（reply/agentId/traceSteps）
 │   └── ExecutionUnit.java           # 执行原语接口（会话复用/运行/产物落盘）
 ├── context/               # 上下文工程域
@@ -265,20 +263,19 @@ infrastructure/
 │       └── LlmMemorySynthesizer  # 提炼策略（LLM 摘要 / 事实提取 / 合并去重）
 ├── collaboration/
 │   ├── OrchestratorRegistry      # 编排插件注册中心（SPI 自动收集）
-│   ├── PipelineStage             # 流水线阶段实体（类型化解析 stages）
 │   ├── ConversationDefinition    # 对话式定义（类型化解析 config.conversation）
 │   ├── DelegateDefinition        # 委托编排定义（类型化解析 config.delegate）
 │   ├── TodoDefinition            # 委托编排规划产物（Todo 任务项）
 │   ├── ExecutionUnitImpl         # 执行原语实现（临时会话/产物落盘）
 │   └── strategy/                 # 编排 / 选择策略实现（SPI 插件）
 │       ├── RoutingOrchestrator       # 路由编排（单专家独立处理，默认兜底）
-│       ├── PipelineOrchestrator      # 流水线编排（阶段接力）
 │       ├── ConversationalOrchestrator # 对话式编排（多专家多轮讨论 + 收敛）
 │       ├── TodoDelegateOrchestrator  # 委托编排（规划 Todo → 委派子 Agent，可递归 + 并行）
-│       ├── RuleBasedOrchestrationSelector # 关键词意图选择器（命中数最多者胜出）
-│       └── LlmOrchestrationSelector     # LLM 意图选择器（llm 模式：语义优先 + 规则兜底，@Primary）
+│       └── tool/builtin/             # 协作编排工具（多 Agent 协作经 ReAct 工具由主 Agent 自主发起）
+│           ├── InvokeDiscussionTool  # invoke_discussion：对话式编排（多专家讨论收敛）
+│           └── InvokeDelegateTool    # invoke_delegate：委托编排（Todo 拆解委派）
 └── config/
-    ├── AgentProperties            # YAML 配置映射（orchestration/selector）
+    ├── AgentProperties            # YAML 配置映射（orchestration/tools/memory）
     ├── AgentConfiguration         # Spring Bean 装配
     ├── AgentRegistryLoader        # agents.json 加载（${VAR} 解析）
     └── OrchestrationConfigLoader  # orchestrations.json 加载 + 启动校验
@@ -297,7 +294,7 @@ infrastructure/
 | `GET`    | `/agent/sessions`     | 列出所有会话                |
 | `DELETE` | `/agent/session/{id}` | 删除会话                  |
 
-> `/agent/chat` 请求体支持可选字段 `orchestrationId`（显式指定编排，跳过意图选择），响应返回实际使用的 `orchestrationId`。
+> `/agent/chat` 请求体支持可选字段 `orchestrationId`（显式指定编排，未指定走默认编排 `routing`），响应返回实际使用的 `orchestrationId`。
 
 ### 5.2 WebSocket
 
@@ -337,7 +334,7 @@ ws://localhost:8080/ws/agent
 
 - **密钥全局兜底**：`~/.mwb-ai-claw/.env` 中的变量作为环境变量注入（优先级低于项目 `.env`），任意目录执行都能读取到 API Key；项目内 `.env` 可覆盖全局配置。
 - **会话/记忆按项目隔离**：启动器不切换工作目录，`.agent/` 落在当前目录，不同项目互不干扰。
-- **参数透传**：可覆盖任意 Spring 配置，如 `mwb-ai-claw --agent.orchestration=code-review-pipeline`。
+- **参数透传**：可覆盖任意 Spring 配置，如 `mwb-ai-claw --agent.orchestration=todo-delegate`。
 
 ```bash
 # 安装完成后（重开终端或 source rc 后）
@@ -539,8 +536,7 @@ agent:
   agent-id: default
   name: mwb-ai-claw
   system-prompt: "你是 mwb-ai-claw 智能助手..."
-  orchestration: routing             # 默认编排 id（意图未命中时的兜底，引用 orchestrations.json 中的 id）
-  orchestration-selector: rule       # 编排选择器：rule（关键词，默认）| llm（LLM 语义优先 + 规则兜底）
+  orchestration: routing             # 默认编排 id（引用 orchestrations.json 中的 id；多 Agent 协作编排经 invoke_* 工具由主 Agent 自主发起）
   model: ${DEFAULT_MODEL:deepseek-chat}            # 通过环境变量引用，避免硬编码
   base-url: ${DEFAULT_BASE_URL:https://api.deepseek.com}
   api-key: ${DEFAULT_API_KEY:}
@@ -635,23 +631,21 @@ Agent 配置与编排定义完全解耦，分两个独立文件存放（`start/s
 {
   "orchestrations": [
     {
-      "id": "code-review-pipeline",
-      "type": "pipeline",
-      "description": "完整开发流水线：架构师需求拆解 → 编码实现 → 代码审查",
-      "keywords": ["设计并实现", "完整实现", "从零开发", "并做代码审查"],
-      "agents": ["architect", "coder", "reviewer"],
+      "id": "team-discussion",
+      "type": "conversational",
+      "description": "多方专家对话式讨论：架构师 / 编码专家 / 审查专家围绕同一问题多轮讨论，最后由决策主持收敛为明确结论",
+      "keywords": ["选型", "方案对比", "对比", "权衡", "决策", "哪个更好", "如何选择", "优缺点", "讨论", "评估", "怎么选"],
+      "agents": ["architect", "coder", "reviewer", "moderator"],
       "config": {
-        "workdir": "orchestration-artifacts",
-        "stages": [
-          {
-            "stageId": "implement",
-            "agentId": "coder",
-            "promptTemplate": "基于以下需求分析进行编码实现。不要调用任何工具，直接输出完整可运行的代码文本：\n\n{input}",
-            "thinking": false,
-            "pass": "text",
-            "onFailure": "abort"
-          }
-        ]
+        "conversation": {
+          "rounds": 2,
+          "moderator": "moderator",
+          "participants": ["architect", "coder", "reviewer"],
+          "minConsensus": 2,
+          "convergence": "moderator",
+          "visibleHistory": 1,
+          "thinking": false
+        }
       }
     }
   ]
@@ -663,45 +657,44 @@ Agent 配置与编排定义完全解耦，分两个独立文件存放（`start/s
 | 字段           | 必填 | 说明                                        |
 | ------------ | -- | ----------------------------------------- |
 | `id`         | 是  | 编排标识（意图命中 / 显式指定 / 默认兜底均引用此 id）        |
-| `type`       | 是  | 编排插件类型：`routing` / `pipeline` / `conversational` / `delegate`（已注册 SPI，可扩展） |
+| `type`       | 是  | 编排插件类型：`routing` / `conversational` / `delegate`（已注册 SPI，可扩展） |
 | `description` | 否 | 编排能力描述                                  |
 | `keywords`   | 否  | 意图关键词（命中数最多者胜出；**兜底编排不设 keywords 不参与竞争**） |
 | `agents`     | 否  | 该编排涉及 Agent 列表（启动校验引用存在性）               |
-| `config`     | 否  | 编排自定义配置（结构由插件自行解释，如 pipeline 的 stages）   |
-
-流水线阶段（`pipeline.config.stages`）字段：
-
-| 字段             | 必填 | 说明                                          |
-| -------------- | -- | ------------------------------------------- |
-| `stageId`      | 是  | 阶段标识（trace / 产物文件名使用）                     |
-| `agentId`      | 是  | 执行阶段使用的 Agent（引用 agents.json）               |
-| `promptTemplate` | 是 | 提示词模板，支持 `{input}` 占位符（上一阶段产物）            |
-| `thinking`     | 否  | 思考模式开关；`false` 关闭推理直接输出（DeepSeek 思考模式会吃满 `max_tokens` 导致正文为空） |
-| `pass`         | 否  | 产物传递：`text`（默认，直接作为下阶段输入）\| `file`（落盘传路径） |
-| `onFailure`    | 否  | 失败策略：`abort`（默认，终止流水线）\| `continue`（跳过继续） |
+| `config`     | 否  | 编排自定义配置（结构由插件自行解释，如 conversational 的 conversation / delegate 的 delegate）   |
 
 ### 6.4 编排选择与多模型
 
-对话请求的编排选择优先级（三层决策分离：选择器选「编排」→ 编排内部选「Agent」）：
+对话请求默认走 `routing` 编排（单专家 ReAct 独立处理）；多 Agent 协作编排（对话式 / 委托）不再由消息前置意图路由选择，而是封装为全局协作工具，由主 Agent 在 ReAct 推理中自主决定是否发起：
 
-1. **显式指定**：请求体携带 `orchestrationId`（REST / WebSocket / Shell 均支持）
-2. **意图选择器**（`agent.orchestration-selector` 配置驱动）：
-   - `llm` 模式：`LlmOrchestrationSelector` 基于各编排 `description` 做 LLM 语义匹配（温度 0 + 关闭思考保证确定性），未命中 / 调用失败回退规则关键词匹配
-   - `rule` 模式（默认）：`RuleBasedOrchestrationSelector` 按 `keywords` 命中计数，命中最多者胜出
-3. **默认兜底**：`agent.orchestration`（默认 `routing`），意图未命中时使用
+| 协作工具 | 对应编排 | 适用场景 |
+| ------- | ------- | ------- |
+| `invoke_discussion` | `team-discussion` | 技术选型、方案对比、权衡决策类问题（多专家讨论 + 主持收敛） |
+| `invoke_delegate` | `todo-delegate` | 复杂、多步骤、跨领域任务（主 Agent 规划 Todo → 委托子 Agent 分步执行） |
+
+编排选择优先级（两层）：**显式指定**（请求体携带 `orchestrationId`，REST / WebSocket / Shell 均支持）> **默认编排**（`agent.orchestration`，默认 `routing`）。协作工具全局注册（`global=true`），对所有 Agent 可见，无需在 `agents.json` / `application.yml` 中声明。
 
 ```bash
 # 默认编排 routing（单专家独立处理）
 java -jar start/target/start-*.jar --spring.profiles.active=shell
 
-# 修改默认兜底编排 / 选择器
-java -jar start/target/start-*.jar --agent.orchestration=code-review-pipeline --agent.orchestration-selector=rule
+# 修改默认编排
+java -jar start/target/start-*.jar --agent.orchestration=team-discussion
 
 # 默认使用委托编排（主 Agent 规划 Todo 拆解任务，委托子 Agent 并行/递归执行）
 java -jar start/target/start-*.jar --agent.orchestration=todo-delegate
+```
 
-# 启用 LLM 语义意图选择（LLM 优先 + 规则兜底；如「Kafka 还是 RabbitMQ」无需关键词即可命中 team-discussion）
-java -jar start/target/start-*.jar --agent.orchestration-selector=llm
+协作工具用法示例（主 Agent 自主发起，无需用户指定编排 id）：
+
+```text
+用户：帮我从零实现一个 REST 服务并审查代码
+主 Agent：→ 调用 invoke_delegate(message="从零实现一个 REST 服务并审查代码")
+          → 返回汇总产出（实现代码 + 审查结论），整理后回复用户
+
+用户：Kafka 还是 RabbitMQ 更适合我们？
+主 Agent：→ 调用 invoke_discussion(message="Kafka 还是 RabbitMQ 更适合我们？")
+          → 返回讨论收敛结论，回复用户
 ```
 
 每个 Agent 的模型独立配置：在 `agents.json` 中为 Agent 指定 `model` / `apiKey`（用 `${VAR}` 引用 `.env` 变量），未配置的字段自动继承默认值。`.env` 示例：

@@ -372,22 +372,22 @@ public class TodoDelegateOrchestratorTest {
     }
 
     @Test
-    public void testP2_nestedPipeline_resultReturned() {
+    public void testP2_nestedOrchestration_resultReturned() {
         executionUnit.rootPlan = "{ \"todos\": ["
-                + "{ \"todoId\": \"t1\", \"title\": \"设计并实现\", \"description\": \"子任务 t1\", \"agentId\": \"coder\", "
-                + "\"dependsOn\": [], \"orchestrationId\": \"code-review-pipeline\" } ] }";
+                + "{ \"todoId\": \"t1\", \"title\": \"方案对比\", \"description\": \"子任务 t1\", \"agentId\": \"coder\", "
+                + "\"dependsOn\": [], \"orchestrationId\": \"team-discussion\" } ] }";
 
         CollaborationResult cr = orchestrate(1, "abort", "帮我做一个项目", "none", 0, 3, 0);
 
         assertEquals("最终答复: 已汇总", cr.getReply());
         // P2-4：嵌套编排 reply 作为该 Todo 结果参与上层汇总
-        assertTrue("嵌套编排结果应注入汇总 prompt", executionUnit.lastSummaryPrompt.contains("流水线嵌套结果"));
+        assertTrue("嵌套编排结果应注入汇总 prompt", executionUnit.lastSummaryPrompt.contains("嵌套编排结果"));
         assertTrue(cr.getTraceSteps().stream()
-                .anyMatch(s -> s.contains("[Todo:t1] 嵌套编排 code-review-pipeline 完成")));
+                .anyMatch(s -> s.contains("[Todo:t1] 嵌套编排 team-discussion 完成")));
         assertFalse("指定嵌套编排的 todo 不应被 Agent 直执行", executionUnit.executed.contains("子任务 t1"));
         assertTrue("嵌套 todo 结论也应沉淀记忆", memoryGateway.savedFacts.containsKey("delegate-todo:t1"));
         assertEquals(1, executionUnit.nestedOrchestrations.size());
-        assertEquals("code-review-pipeline", executionUnit.nestedOrchestrations.get(0));
+        assertEquals("team-discussion", executionUnit.nestedOrchestrations.get(0));
     }
 
     @Test
@@ -522,7 +522,7 @@ public class TodoDelegateOrchestratorTest {
                 return orchestrator.orchestrate(nestedCtx);
             }
             CollaborationResult cr = new CollaborationResult();
-            cr.setReply("流水线嵌套结果: " + firstLine(message));
+            cr.setReply("嵌套编排结果: " + firstLine(message));
             cr.setAgentId("coder");
             cr.setSessionId("test-session");
             cr.setOrchestrationId(orchestrationId);
