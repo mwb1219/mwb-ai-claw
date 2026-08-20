@@ -2,6 +2,7 @@ package com.mwb.ai.claw.infrastructure.skill;
 
 import com.mwb.ai.claw.domain.skill.Skill;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
+import com.mwb.ai.claw.infrastructure.util.ConfigFileLocator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.Resource;
@@ -23,8 +24,10 @@ import java.util.Set;
 /**
  * 技能加载器：扫描技能根目录并解析 SKILL.md（YAML frontmatter + 指令正文）。
  * <p>
- * 加载策略与 agents.json / orchestrations.json 一致：运行目录 <skills-dir> 优先，
- * classpath skills/ 内置模板兜底。frontmatter 解析复用 Spring Boot 传递依赖 SnakeYAML。
+ * 加载策略与配置文件一致（三级）：运行目录 <skills-dir> 优先 → 安装目录
+ * {@code $MWB_AI_CLAW_HOME/skills/} → classpath skills/ 内置模板兜底；
+ * 外部目录命中（非空）即用，不再读取低优先级来源（用户自定义技能集完全接管）。
+ * frontmatter 解析复用 Spring Boot 传递依赖 SnakeYAML。
  * 启动校验：name / description 缺失、name 与目录名不一致、name 重复 → 抛异常。
  */
 @Component
@@ -43,12 +46,18 @@ public class SkillLoader {
     }
 
     /**
-     * 加载全部技能（外部目录优先，classpath 兜底），并执行启动校验。
+     * 加载全部技能（运行目录 → 安装目录 → classpath 兜底），并执行启动校验。
      *
      * @return 技能列表（可能为空，不会为 null）
      */
     public List<Skill> loadSkills() {
-        List<Skill> skills = loadExternal();
+        // 1. 运行目录（agent.skills-dir 显式指定或默认 user.dir/skills）
+        List<Skill> skills = loadExternal(userSkillsDir());
+        // 2. 安装目录 skills（install 时随包复制，用户可直接增删）
+        if (skills == null) {
+            skills = loadExternal(installSkillsDir());
+        }
+        // 3. classpath 内置模板兜底
         if (skills == null) {
             skills = loadClasspath();
         }
@@ -59,12 +68,22 @@ public class SkillLoader {
         return skills;
     }
 
-    /** 加载运行目录技能（agent.skills-dir，默认 user.dir/skills）；目录不存在或空返回 null */
-    private List<Skill> loadExternal() {
+    /** 运行目录技能根：agent.skills-dir 显式指定优先，默认 user.dir/skills */
+    private String userSkillsDir() {
         String dir = agentProperties.getSkillsDir();
-        File root = new File(dir == null || dir.trim().isEmpty()
+        return dir == null || dir.trim().isEmpty()
                 ? System.getProperty("user.dir") + File.separator + "skills"
-                : dir.trim());
+                : dir.trim();
+    }
+
+    /** 安装目录技能根：{@code $MWB_AI_CLAW_HOME/skills/}（与 ConfigFileLocator 同一安装目录解析） */
+    private String installSkillsDir() {
+        return new File(ConfigFileLocator.homeDir(), "skills").getAbsolutePath();
+    }
+
+    /** 加载指定外部目录技能；目录不存在或空返回 null */
+    private List<Skill> loadExternal(String dir) {
+        File root = new File(dir);
         if (!root.isDirectory()) {
             return null;
         }

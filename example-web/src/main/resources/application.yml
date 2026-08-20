@@ -1,13 +1,13 @@
 # ================= Spring 默认 Profile =================
 # 默认激活 web 交互模式（REST/SSE/WebSocket）
-# 切换 Shell 交互模式：--spring.profiles.active=shell
+# 切换 Shell 交互模式：--spring.profiles.active=shell（需提供 application-shell.yml）
 spring:
   profiles:
     active: web
   # ================= 数据源（agent.storage.type=db 时生效） =================
   # 默认：嵌入式 H2（MySQL 兼容模式，可直接执行 MySQL 语法 schema.sql，数据重启清空，仅联调用）
   # 生产 MySQL：设置环境变量 DB_URL / DB_USERNAME / DB_PASSWORD / DB_DRIVER，
-  #   并先执行 start/src/main/resources/schema.sql 建表（或设 SQL_INIT_MODE=always 自动初始化）
+  #   并先执行 example-web/src/main/resources/schema.sql 建表（或设 SQL_INIT_MODE=always 自动初始化）
   datasource:
     url: ${DB_URL:jdbc:h2:mem:clawdb;MODE=MySQL;DB_CLOSE_DELAY=-1}
     username: ${DB_USERNAME:sa}
@@ -20,7 +20,7 @@ spring:
       schema-locations: classpath:schema.sql
 
 project:
-  name: start
+  name: example-web
 
 # ================= Agent 配置（OpenAI 兼容） =================
 # 前缀 agent，对应 AgentProperties
@@ -90,7 +90,7 @@ agent:
     synthesizer-base-url: ${SYNTHESIS_BASE_URL:}    # 小模型提炼：Base URL（留空继承 agent.base-url）
     synthesizer-api-key: ${SYNTHESIS_API_KEY:}      # 小模型提炼：API Key（留空继承 agent.api-key）
     synthesis-cache-size: 50        # 提炼缓存容量（按输入内容哈希去重，避免重复调 LLM；<=0 关闭）
-  # Agent 注册表（agents.json）与编排注册表（orchestrations.json）已独立到 start/src/main/resources 下
+  # Agent 注册表（agents.json）与编排注册表（orchestrations.json）已独立到 example-web/src/main/resources 下
   # 可在运行目录放置同名文件覆盖（支持 ${VAR:default} 占位符），或使用 classpath 默认模板
   # 工具安全配置
   security:
@@ -292,4 +292,4 @@ agent:
 
 # ================= MCP Server 配置 =================
 # 已独立到 mcp-server.json 文件（与 Cursor / Claude 的 mcp.json 格式一致）。
-# 编辑 start/src/main/resources/mcp-server.json，或在运行目录放置外部 mcp-server.json 覆盖。
+# 编辑 example-web/src/main/resources/mcp-server.json，或在运行目录放置外部 mcp-server.json 覆盖。

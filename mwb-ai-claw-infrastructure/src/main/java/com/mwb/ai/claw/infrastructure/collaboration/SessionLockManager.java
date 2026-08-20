@@ -8,7 +8,7 @@ import com.mwb.ai.claw.domain.scope.AgentScope;
  * 会话级锁管理器：保证同一会话（scope + sessionId）的「读 → 追加 → 推理 → 保存」全程串行化，
  * 不同会话 / 不同用户完全并行。锁是技术关注点，故放 infrastructure 层。
  * <p>
- * 实现：{@link LocalSessionLockManager}（默认，JVM 内）与 Redis 分布式实现（多实例部署）。
+ * 实现：{@link LocalSessionLockManager}（默认，JVM 内，单实例部署）。
  */
 public interface SessionLockManager {
 

@@ -7,6 +7,7 @@
 ```
 安装包 /
 ├── .env.example            密钥与模型配置模板（复制为 .env 填写）
+├── skills/                 内置技能模板（SKILL.md，可增删自定义技能）
 └── config/
     ├── agents.json         专家 Agent 定义（身份、模型、可用工具）
     ├── orchestrations.json 协作编排注册表（路由 / 讨论 / 委托）
@@ -19,6 +20,7 @@
 ~/.mwb-ai-claw/
 ├── lib/start.jar           运行产物
 ├── config/                 配置模板（直接修改即可覆盖内置默认）
+├── skills/                 技能模板（增删技能目录即自定义技能集）
 ├── .env.example            密钥模板副本（参考/重置用）
 ├── .env                    全局密钥配置（安装时已从模板创建，填入密钥即可）
 └── bin/mwb-ai-claw         启动器
@@ -49,8 +51,15 @@
 | `CODER_MODEL` / `CODER_API_KEY` 等 | 各专家 Agent 独立模型，留空继承默认 |
 | `EMBEDDING_MODEL` / `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` | 向量检索专用模型（DeepSeek 不支持 embeddings，建议配 OpenAI 兼容的 text-embedding-3-small） |
 | `SYNTHESIS_MODEL` / `SYNTHESIS_BASE_URL` / `SYNTHESIS_API_KEY` | 摘要/事实提炼的小模型（成本优化） |
+| `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` / `DB_DRIVER` | 数据库连接（`agent.storage.type=db` 时生效；默认嵌入式 H2，生产配 MySQL 连接串） |
+| `SQL_INIT_MODE` | SQL 初始化模式：`embedded`（默认，仅 H2）| `always`（每次启动执行建表）| `never` |
 
 `.env` 支持 `${VAR}` 占位符引用，例如 `agents.json` 中的 `"model": "${CODER_MODEL:${DEFAULT_MODEL:deepseek-chat}}"`。
+
+> **存储后端 `agent.storage.type`**：`file`（本地文件，默认，零依赖）| `db`（JDBC 持久化：会话 / 长期记忆 / 记忆页落库）。
+> 设置位置：`application.yml` 的 `agent.storage.type`，环境变量 `STORAGE_TYPE`（写入 `.env`），或命令行覆盖 `mwb-ai-claw --agent.storage.type=db`（优先级递增）。
+> 注意：`db` 时数据源为启动即连（见上表 DB_* 变量），需先确保数据库可达。
+> 会话并发锁固定本地 JVM 实现（`LocalSessionLockManager`，单实例部署），**无需任何额外配置**（Redis 分布式锁已移除）。
 
 ## 4. 专家 Agent（config/agents.json）
 
@@ -119,3 +128,13 @@ mwb-ai-claw --agent.security.shell-approval-mode=auto  # 工具审批自动放�
 - 会话 / 记忆数据落在**运行目录** `.agent/` 下（按项目隔离）；
 - 运行用量记录写入 `.agent/runs/YYYY-MM-DD.jsonl`；
 - 退出清理：删除运行目录 `.agent/` 即可重置全部会话记忆。
+
+## 9. 技能（skills/）
+
+技能是可复用工作流 / 领域知识包，格式为 `skills/<name>/SKILL.md`（YAML frontmatter `name` / `description` + Markdown 指令正文）。**加载顺序（三级，任一外部目录非空即完全接管技能集）**：
+
+1. **运行目录**：`${user.dir}/skills`（或 `agent.skills-dir` 指定）
+2. **安装目录**：`$MWB_AI_CLAW_HOME/skills/`（install 时随包复制，安装模式下直接在此增删技能目录，重启生效）
+3. **classpath 内置**：jar 内 `skills/` 模板（10 个内置技能）兜底
+
+新增技能 = 放入上述任一技能目录，重启应用后日志输出「已加载技能 [n]」，对话中 LLM 会自动调用 `use_skill` 按需加载。

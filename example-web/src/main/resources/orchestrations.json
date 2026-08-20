@@ -1,0 +1,52 @@
+{
+  "orchestrations": [
+    {
+      "id": "routing",
+      "type": "routing",
+      "description": "单专家独立处理：适用于单一领域问题（写代码、查资料、答疑、修复等），由路由按意图选择最合适的 Agent。作为默认兜底编排；多 Agent 协作编排经 invoke_* 工具由主 Agent 自主发起，不再做消息前置意图路由",
+      "agents": ["coder", "researcher", "architect", "reviewer"]
+    },
+    {
+      "id": "team-discussion",
+      "type": "conversational",
+      "description": "多方专家对话式讨论：架构师 / 编码专家 / 审查专家围绕同一问题多轮讨论（首轮并行观点、讨论轮互相回应），最后由决策主持收敛为明确结论。适用于技术选型、方案对比、权衡决策类问题",
+      "keywords": ["选型", "方案对比", "对比", "权衡", "决策", "哪个更好", "如何选择", "优缺点", "讨论", "评估", "怎么选"],
+      "agents": ["architect", "coder", "reviewer", "moderator"],
+      "config": {
+        "conversation": {
+          "rounds": 2,
+          "moderator": "moderator",
+          "participants": ["architect", "coder", "reviewer"],
+          "minConsensus": 2,
+          "convergence": "moderator",
+          "visibleHistory": 1,
+          "thinking": false
+        }
+      }
+    },
+    {
+      "id": "todo-delegate",
+      "type": "delegate",
+      "description": "主 Agent 思考规划并拆解为 Todo 列表，委托子 Agent 执行；子 Agent 可递归再委托，逐层汇总。适用于复杂、多步骤、跨领域任务",
+      "keywords": ["规划并实现", "复杂任务", "任务拆解", "分步骤", "分步完成", "多步骤", "拆解并执行", "团队协作", "分工完成", "整体规划"],
+      "agents": ["architect", "coder", "researcher", "reviewer"],
+      "config": {
+        "delegate": {
+          "plannerAgentId": "architect",
+          "maxTodos": 8,
+          "maxDepth": 2,
+          "parallel": true,
+          "concurrency": 4,
+          "onFailure": "abort",
+          "retries": 1,
+          "thinking": false,
+          "resultPass": "text",
+          "approvalGate": "none",
+          "approvalTimeoutMs": 0,
+          "topK": 3,
+          "replanRounds": 0
+        }
+      }
+    }
+  ]
+}

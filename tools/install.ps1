@@ -74,6 +74,7 @@ mwb-ai-claw 本地安装脚本 (Windows PowerShell)
     {0}
         ├── lib\start.jar        构建产物
         ├── config\              Agent/编排/MCP 配置模板（修改后重启即生效）
+        ├── skills\              技能模板（增删技能目录即自定义技能集）
         ├── bin\mwb-ai-claw.cmd  启动器批处理
         ├── .env.example         密钥模板副本（参考/重置用）
         └── .env                 全局密钥配置（DEFAULT_API_KEY 等）
@@ -340,6 +341,16 @@ $allArgs += $Args
     if (Test-Path $EnvExample) {
         Copy-Item -Force $EnvExample (Join-Path $InstallDir ".env.example")
         Write-OK "已复制密钥模板: $(Join-Path $InstallDir '.env.example')"
+    }
+
+    # 6. 复制内置技能模板（skills\；加载顺序：运行目录 skills → 安装目录 skills（本目录）→ classpath。
+    #    用户直接在安装目录增删技能目录即可自定义技能集，重启后生效）
+    $SkillsSrc = Join-Path $ProjectRoot "skills"
+    if (Test-Path $SkillsSrc) {
+        $SkillsDir = Join-Path $InstallDir "skills"
+        New-Item -ItemType Directory -Force -Path $SkillsDir | Out-Null
+        Copy-Item -Force (Join-Path $SkillsSrc "*") $SkillsDir -Recurse
+        Write-OK "已复制技能模板: $SkillsDir"
     }
 }
 

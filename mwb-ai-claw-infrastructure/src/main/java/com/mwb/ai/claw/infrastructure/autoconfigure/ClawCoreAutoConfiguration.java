@@ -8,7 +8,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.mwb.ai.claw.domain.core.AgentGateway;
@@ -26,7 +25,6 @@ import com.mwb.ai.claw.domain.tool.ToolGateway;
 import com.mwb.ai.claw.domain.tool.ToolPermissionChecker;
 import com.mwb.ai.claw.infrastructure.auth.ConfigToolPermissionChecker;
 import com.mwb.ai.claw.infrastructure.collaboration.LocalSessionLockManager;
-import com.mwb.ai.claw.infrastructure.collaboration.RedisSessionLockManager;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.config.AgentRegistryLoader;
 import com.mwb.ai.claw.infrastructure.config.AuthProperties;
@@ -37,22 +35,19 @@ import com.mwb.ai.claw.infrastructure.llm.ResilientLlmGateway;
 import com.mwb.ai.claw.infrastructure.llm.provider.AnthropicLlmGateway;
 import com.mwb.ai.claw.infrastructure.llm.provider.GeminiLlmGateway;
 import com.mwb.ai.claw.infrastructure.llm.provider.ProviderRoutingGateway;
-import com.mwb.ai.claw.infrastructure.memory.FileBasedMemoryGateway;
-import com.mwb.ai.claw.infrastructure.memory.FileBasedSessionGateway;
-import com.mwb.ai.claw.infrastructure.memory.FileMemoryPageStore;
 import com.mwb.ai.claw.infrastructure.memory.LayeredMemoryGatewayImpl;
 import com.mwb.ai.claw.infrastructure.memory.MemorySynthesisExecutor;
 import com.mwb.ai.claw.infrastructure.memory.SynthesisCache;
+import com.mwb.ai.claw.infrastructure.memory.storage.file.FileBasedMemoryGateway;
+import com.mwb.ai.claw.infrastructure.memory.storage.file.FileBasedSessionGateway;
+import com.mwb.ai.claw.infrastructure.memory.storage.file.FileMemoryPageStore;
+import com.mwb.ai.claw.infrastructure.memory.storage.jdbc.JdbcLongTermMemoryGateway;
+import com.mwb.ai.claw.infrastructure.memory.storage.jdbc.JdbcMemoryPageStore;
+import com.mwb.ai.claw.infrastructure.memory.storage.jdbc.JdbcSessionGateway;
 import com.mwb.ai.claw.infrastructure.memory.strategy.LlmMemorySynthesizer;
 import com.mwb.ai.claw.infrastructure.observability.MetricsRecorder;
 import com.mwb.ai.claw.infrastructure.skill.SkillLoader;
 import com.mwb.ai.claw.infrastructure.skill.SkillRegistryImpl;
-import com.mwb.ai.claw.infrastructure.storage.jdbc.JdbcLongTermMemoryGateway;
-import com.mwb.ai.claw.infrastructure.storage.jdbc.JdbcMemoryPageStore;
-import com.mwb.ai.claw.infrastructure.storage.jdbc.JdbcSessionGateway;
-import com.mwb.ai.claw.infrastructure.storage.redis.RedisLongTermMemoryGateway;
-import com.mwb.ai.claw.infrastructure.storage.redis.RedisMemoryPageStore;
-import com.mwb.ai.claw.infrastructure.storage.redis.RedisSessionGateway;
 import com.mwb.ai.claw.infrastructure.tool.ToolGatewayImpl;
 
 import io.micrometer.core.instrument.MeterRegistry;
@@ -66,9 +61,9 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
  *   <li>所有可替换的默认实现均为普通 POJO（无 {@code @Component}），统一在此以
  *       {@code @Bean} + 方法级 {@code @ConditionalOnMissingBean} 注册。条件在自动装配
  *       阶段（用户 Bean 已注册之后）评估，使用方声明同名接口的 Bean 即可覆盖默认实现；</li>
- *   <li>存储后端三选一：{@code agent.storage.type}=file（默认）| jdbc | redis，分别注册
- *       会话 / 长期记忆 / 记忆页三组实现；</li>
- *   <li>会话锁二选一：{@code agent.storage.lock-type}=local（默认）| redis；</li>
+ *   <li>存储后端二选一：{@code agent.storage.type}=file（默认）| db，分别注册
+ *       会话 / 长期记忆 / 记忆页三组实现（db 走 JDBC 持久化）；</li>
+ *   <li>会话锁固定本地 JVM 实现（单实例部署）；</li>
  *   <li>技能开关：{@code agent.skills-enabled}（默认 true）控制 SkillGateway 是否注册。</li>
  * </ul>
  *
@@ -168,7 +163,7 @@ public class ClawCoreAutoConfiguration {
         return new AgentGatewayImpl(agentProperties, longTermMemoryGateway, agentRegistryLoader);
     }
 
-    // ==================== 存储后端（file | jdbc | redis 三选一） ====================
+    // ==================== 存储后端（file | db 二选一） ====================
 
     @Configuration
     @ConditionalOnProperty(name = "agent.storage.type", havingValue = "file", matchIfMissing = true)
@@ -194,8 +189,8 @@ public class ClawCoreAutoConfiguration {
     }
 
     @Configuration
-    @ConditionalOnProperty(name = "agent.storage.type", havingValue = "jdbc")
-    public static class JdbcStorageConfiguration {
+    @ConditionalOnProperty(name = "agent.storage.type", havingValue = "db")
+    public static class DbStorageConfiguration {
 
         @Bean
         @ConditionalOnMissingBean(MemoryGateway.class)
@@ -216,50 +211,15 @@ public class ClawCoreAutoConfiguration {
         }
     }
 
-    @Configuration
-    @ConditionalOnProperty(name = "agent.storage.type", havingValue = "redis")
-    public static class RedisStorageConfiguration {
-
-        @Bean
-        @ConditionalOnMissingBean(MemoryGateway.class)
-        public RedisSessionGateway redisSessionGateway(StringRedisTemplate redis) {
-            return new RedisSessionGateway(redis);
-        }
-
-        @Bean
-        @ConditionalOnMissingBean(LongTermMemoryGateway.class)
-        public RedisLongTermMemoryGateway redisLongTermMemoryGateway(StringRedisTemplate redis) {
-            return new RedisLongTermMemoryGateway(redis);
-        }
-
-        @Bean
-        @ConditionalOnMissingBean(MemoryPageStore.class)
-        public RedisMemoryPageStore redisMemoryPageStore(StringRedisTemplate redis) {
-            return new RedisMemoryPageStore(redis);
-        }
-    }
-
-    // ==================== 会话锁（local | redis 二选一） ====================
+    // ==================== 会话锁（本地 JVM 实现，单实例部署） ====================
 
     @Configuration
-    @ConditionalOnProperty(name = "agent.storage.lock-type", havingValue = "local", matchIfMissing = true)
     public static class LocalLockConfiguration {
 
         @Bean
         @ConditionalOnMissingBean(com.mwb.ai.claw.infrastructure.collaboration.SessionLockManager.class)
         public LocalSessionLockManager localSessionLockManager() {
             return new LocalSessionLockManager();
-        }
-    }
-
-    @Configuration
-    @ConditionalOnProperty(name = "agent.storage.lock-type", havingValue = "redis")
-    public static class RedisLockConfiguration {
-
-        @Bean
-        @ConditionalOnMissingBean(com.mwb.ai.claw.infrastructure.collaboration.SessionLockManager.class)
-        public RedisSessionLockManager redisSessionLockManager(StringRedisTemplate redis) {
-            return new RedisSessionLockManager(redis);
         }
     }
 }

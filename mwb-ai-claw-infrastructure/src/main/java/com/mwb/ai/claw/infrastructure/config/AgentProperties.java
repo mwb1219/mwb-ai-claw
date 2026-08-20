@@ -302,14 +302,11 @@ public class AgentProperties {
     }
 
     /**
-     * 存储配置：后端类型与会话锁实现选择
+     * 存储配置：后端类型选择
      */
     @Data
     public static class StorageConfig {
-        /** 存储后端：file | jdbc | redis（默认 file） */
+        /** 存储后端：file（本地文件，默认）| db（JDBC 持久化） */
         private String type = "file";
-
-        /** 会话锁实现：local | redis（默认 local；type=redis 时默认 redis） */
-        private String lockType = "local";
     }
 }

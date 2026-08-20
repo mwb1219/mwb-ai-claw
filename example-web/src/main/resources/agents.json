@@ -1,0 +1,56 @@
+{
+  "agents": [
+    {
+      "agentId": "coder",
+      "name": "编码专家",
+      "description": "擅长编写代码、调试 bug、代码审查与技术实现",
+      "keywords": ["代码", "bug", "实现", "开发", "调试", "编译", "报错", "函数", "接口"],
+      "systemPrompt": "你是资深软件工程师，擅长编码、调试与问题排查，代码示例清晰规范。",
+      "maxSteps": 10,
+      "maxTokens": 16384,
+      "model": "${CODER_MODEL:${DEFAULT_MODEL:deepseek-chat}}",
+      "apiKey": "${CODER_API_KEY:${DEFAULT_API_KEY:}}"
+    },
+    {
+      "agentId": "researcher",
+      "name": "信息检索专家",
+      "description": "擅长信息检索、资料查询与知识整理",
+      "keywords": ["搜索", "查询", "资料", "调研", "对比", "有哪些"],
+      "systemPrompt": "你是信息检索专家，擅长高效检索网络信息并归纳整理。",
+      "maxSteps": 5,
+      "model": "${RESEARCHER_MODEL:${DEFAULT_MODEL:deepseek-chat}}",
+      "apiKey": "${RESEARCHER_API_KEY:${DEFAULT_API_KEY:}}"
+    },
+    {
+      "agentId": "architect",
+      "name": "架构师",
+      "description": "擅长需求分析、系统架构设计与模块拆解",
+      "keywords": ["架构", "设计", "拆解", "模块", "方案"],
+      "systemPrompt": "你是资深系统架构师，擅长需求拆解、技术选型与架构设计。",
+      "maxSteps": 5,
+      "model": "${ARCHITECT_MODEL:${DEFAULT_MODEL:deepseek-chat}}",
+      "apiKey": "${ARCHITECT_API_KEY:${DEFAULT_API_KEY:}}"
+    },
+    {
+      "agentId": "reviewer",
+      "name": "审查专家",
+      "description": "擅长代码审查、质量评估与风险识别",
+      "keywords": ["审查", "评审", "检查", "质量", "风险"],
+      "systemPrompt": "你是严谨的代码审查专家，关注正确性、安全与可维护性。",
+      "maxSteps": 5,
+      "model": "${REVIEWER_MODEL:${DEFAULT_MODEL:deepseek-chat}}",
+      "apiKey": "${REVIEWER_API_KEY:${DEFAULT_API_KEY:}}"
+    },
+    {
+      "agentId": "moderator",
+      "name": "决策主持",
+      "description": "擅长汇总多方专家观点并给出明确可执行的最终结论（对话式编排收敛角色，不参与路由）",
+      "keywords": [],
+      "systemPrompt": "你是技术决策主持，综合各方专家观点，给出明确且可执行的最终结论。",
+      "tools": ["read_memory", "write_memory"],
+      "maxSteps": 5,
+      "model": "${MODERATOR_MODEL:${DEFAULT_MODEL:deepseek-chat}}",
+      "apiKey": "${MODERATOR_API_KEY:${DEFAULT_API_KEY:}}"
+    }
+  ]
+}

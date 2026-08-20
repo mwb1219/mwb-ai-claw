@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.infrastructure.memory;
+package com.mwb.ai.claw.infrastructure.memory.storage.file;
 
 import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
 import com.mwb.ai.claw.domain.scope.AgentScope;

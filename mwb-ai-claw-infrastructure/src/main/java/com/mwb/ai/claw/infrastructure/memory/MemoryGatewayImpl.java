@@ -10,7 +10,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 /**
- * 记忆网关实现：纯内存版会话存储（已被 {@link FileBasedSessionGateway} 替代）。
+ * 记忆网关实现：纯内存版会话存储（已被 {@link com.mwb.ai.claw.infrastructure.memory.storage.file.FileBasedSessionGateway} 替代）。
  * <p>
  * 保留此实现供单元测试使用，不再注册为 Spring Bean。
  */

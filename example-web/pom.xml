@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.mwb.ai.claw</groupId>
+        <artifactId>mwb-ai-claw-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>example-web</artifactId>
+    <packaging>jar</packaging>
+    <name>example-web</name>
+    <description>Web 服务端示例：演示 mwb-ai-claw Spring Boot Starter 的 REST / SSE / WebSocket 接入方式</description>
+
+    <properties>
+        <!-- 示例工程不发布到 Maven 仓库 -->
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
+
+    <dependencies>
+        <!-- 框架 Starter：自动装配记忆 / LLM / 工具 / 编排 / 存储 / REST / WebSocket -->
+        <dependency>
+            <groupId>com.mwb.ai.claw</groupId>
+            <artifactId>mwb-ai-claw-spring-boot-starter</artifactId>
+        </dependency>
+
+        <!-- Web 服务端容器（spring.profiles.active=web 默认激活） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+        <!-- JDBC 存储（agent.storage.type=db）：嵌入式 H2（联调用，MySQL 兼容模式）+ 生产 MySQL 驱动 -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <!-- 生产 MySQL：切换 DB_DRIVER=com.mysql.cj.jdbc.Driver 即用（见 application.yml） -->
+        <dependency>
+            <groupId>mysql</groupId>
+            <artifactId>mysql-connector-java</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

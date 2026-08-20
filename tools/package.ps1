@@ -6,6 +6,7 @@
 #   mwb-ai-claw-<version>-bin\
 #   ├── install.ps1         安装脚本（自适应二进制模式）
 #   ├── CONFIG-GUIDE.md     配置指南（密钥 / Agent / 编排 / MCP 配置说明）
+#   ├── skills\              内置技能模板（SKILL.md，可增删自定义技能）
 #   ├── lib\start.jar        预构建可执行 jar（无源码）
 #   ├── config\              用户可调整配置模板（agents.json / orchestrations.json / mcp-server.json.example）
 #   │                        加载顺序：运行目录 → 安装目录 config → classpath
@@ -177,6 +178,14 @@ if (Test-Path $ConfigSrc) {
 $Guide = Join-Path $ProjectRoot "CONFIG-GUIDE.md"
 if (Test-Path $Guide) {
     Copy-Item -Force $Guide (Join-Path $DistDir "CONFIG-GUIDE.md")
+}
+
+# 6. 内置技能模板（skills\ 随包分发；加载顺序：运行目录 skills → 安装目录 skills → classpath）
+$SkillsSrc = Join-Path $ProjectRoot "start\src\main\resources\skills"
+if (Test-Path $SkillsSrc) {
+    $SkillsDir = Join-Path $DistDir "skills"
+    New-Item -ItemType Directory -Force -Path $SkillsDir | Out-Null
+    Copy-Item -Force (Join-Path $SkillsSrc "*") $SkillsDir -Recurse
 }
 
 Write-OK "分发目录内容:"

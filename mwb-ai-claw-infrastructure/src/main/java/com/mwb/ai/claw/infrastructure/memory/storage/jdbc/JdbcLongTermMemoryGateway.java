@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.infrastructure.storage.jdbc;
+package com.mwb.ai.claw.infrastructure.memory.storage.jdbc;
 
 import java.util.ArrayList;
 import java.util.List;

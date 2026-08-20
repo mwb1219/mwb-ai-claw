@@ -74,6 +74,7 @@ mwb-ai-claw 本地安装脚本
     $INSTALL_DIR
         ├── lib/start.jar        构建产物
         ├── config/              Agent/编排/MCP 配置模板（修改后重启即生效）
+        ├── skills/              技能模板（增删技能目录即自定义技能集）
         ├── bin/$COMMAND_NAME    启动器脚本
         ├── .env.example         密钥模板副本（参考/重置用）
         └── .env                 全局密钥配置（DEFAULT_API_KEY 等）
@@ -361,6 +362,15 @@ WRAPPER_EOF
     if [[ -f "$PROJECT_ROOT/.env.example" ]]; then
         cp -f "$PROJECT_ROOT/.env.example" "$INSTALL_DIR/.env.example"
         ok "已复制密钥模板: $INSTALL_DIR/.env.example"
+    fi
+
+    # 5. 复制内置技能模板（skills/；加载顺序：运行目录 skills → 安装目录 skills（本目录）→ classpath。
+    #    用户直接在安装目录增删技能目录即可自定义技能集，重启后生效）
+    if [[ -d "$PROJECT_ROOT/skills" ]]; then
+        mkdir -p "$INSTALL_DIR/skills"
+        if cp -Rf "$PROJECT_ROOT"/skills/. "$INSTALL_DIR/skills/" 2>/dev/null; then
+            ok "已复制技能模板: $INSTALL_DIR/skills/"
+        fi
     fi
 }
 

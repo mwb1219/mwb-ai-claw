@@ -597,7 +597,7 @@ agent:
   max-steps-extension: 2.0            # ReAct 步数扩展系数：预算(max-steps)用尽且工具链未完成时自动扩展，硬上限 = max-steps × 系数
   memory-dir: ""                      # 长期记忆目录，默认 ${user.dir}/.agent
   skills-enabled: true                # 技能总开关（false 时不加载技能、不注册 use_skill 工具）
-  skills-dir: ""                      # 技能根目录（默认 ${user.dir}/skills；classpath skills/ 为内置模板兜底）
+  skills-dir: ""                      # 技能根目录（默认 ${user.dir}/skills；加载顺序：运行目录 → 安装目录 skills → classpath 内置）
   # 可用工具列表：缺省（不配置）= 绑定全部已注册工具（内置 + 全局/MCP）；
   # 指定后 = 强制仅绑定声明的工具（use_skill / MCP / invoke_* 等全局工具需显式加入）
   # tools:
@@ -637,8 +637,7 @@ agent:
 
   # 存储后端（PhaseA 服务端生产化：会话 / 记忆页 / 长期记忆三端口可插拔）
   storage:
-    type: file                 # 存储后端：file（默认，本地 .agent 目录）| jdbc（需 schema.sql 建表）| redis
-    lock-type: local           # 会话锁实现：local（默认，JVM 内 ReentrantLock）| redis（SET NX PX + Lua，多实例）
+    type: file                 # 存储后端：file（默认，本地 .agent 目录）| db（JDBC 持久化，需 schema.sql 建表）
 
   # 请求鉴权（默认关闭；服务端多租户隔离时开启）
   auth:
@@ -651,7 +650,7 @@ agent:
     tool-permissions: {}       # 工具级静态授权：toolName -> 允许的 apiKey 列表（缺省全部允许）
 ```
 
-> **存储与鉴权**：`agent.storage.type` 切换后端时保持存储端口语义不变（文件/JDBC/Redis 三实现按条件装配，默认文件模式零配置迁移）；`agent.auth.enabled=true` 后，REST 请求（Header / Authorization / SSE `?apiKey=`）与 WebSocket 握手统一鉴权，校验通过后以 (tenantId, userId) 维度隔离会话、记忆与审批节点。
+> **存储与鉴权**：`agent.storage.type` 切换后端时保持存储端口语义不变（文件 / JDBC 两实现按条件装配，默认文件模式零配置迁移）；`agent.auth.enabled=true` 后，REST 请求（Header / Authorization / SSE `?apiKey=`）与 WebSocket 握手统一鉴权，校验通过后以 (tenantId, userId) 维度隔离会话、记忆与审批节点。
 
 ### 6.3 Agent 注册表（agents.json）与编排注册表（orchestrations.json）
 
@@ -853,7 +852,7 @@ MCP Server 配置独立在 `mcp-server.json`（与 Cursor / Claude 的 mcp.json 
 | 工具协议     | MCP (Model Context Protocol)                        | stdio / streamable\_http（SSE 兼容） |
 | Shell 终端 | JLine 3.20                                          | ANSI 着色、命令历史、行编辑、多行输入、Tab 补全                 |
 | 序列化      | Jackson                                             | Session JSON 持久化                 |
-| 持久化      | 本地文件 (.agent/ 目录，默认) / JDBC（H2·MySQL）/ Redis                | 会话 + 记忆页 + 长期记忆三端口可插拔（`agent.storage.type`） |
+| 持久化      | 本地文件 (.agent/ 目录，默认) / JDBC（H2·MySQL）                       | 会话 + 记忆页 + 长期记忆三端口可插拔（`agent.storage.type`） |
 | 前端       | 原生 HTML/CSS/JS                                      | 无框架依赖，可直接打开                      |
 
 ## 九、开发指南
@@ -875,7 +874,7 @@ public class MyTool implements ToolExecutor {
 
 ### 新增技能（Skill）
 
-无需写代码：在技能根目录（默认 `${user.dir}/skills`，或 `agent.skills-dir` 指定）放一个目录，包含 `SKILL.md`（YAML frontmatter + Markdown 指令）：
+无需写代码：在技能根目录放一个目录，包含 `SKILL.md`（YAML frontmatter + Markdown 指令）。技能加载按三级优先级查找：**运行目录**（默认 `${user.dir}/skills`，或 `agent.skills-dir` 指定）→ **安装目录**（`$MWB_AI_CLAW_HOME/skills/`，install 时随包复制）→ **classpath 内置模板**；任一外部目录非空即完全接管技能集。安装模式下直接编辑 `~/.mwb-ai-claw/skills/` 增删技能目录即可：
 
 ```markdown
 ---

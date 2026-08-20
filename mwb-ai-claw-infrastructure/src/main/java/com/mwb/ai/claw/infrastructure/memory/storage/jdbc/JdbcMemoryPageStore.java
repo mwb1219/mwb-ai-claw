@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.infrastructure.storage.jdbc;
+package com.mwb.ai.claw.infrastructure.memory.storage.jdbc;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -83,7 +83,7 @@ public class JdbcMemoryPageStore implements MemoryPageStore {
     @Override
     public List<MemoryPage> loadFacts(AgentScope scope) {
         ScopeClause where = scopeWhere(scope);
-        String sql = "SELECT fact_key AS key, content, importance, session_id, version, token_count, create_time "
+        String sql = "SELECT fact_key AS `key`, content, importance, session_id, version, token_count, create_time "
                 + "FROM claw_fact WHERE " + where.sql + " ORDER BY importance DESC";
         return jdbc.query(sql, (rs, i) -> {
             MemoryPage page = new MemoryPage();

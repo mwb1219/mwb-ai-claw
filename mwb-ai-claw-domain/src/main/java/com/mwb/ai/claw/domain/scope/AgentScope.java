@@ -36,7 +36,7 @@ public class AgentScope {
     }
 
     /**
-     * 存储命名空间 key（文件目录 / 表前缀 / Redis key 前缀统一使用）。
+     * 存储命名空间 key（文件目录 / 表前缀统一使用）。
      * null → 使用 legacy 根目录。
      */
     public String namespace() {

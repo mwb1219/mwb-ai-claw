@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.infrastructure.memory;
+package com.mwb.ai.claw.infrastructure.memory.storage.file;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;

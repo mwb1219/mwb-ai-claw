@@ -73,7 +73,7 @@ public final class ConfigFileLocator {
      * 安装目录根：系统属性 {@code mwb.ai.claw.home}（启动器注入）→ 环境变量
      * {@code MWB_AI_CLAW_HOME} → 默认 {@code ~/.mwb-ai-claw}。
      */
-    private static File homeDir() {
+    public static File homeDir() {
         String home = System.getProperty("mwb.ai.claw.home");
         if (home == null || home.trim().isEmpty()) {
             home = System.getenv("MWB_AI_CLAW_HOME");

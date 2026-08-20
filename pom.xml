@@ -29,6 +29,7 @@
         <module>mwb-ai-claw-infrastructure</module>
         <module>mwb-ai-claw-spring-boot-starter</module>
         <module>example-embed</module>
+        <module>example-web</module>
         <module>start</module>
     </modules>
 
