@@ -13,5 +13,11 @@
     <name>mwb-ai-claw-client</name>
 
     <dependencies>
+        <!-- 引用 domain 数据模型（ContentPart 等，供 ChatCmd 携带多模态片段与结构化输出参数） -->
+        <dependency>
+            <groupId>com.mwb.ai.claw</groupId>
+            <artifactId>mwb-ai-claw-domain</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 </project>

@@ -3,6 +3,7 @@ package com.mwb.ai.claw.infrastructure.llm.provider;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -77,7 +78,7 @@ public class GeminiLlmGateway extends AbstractProtocolGateway {
         }
         if (system.length() > 0) {
             Map<String, Object> instr = new LinkedHashMap<>();
-            instr.put("parts", List.of(part("text", system.toString())));
+            instr.put("parts", Collections.singletonList(part("text", system.toString())));
             body.put("systemInstruction", instr);
         }
 
@@ -101,7 +102,7 @@ public class GeminiLlmGateway extends AbstractProtocolGateway {
             }
             Map<String, Object> tools = new LinkedHashMap<>();
             tools.put("functionDeclarations", declarations);
-            body.put("tools", List.of(tools));
+            body.put("tools", Collections.singletonList(tools));
         }
 
         // generationConfig（D2 结构化输出：json_object / json_schema）

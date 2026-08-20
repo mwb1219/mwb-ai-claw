@@ -9,7 +9,9 @@ import java.nio.file.StandardOpenOption;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.slf4j.Logger;
@@ -89,5 +91,38 @@ public class RunUsageRecorder {
                     : Paths.get(memoryDir, "runs").toString();
         }
         return Paths.get(dir);
+    }
+
+    /**
+     * 读取指定日期（yyyy-MM-dd，空=今天）的运行记录 JSONL，按时间顺序返回（最新在后）。
+     * 文件不存在或 IO 异常时返回空列表（供 shell /runs 面板查询）。
+     */
+    public List<Map<String, Object>> readRuns(String date) {
+        String day = (date == null || date.trim().isEmpty()) ? LocalDate.now().toString() : date.trim();
+        Path file = usageDir().resolve(day + ".jsonl");
+        if (!Files.isRegularFile(file)) {
+            return new ArrayList<>();
+        }
+        try {
+            List<Map<String, Object>> runs = new ArrayList<>();
+            for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
+                if (line.trim().isEmpty()) {
+                    continue;
+                }
+                try {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> entry = JsonUtils.fromJson(line, Map.class);
+                    if (entry != null) {
+                        runs.add(entry);
+                    }
+                } catch (Exception ignore) {
+                    // 单行解析失败跳过，不中断整体读取
+                }
+            }
+            return runs;
+        } catch (IOException e) {
+            log.warn("读取运行用量失败: {}", e.getMessage());
+            return new ArrayList<>();
+        }
     }
 }

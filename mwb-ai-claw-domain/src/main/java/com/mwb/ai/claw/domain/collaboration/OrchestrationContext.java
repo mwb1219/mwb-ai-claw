@@ -2,9 +2,12 @@ package com.mwb.ai.claw.domain.collaboration;
 
 import com.mwb.ai.claw.domain.core.AgentGateway;
 import com.mwb.ai.claw.domain.core.ProgressCallback;
+import com.mwb.ai.claw.domain.llm.ContentPart;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import lombok.Data;
+
+import java.util.List;
 
 /**
  * 编排执行上下文：编排器所需的全部输入。
@@ -19,6 +22,9 @@ public class OrchestrationContext {
 
     /** 用户消息 */
     private String message;
+
+    /** 多模态内容片段（D2）：非空时随用户消息进入会话（image_url / image_base64） */
+    private List<ContentPart> parts;
 
     /** 会话 id（可空，空则新建主会话） */
     private String sessionId;

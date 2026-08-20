@@ -46,15 +46,16 @@ agent:
   # 技能（Skill）支持：渐进式披露 —— 技能清单常驻 system prompt，SKILL.md 正文按需经 use_skill 工具加载
   skills-enabled: true            # 技能总开关（false 时不加载技能、不注册 use_skill 工具）
   skills-dir: ""                  # 技能根目录（运行目录，默认 ${user.dir}/skills；classpath skills/ 为内置模板兜底）
-  # 可用工具列表
-  tools:
-    - echo
-    - http
-    - file
-    - shell
-    - shell_status
-    - read_memory
-    - write_memory
+  # 可用工具列表：缺省（不配置）= 绑定全部已注册工具（内置 + 全局/MCP）；
+  # 指定后 = 强制仅绑定声明的工具（use_skill / MCP / invoke_* 等全局工具需显式加入）
+  # tools:
+  #   - echo
+  #   - http
+  #   - file
+  #   - shell
+  #   - shell_status
+  #   - read_memory
+  #   - write_memory
   # 分层记忆（突破上下文窗口：分层存储 + 动态换页 + 检索召回）
   # 直接对应 AgentProperties.memory（LayeredMemoryConfig），命令行覆盖示例：
   #   --agent.memory.summary-block-size=2 --agent.memory.hot-window-size=4

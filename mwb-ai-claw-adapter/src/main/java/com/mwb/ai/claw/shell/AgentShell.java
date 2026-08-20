@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -41,10 +42,12 @@ import org.springframework.stereotype.Component;
 
 import com.mwb.ai.claw.agent.ApprovalService;
 import com.mwb.ai.claw.agent.executor.ChatCmdExe;
+import com.mwb.ai.claw.agent.observability.RunUsageRecorder;
 import com.mwb.ai.claw.api.AgentServiceI;
 import com.mwb.ai.claw.domain.core.Message;
 import com.mwb.ai.claw.domain.core.ProgressCallback;
 import com.mwb.ai.claw.domain.core.Session;
+import com.mwb.ai.claw.domain.llm.ContentPart;
 import com.mwb.ai.claw.domain.llm.LlmResponse;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
 import com.mwb.ai.claw.domain.memory.LayeredMemoryConfig;
@@ -66,10 +69,12 @@ import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.memory.MemorySynthesisExecutor;
 import com.mwb.ai.claw.infrastructure.memory.SynthesisCache;
 import com.mwb.ai.claw.infrastructure.memory.strategy.LlmMemorySynthesizer;
+import com.mwb.ai.claw.infrastructure.observability.MetricsRecorder;
 import com.mwb.ai.claw.infrastructure.tool.ToolSecurity;
 import com.mwb.ai.claw.infrastructure.tool.mcp.McpClientManager;
 import com.mwb.ai.claw.infrastructure.util.JsonUtils;
 import com.mwb.ai.claw.infrastructure.util.TokenEstimator;
+import com.mwb.ai.claw.shell.util.MultimodalInputParser;
 import com.mwb.ai.claw.shell.util.TemplateEngine;
 
 /**
@@ -124,6 +129,12 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
 
     @Resource
     private ApprovalService approvalService;
+
+    @Resource
+    private MetricsRecorder metricsRecorder;
+
+    @Resource
+    private RunUsageRecorder runUsageRecorder;
 
     private Terminal terminal;
     private LineReader reader;
@@ -480,11 +491,26 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
             case "/memory":
                 handleMemoryCommand(arg1, arg2);
                 break;
+            case "/metrics":
+                handleMetricsCommand();
+                break;
+            case "/runs":
+                handleRunsCommand(arg1);
+                break;
             case "/compact":
                 compactSession();
                 break;
             case "/cost":
                 showCost(arg1);
+                break;
+            case "/json":
+                // 结构化输出：消息以 JSON 对象格式输出（response_format=json_object）
+                String jsonMsg = input.length() > 5 ? input.substring(5).trim() : "";
+                if (jsonMsg.isEmpty()) {
+                    println(STYLE_WARN, "用法: /json <消息> —— 以 JSON 结构化输出，回复经提取并格式化展示");
+                    break;
+                }
+                handleChat(jsonMsg, true);
                 break;
             case "/clear":
                 // 清屏 + 重置上下文（新建会话；旧会话保留在 /session list）
@@ -619,7 +645,7 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
         }
     }
 
-    /** 执行自定义命令：模板引擎渲染后作为消息发送；output=json 时对回复做结构化提取展示 */
+    /** 执行自定义命令：模板引擎渲染后作为消息发送；output=json 时以结构化输出（response_format=json_object）并格式化展示 */
     private void handleCustomCommand(CustomCommand cc, String argsText) {
         String template = cc.getTemplate();
         if (template == null || template.isEmpty()) {
@@ -631,13 +657,7 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
             println(STYLE_ACTION, "[/" + cc.getName() + "] " + cc.getDescription());
         }
         if ("json".equalsIgnoreCase(cc.getOutput())) {
-            jsonOutputMode = true;
-            capturedReply = null;
-            chatOnce(message);
-            jsonOutputMode = false;
-            if (capturedReply != null) {
-                displayStructuredJson(capturedReply);
-            }
+            chatOnce(message, true, null);
         } else {
             chatOnce(message);
         }
@@ -664,6 +684,19 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
             terminal.writer().print(markdownRenderer.render(reply));
             terminal.writer().flush();
         }
+    }
+
+    // ==================== 多模态输入解析（D2） ====================
+
+    /**
+     * 解析用户输入中的图片附件（D2 多模态，见 {@link MultimodalInputParser}）：
+     * <ul>
+     *   <li>{@code ![描述](路径|URL)} — Markdown 图片语法，URL 转 image_url，本地路径转 base64；</li>
+     *   <li>{@code @路径} — 本地图片附件标记（路径存在且为图片扩展名时生效）。</li>
+     * </ul>
+     */
+    private MultimodalInputParser.Result parseMultimodalInput(String input) {
+        return MultimodalInputParser.parse(input);
     }
 
     // ==================== MCP 管理 ====================
@@ -964,6 +997,76 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
         println(STYLE_INFO, "  提示: 长会话可执行 /compact 压缩历史上下文降低用量");
     }
 
+    // ==================== 可观测性查询（/metrics /runs） ====================
+
+    /** /metrics：实时展示进程内 claw.* 指标（Counter / Timer 快照） */
+    private void handleMetricsCommand() {
+        List<Map<String, Object>> meters = metricsRecorder.snapshot();
+        if (meters.isEmpty()) {
+            println(STYLE_INFO, "暂无指标数据（对话 / 工具 / LLM 调用后产生）");
+            return;
+        }
+        println(STYLE_PROMPT, "◈ 可观测性指标（claw.* 实时内存计数）◈");
+        for (Map<String, Object> m : meters) {
+            String name = String.valueOf(m.get("name"));
+            String tags = String.valueOf(m.get("tags"));
+            String line;
+            if (m.containsKey("meanMs")) {
+                // Timer：次数 + 均值 + 总量
+                line = String.format("%s{%s}  %d 次 | 均值 %.0fms | 总计 %.0fms",
+                        name, tags, ((Number) m.get("count")).longValue(),
+                        ((Number) m.get("meanMs")).doubleValue(),
+                        ((Number) m.get("totalMs")).doubleValue());
+            } else if (m.containsKey("count")) {
+                // Counter
+                line = String.format("%s{%s}  %.0f 次", name, tags,
+                        ((Number) m.get("count")).doubleValue());
+            } else {
+                line = String.format("%s{%s}  %s", name, tags, String.valueOf(m.get("value")));
+            }
+            println(STYLE_INFO, "  " + line);
+        }
+        println(STYLE_INFO, "  提示: 指标为进程内计数（重启清零）；引入 actuator 后经 /actuator/metrics 暴露");
+    }
+
+    /** /runs [日期]：查询每次运行用量记录（JSONL），空参默认今天 */
+    private void handleRunsCommand(String date) {
+        String day = (date == null || date.trim().isEmpty()) ? LocalDate.now().toString() : date.trim();
+        List<Map<String, Object>> runs = runUsageRecorder.readRuns(day);
+        if (runs.isEmpty()) {
+            println(STYLE_INFO, day + " 暂无运行记录（每次对话完成后写入 {memory-dir}/runs/" + day + ".jsonl）");
+            return;
+        }
+        int success = 0;
+        long totalMs = 0;
+        for (Map<String, Object> r : runs) {
+            if (Boolean.TRUE.equals(r.get("success"))) {
+                success++;
+            }
+            Object d = r.get("durationMs");
+            if (d instanceof Number) {
+                totalMs += ((Number) d).longValue();
+            }
+        }
+        println(STYLE_PROMPT, "◈ 运行记录（" + day + "）◈");
+        println(STYLE_INFO, String.format("  共 %d 次 | 成功 %d | 失败 %d | 平均耗时 %.0fms",
+                runs.size(), success, runs.size() - success,
+                runs.isEmpty() ? 0 : totalMs * 1.0 / runs.size()));
+        // 明细：最新 10 条（最新在上）
+        int from = Math.max(0, runs.size() - 10);
+        for (int i = runs.size() - 1; i >= from; i--) {
+            Map<String, Object> r = runs.get(i);
+            String label = Boolean.TRUE.equals(r.get("success")) ? "成功" : "失败";
+            String ts = r.get("ts") == null ? "" : abbreviate(String.valueOf(r.get("ts")), 19);
+            String sid = r.get("sessionId") == null ? "" : abbreviate(String.valueOf(r.get("sessionId")), 14);
+            println(STYLE_INFO, String.format("  %s %s | %s | %s | %sms | %s",
+                    ts, label, sid, r.get("model"), r.get("durationMs"), r.get("orchestration")));
+        }
+        if (runs.size() > 10) {
+            println(STYLE_INFO, "  … 仅显示最近 10 条（共 " + runs.size() + " 条）");
+        }
+    }
+
     // ==================== ! 快捷命令执行 ====================
 
     /**
@@ -1155,6 +1258,10 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
     // ==================== 对话处理 ====================
 
     private void handleChat(String message) {
+        handleChat(message, false);
+    }
+
+    private void handleChat(String message, boolean jsonOutput) {
         if (planMode) {
             // 计划模式：先让 Agent 输出方案（不执行），用户确认后再执行
             chatOnce(message + "\n\n（计划模式）请先输出详细的实施方案与具体步骤，不要调用任何工具执行操作；等待用户确认后再开始执行。");
@@ -1174,7 +1281,7 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
         chatInProgress = true;
         chatExecutor.submit(() -> {
             try {
-                chatOnce(message);
+                chatOnce(message, jsonOutput, null);
             } finally {
                 chatInProgress = false;
                 println(STYLE_INFO, "");
@@ -1185,21 +1292,56 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
 
     /** 发送一次对话（同步/流式）并自动生成会话标题 */
     private void chatOnce(String message) {
-        ChatCmd cmd = new ChatCmd();
-        cmd.setMessage(message);
-        cmd.setSessionId(sessionId);
+        chatOnce(message, false, null);
+    }
 
+    /**
+     * 发送一次对话（同步/流式）。
+     * <p>
+     * 兼容 PhaseD 能力：
+     * <ul>
+     *   <li>多模态：{@code parts} 为空时自动解析消息中的图片标记（{@code ![描述](路径|URL)} 与 {@code @路径}）；</li>
+     *   <li>结构化输出：{@code jsonOutput=true} 时设置 {@code response_format=json_object}，回复经 extractJson 提取并格式化展示。</li>
+     * </ul>
+     */
+    private void chatOnce(String message, boolean jsonOutput, List<ContentPart> parts) {
+        // 多模态解析：未显式提供 parts 时识别消息中的图片标记
+        MultimodalInputParser.Result parsed = parts == null ? parseMultimodalInput(message) : null;
+        String text = parsed != null ? parsed.text() : message;
+        List<ContentPart> imageParts = parsed != null ? parsed.parts() : parts;
+
+        ChatCmd cmd = new ChatCmd();
+        cmd.setMessage(text);
+        cmd.setSessionId(sessionId);
+        if (jsonOutput) {
+            cmd.setResponseFormat("json_object");
+        }
+        if (imageParts != null && !imageParts.isEmpty()) {
+            cmd.setParts(imageParts);
+        }
+        if (jsonOutput) {
+            jsonOutputMode = true;
+            capturedReply = null;
+        }
         try {
             if (streamMode) {
                 doStreamChat(cmd);
             } else {
                 doSyncChat(cmd);
             }
+            // 结构化输出：统一提取 JSON 并格式化展示
+            if (jsonOutput && capturedReply != null) {
+                displayStructuredJson(capturedReply);
+            }
             // 首次对话后自动生成会话标题（首条用户消息截断）
             ensureSessionTitle();
         } catch (Exception e) {
             println(STYLE_ERROR, "对话失败: " + e.getMessage());
             log.error("对话异常", e);
+        } finally {
+            if (jsonOutput) {
+                jsonOutputMode = false;
+            }
         }
     }
 
@@ -1513,6 +1655,7 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
         println(STYLE_INFO, "");
         println(STYLE_INFO, "  直接输入文本 → 发送给 Agent");
         println(STYLE_INFO, "  !<命令>        → 本地执行 shell 命令并将输出交给 Agent 分析（如 !npm test）");
+        println(STYLE_INFO, "  ![描述](图片路径或URL) → 发送图片给 Agent（多模态；也可用 @图片路径 附件标记）");
         println(STYLE_INFO, "");
         println(STYLE_INFO, "  命令:");
         println(STYLE_INFO, "  /help                  显示此帮助");
@@ -1521,6 +1664,7 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
         println(STYLE_INFO, "  /compact               压缩当前会话历史上下文（保留最近 10 条 + 摘要）");
         println(STYLE_INFO, "  /cost [id]             当前会话（或指定会话）Token 用量估算");
         println(STYLE_INFO, "  /plan                  切换计划模式（先出方案，确认后执行）");
+        println(STYLE_INFO, "  /json <消息>           以 JSON 结构化输出（response_format=json_object），回复经提取格式化展示");
         println(STYLE_INFO, "  /mcp                   查看 MCP Server 列表");
         println(STYLE_INFO, "  /mcp connect <name>    连接（重连）MCP Server");
         println(STYLE_INFO, "  /mcp disconnect <name> 断开 MCP Server");
@@ -1539,6 +1683,8 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
         println(STYLE_INFO, "  /memory summaries      查看中期摘要页");
         println(STYLE_INFO, "  /memory archive        查看跨会话档案块");
         println(STYLE_INFO, "  /memory search <q>     检索记忆召回调试");
+        println(STYLE_INFO, "  /metrics               可观测性指标总览（claw.* 实时计数）");
+        println(STYLE_INFO, "  /runs [yyyy-MM-dd]     运行用量记录（空参=今天）");
         println(STYLE_INFO, "  /clear                 清屏并重置上下文（新建会话）");
         println(STYLE_INFO, "  /pending [sessionId]   列出待审批节点（delegate 编排审批门禁）");
         println(STYLE_INFO, "  /approve <layerKey> [sessionId]  批准该层计划，继续委派执行");
@@ -1785,8 +1931,8 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
             "/fork ", "/plan", "/mcp", "/mcp list", "/mcp connect ", "/mcp disconnect ",
             "/agent", "/agent list", "/agent attach ",
             "/memory", "/memory stats", "/memory facts", "/memory summaries",
-            "/memory archive", "/memory search ", "/compact", "/cost", "/clear",
-            "/pending", "/approve ", "/reject ", "/exit", "/quit");
+            "/memory archive", "/memory search ", "/compact", "/cost", "/json ", "/clear",
+            "/metrics", "/runs ", "/pending", "/approve ", "/reject ", "/exit", "/quit");
 
     /** 终端补全器：斜杠命令 / 会话 ID（switch/delete/rename 场景）/ 文件路径 */
     private final class ShellCompleter implements Completer {

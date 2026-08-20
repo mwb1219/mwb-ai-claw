@@ -49,8 +49,8 @@ public class RoutingOrchestrator implements AgentOrchestrator {
         // 获取或创建会话
         Session session = ctx.getExecutionUnit().getOrCreateSession(ctx.getScope(), ctx.getSessionId(), agent);
 
-        // 追加用户消息并执行 ReAct
-        session.addUserMessage(ctx.getMessage());
+        // 追加用户消息（D2 多模态：parts 非空时携带图片片段）并执行 ReAct
+        session.addUserMessage(ctx.getMessage(), ctx.getParts());
         ReActResult result = ctx.getExecutionUnit()
                 .runSession(session, agent, ctx.getCallback(), ctx.getStreamCallback());
 

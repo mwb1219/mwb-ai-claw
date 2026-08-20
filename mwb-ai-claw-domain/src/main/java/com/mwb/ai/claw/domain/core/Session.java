@@ -1,5 +1,6 @@
 package com.mwb.ai.claw.domain.core;
 
+import com.mwb.ai.claw.domain.llm.ContentPart;
 import com.mwb.ai.claw.domain.llm.ToolCall;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import lombok.Data;
@@ -47,7 +48,12 @@ public class Session {
     }
 
     public void addUserMessage(String content) {
-        this.messages.add(Message.of("user", content));
+        addUserMessage(content, null);
+    }
+
+    /** 追加用户消息；parts 非空时携带多模态片段（D2） */
+    public void addUserMessage(String content, List<ContentPart> parts) {
+        this.messages.add(Message.of("user", content, parts));
         refreshUpdateTime();
         // 自动设置标题：取第一条用户消息的前 30 个字符
         if ((title == null || title.startsWith("session-")) && messages.size() == 1) {

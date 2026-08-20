@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.mwb.ai.claw.agent.observability.RunUsageRecorder;
+import com.mwb.ai.claw.domain.context.LlmRequestOptions;
 import com.mwb.ai.claw.domain.collaboration.AgentOrchestrator;
 import com.mwb.ai.claw.domain.collaboration.CollaborationResult;
 import com.mwb.ai.claw.domain.collaboration.ExecutionUnit;
@@ -75,6 +76,11 @@ public class ChatCmdExe {
                                                    LlmStreamCallback streamCallback) {
         long start = System.currentTimeMillis();
         String orchestrationId = null;
+        // 结构化输出（D2）：请求级 responseFormat/jsonSchema 经线程上下文注入 ReAct 循环内每次 LLM 请求
+        boolean boundOptions = cmd.getResponseFormat() != null && !cmd.getResponseFormat().trim().isEmpty();
+        if (boundOptions) {
+            LlmRequestOptions.bind(cmd.getResponseFormat(), cmd.getJsonSchema());
+        }
         // 单次运行 token 预算：>0 时在当前线程绑定，LLM 韧性装饰器按次累计，超限中止
         long budgetTokens = agentProperties.getLlm().getRunBudgetTokens();
         RunTokenBudget budget = budgetTokens > 0 ? RunTokenBudget.bind(budgetTokens) : null;
@@ -93,6 +99,7 @@ public class ChatCmdExe {
             OrchestrationContext ctx = new OrchestrationContext();
             ctx.setScope(AgentScopeContext.get());
             ctx.setMessage(cmd.getMessage());
+            ctx.setParts(cmd.getParts());
             ctx.setSessionId(cmd.getSessionId());
             ctx.setExplicitAgentId(cmd.getAgentId());
             ctx.setExplicitOrchestrationId(cmd.getOrchestrationId());
@@ -130,6 +137,9 @@ public class ChatCmdExe {
             recordUsage(cmd, orchestrationId, null, false, "SYSTEM_ERROR", start);
             throw e;
         } finally {
+            if (boundOptions) {
+                LlmRequestOptions.unbind();
+            }
             if (budget != null) {
                 RunTokenBudget.unbind();
             }

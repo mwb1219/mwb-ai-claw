@@ -1,0 +1,4 @@
+{
+  "agents": [],
+  "_comment": "infrastructure 测试用内置模板（验证 classpath 回退）"
+}

@@ -73,7 +73,9 @@ mwb-ai-claw 本地安装脚本
 安装位置 (可通过 MWB_AI_CLAW_HOME 覆盖):
     $INSTALL_DIR
         ├── lib/start.jar        构建产物
+        ├── config/              Agent/编排/MCP 配置模板（修改后重启即生效）
         ├── bin/$COMMAND_NAME    启动器脚本
+        ├── .env.example         密钥模板副本（参考/重置用）
         └── .env                 全局密钥配置（DEFAULT_API_KEY 等）
 
 PATH 链接:
@@ -339,10 +341,27 @@ elif [[ -n "${MWB_AI_CLAW_APPROVAL_MODE:-}" ]]; then
 fi
 
 # 透传用户参数；默认激活 shell profile
-exec java -jar "$JAR_PATH" --spring.profiles.active=shell "$@"
+# -Dmwb.ai.claw.home 注入安装目录：ConfigFileLocator 可按「运行目录→安装目录 config→classpath」加载配置
+exec java -Dmwb.ai.claw.home="$MWBC_HOME" -jar "$JAR_PATH" --spring.profiles.active=shell "$@"
 WRAPPER_EOF
     chmod +x "$BIN_DIR/$COMMAND_NAME"
     ok "已生成启动器: $BIN_DIR/$COMMAND_NAME"
+
+    # 3. 复制用户可调整配置模板（agents.json / orchestrations.json / mcp-server.json.example）
+    #    加载顺序：运行目录(user.dir) → 安装目录 config（本目录）→ classpath。
+    #    用户直接修改本目录下的配置文件即可覆盖内置默认，重启后生效
+    if [[ -d "$PROJECT_ROOT/config" ]]; then
+        mkdir -p "$INSTALL_DIR/config"
+        if cp -f "$PROJECT_ROOT"/config/* "$INSTALL_DIR/config/" 2>/dev/null; then
+            ok "已复制配置模板: $INSTALL_DIR/config/"
+        fi
+    fi
+
+    # 4. 复制 .env.example 密钥模板副本（参考/重置用；实际密钥写在 $INSTALL_DIR/.env）
+    if [[ -f "$PROJECT_ROOT/.env.example" ]]; then
+        cp -f "$PROJECT_ROOT/.env.example" "$INSTALL_DIR/.env.example"
+        ok "已复制密钥模板: $INSTALL_DIR/.env.example"
+    fi
 }
 
 # ---------------- 初始化 .env ----------------
@@ -445,6 +464,9 @@ main() {
     printf "  ${C_BOLD}用法${C_NC}: 在任意目录执行 ${C_CYAN}${COMMAND_NAME}${C_NC} 进入 Agent Shell\n"
     printf "  ${C_BOLD}帮助${C_NC}: ${C_YELLOW}${COMMAND_NAME} --help${C_NC} 查看启动参数 | 进入后输入 ${C_YELLOW}/help${C_NC} 查看命令\n"
     printf "  ${C_BOLD}审批${C_NC}: 默认 ${C_YELLOW}ask${C_NC}（高风险命令询问 y/N）；改为自动可在 ${ENV_FILE} 中设 ${C_CYAN}MWB_AI_CLAW_APPROVAL_MODE=auto${C_NC}\n"
+    [[ -d "$INSTALL_DIR/config" ]] && {
+        printf "  ${C_BOLD}自定义${C_NC}: 将 ${C_CYAN}%s${C_NC} 下文件复制到运行目录即可覆盖默认配置（agents/orchestrations/mcp-server）\n" "$INSTALL_DIR/config"
+    }
     [[ -f "$ENV_FILE" && -z "$(grep -E '^DEFAULT_API_KEY=\S' "$ENV_FILE" 2>/dev/null || true)" ]] && {
         warn "提醒: $ENV_FILE 中 DEFAULT_API_KEY 仍为空, 请先填入再使用"
     }

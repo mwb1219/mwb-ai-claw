@@ -394,8 +394,14 @@ mwb-ai-claw --agent.orchestration=... # 指定编排
 mwb-ai-claw-<version>-bin/
 ├── install.sh        安装脚本（自动识别二进制模式，跳过 mvn）
 ├── lib/start.jar     预构建可执行 jar（无源码）
+├── config/           用户可调整配置模板（复制到运行目录即可覆盖内置默认）
+│   ├── agents.json            专家 Agent 定义
+│   ├── orchestrations.json    协作编排注册表
+│   └── mcp-server.json.example  MCP Server 配置模板（复制为 mcp-server.json 生效）
 └── .env.example      密钥配置模板
 ```
+
+> **配置覆盖机制**：配置文件按三级加载——**运行目录（user.dir）→ 安装目录 `~/.mwb-ai-claw/` → classpath 内置默认**。安装后直接修改 `~/.mwb-ai-claw/config/` 下的 json 模板（MCP 需复制为 `mcp-server.json`）、编辑 `~/.mwb-ai-claw/.env`（已从模板创建）即可覆盖内置默认，重启生效，无需重新打包。
 
 #### 5.3.3 用户使用流程
 
@@ -507,6 +513,7 @@ java -jar start/target/start-*.jar --spring.profiles.active=shell
 | ---------------------- | ------------ |
 | 自由文本                   | 发送给 Agent 对话 |
 | `!<命令>`                | 本地执行 shell 命令并把输出交给 Agent 分析（如 `!npm test`） |
+| `/json <消息>`           | 以 JSON 结构化输出（response_format=json_object），回复经提取并格式化展示 |
 | `/mode`                | 切换 流式/同步 模式  |
 | `/trace`               | 切换 观察结果 完整/缩写 |
 | `/plan`                | 切换计划模式（先出方案，用户确认后执行） |
@@ -526,10 +533,19 @@ java -jar start/target/start-*.jar --spring.profiles.active=shell
 | `/agent`               | 查看后台 agent 任务 |
 | `/agent attach <id>`   | 查看后台 agent 结果 |
 | `/memory`              | 分层记忆总览 / `stats` / `facts` / `summaries` / `archive` / `search <q>` |
+| `/metrics`             | 可观测性指标总览（claw.* 实时计数：LLM / 工具 / ReAct / API / 记忆） |
+| `/runs [yyyy-MM-dd]`   | 运行用量记录查询（空参=今天；含成功率 / 平均耗时汇总与明细） |
 | `/clear`               | 清屏并重置上下文（新建会话） |
 | `/exit` / `/quit`      | 退出           |
 
 流式模式下 AI 回复逐 token 绿色打印，Thought 紫色、Action 黄色、Observation 蓝色、Shell 输出绿色。命令历史自动保存至 `~/.mwb-ai-claw-history`。
+
+**多模态图片输入**（与文本混用，可同时使用两种语法）：
+
+- `![描述](图片路径或URL)` —— Markdown 图片语法：URL 转 `image_url`；本地路径转 `image_base64`（≤10MB）
+- `@图片路径` —— 本地图片附件标记（文件存在且为图片扩展名 `.png/.jpg/.jpeg/.gif/.webp/.bmp` 时生效）
+
+例：`分析这张架构图 ![架构图](~/docs/arch.png) 并指出问题`、`诊断截图 @./logs/error.png`。
 
 **启动参数**（`mwb-ai-claw --prompt "问题"` 等）：
 
@@ -582,13 +598,16 @@ agent:
   memory-dir: ""                      # 长期记忆目录，默认 ${user.dir}/.agent
   skills-enabled: true                # 技能总开关（false 时不加载技能、不注册 use_skill 工具）
   skills-dir: ""                      # 技能根目录（默认 ${user.dir}/skills；classpath skills/ 为内置模板兜底）
-  tools:
-    - echo
-    - http
-    - file
-    - shell
-    - read_memory
-    - write_memory
+  # 可用工具列表：缺省（不配置）= 绑定全部已注册工具（内置 + 全局/MCP）；
+  # 指定后 = 强制仅绑定声明的工具（use_skill / MCP / invoke_* 等全局工具需显式加入）
+  # tools:
+  #   - echo
+  #   - http
+  #   - file
+  #   - shell
+  #   - shell_status
+  #   - read_memory
+  #   - write_memory
 
   # 分层记忆（突破上下文窗口：分层存储 + 动态换页 + 检索召回）
   memory:
@@ -670,7 +689,7 @@ Agent 配置与编排定义完全解耦，分两个独立文件存放（`start/s
 | `description`                  | 否  | 能力描述，供 LLM 语义路由判断意图                   |
 | `keywords`                     | 否  | 规则路由关键词（路由编排内部选择 Agent 使用）           |
 | `systemPrompt`                 | 否  | 系统提示词，缺省继承默认                          |
-| `tools`                        | 否  | 可用工具列表，缺省继承默认                         |
+| `tools`                        | 否  | 可用工具列表；缺省（不配置）= 绑定全部已注册工具，配置后 = 强制仅绑定声明的工具（不再自动附加全局/MCP 工具） |
 | `maxSteps`                     | 否  | 初始推理预算步数，缺省继承默认；预算用尽且工具链未完成时按 `max-steps-extension` 自动扩展（硬上限 = maxSteps × 系数） |
 | `model` / `baseUrl` / `apiKey` | 否  | 独立模型配置，缺省继承默认，支持 `${VAR:default}` 占位符 |
 | `temperature` / `maxTokens`    | 否  | 采样温度 / 单次最大 tokens，缺省继承默认             |
@@ -852,7 +871,7 @@ public class MyTool implements ToolExecutor {
 }
 ```
 
-然后在 `application.yml` 的 `agent.tools` 列表中添加工具名即可。
+然后在 `application.yml` 的 `agent.tools` 列表中添加工具名即可。缺省不配置 `tools` 时 Agent 默认绑定**全部已注册工具**；一旦配置则**强制仅绑定声明的工具**（全局工具如 `use_skill` / MCP / `invoke_*` 需显式加入列表）。
 
 ### 新增技能（Skill）
 

@@ -17,6 +17,11 @@
             <groupId>com.mwb.ai.claw</groupId>
             <artifactId>mwb-ai-claw-domain</artifactId>
         </dependency>
+        <!-- client 数据模型与错误码（AgentErrorCode / BizException / ChatCmd 等） -->
+        <dependency>
+            <groupId>com.mwb.ai.claw</groupId>
+            <artifactId>mwb-ai-claw-client</artifactId>
+        </dependency>
 
         <!-- LLM 调用所需：Spring、RestTemplate、Jackson、SLF4J -->
         <dependency>

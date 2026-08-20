@@ -85,8 +85,11 @@ public class AgentProperties {
     /** 技能根目录（运行目录，默认 ${user.dir}/skills；classpath skills/ 为内置模板兜底） */
     private String skillsDir = "";
 
-    /** 可用工具名称列表 */
-    private List<String> tools = Arrays.asList("echo");
+    /**
+     * 可用工具名称列表；空 = 绑定全部已注册工具（内置 + 全局/MCP，缺省行为），
+     * 非空 = 强制仅绑定声明的工具（不再自动附加全局工具）
+     */
+    private List<String> tools = new ArrayList<>();
 
     /** 专家 Agent 定义列表（多 Agent 路由） */
     private List<AgentConfig> agents = new ArrayList<>();

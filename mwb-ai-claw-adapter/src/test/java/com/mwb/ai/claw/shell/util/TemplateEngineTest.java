@@ -14,7 +14,7 @@ public class TemplateEngineTest {
 
     @Test
     public void testLegacyPlaceholders() {
-        assertEquals("hello world extra", new TemplateEngine("hello world extra").render("say {args}"));
+        assertEquals("say hello world extra", new TemplateEngine("hello world extra").render("say {args}"));
         assertEquals("first=hello second=world", new TemplateEngine("hello world").render("first={1} second={2}"));
         // 无参数时 {1}/{2} 替换为空
         assertEquals("a= b=", new TemplateEngine("").render("a={1} b={2}"));

@@ -94,7 +94,7 @@ public class AgentGatewayImpl implements AgentGateway {
                 config.getApiKey() != null ? config.getApiKey() : agentProperties.getApiKey(),
                 config.getTemperature() != null ? config.getTemperature() : agentProperties.getTemperature(),
                 config.getMaxTokens() != null ? config.getMaxTokens() : agentProperties.getMaxTokens()));
-        // 工具集：未配置则继承默认
+        // 工具集：未配置则继承默认（默认 agent.tools 为空 = 绑定全部已注册工具）
         agent.setToolNames(config.getTools() != null && !config.getTools().isEmpty()
                 ? config.getTools() : agentProperties.getTools());
         agent.setMaxSteps(config.getMaxSteps() != null ? config.getMaxSteps() : agentProperties.getMaxSteps());

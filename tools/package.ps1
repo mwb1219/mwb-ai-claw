@@ -5,7 +5,10 @@
 # 安装包内容:
 #   mwb-ai-claw-<version>-bin\
 #   ├── install.ps1         安装脚本（自适应二进制模式）
+#   ├── CONFIG-GUIDE.md     配置指南（密钥 / Agent / 编排 / MCP 配置说明）
 #   ├── lib\start.jar        预构建可执行 jar（无源码）
+#   ├── config\              用户可调整配置模板（agents.json / orchestrations.json / mcp-server.json.example）
+#   │                        加载顺序：运行目录 → 安装目录 config → classpath
 #   └── .env.example        密钥配置模板
 #
 # 用法:
@@ -154,6 +157,26 @@ if (Test-Path $srcExample) {
 } elseif (Test-Path $srcEnv) {
     Copy-Item -Force $srcEnv (Join-Path $DistDir ".env.example")
     Write-Warn "未找到 .env.example，已从 .env 复制为 .env.example（可能含密钥，请检查后再分发）"
+}
+
+# 4. 用户可调整配置模板（agents / orchestrations / mcp-server）
+#    加载顺序：运行目录(user.dir) → 安装目录 config（install 时复制）→ classpath。
+#    安装后直接修改安装目录 config\ 下文件即可覆盖内置默认，无需重新打包
+$ConfigSrc = Join-Path $ProjectRoot "start\src\main\resources"
+if (Test-Path $ConfigSrc) {
+    New-Item -ItemType Directory -Force -Path (Join-Path $DistDir "config") | Out-Null
+    foreach ($cfg in @("agents.json", "orchestrations.json", "mcp-server.json.example")) {
+        $cfgPath = Join-Path $ConfigSrc $cfg
+        if (Test-Path $cfgPath) {
+            Copy-Item -Force $cfgPath (Join-Path $DistDir "config\$cfg")
+        }
+    }
+}
+
+# 5. 配置指南（随包分发，供用户按说明配置）
+$Guide = Join-Path $ProjectRoot "CONFIG-GUIDE.md"
+if (Test-Path $Guide) {
+    Copy-Item -Force $Guide (Join-Path $DistDir "CONFIG-GUIDE.md")
 }
 
 Write-OK "分发目录内容:"

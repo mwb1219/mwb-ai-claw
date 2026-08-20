@@ -6,7 +6,10 @@
 # 安装包内容:
 #   mwb-ai-claw-<version>-bin/
 #   ├── install.sh          安装脚本（自适应二进制模式）
+#   ├── CONFIG-GUIDE.md     配置指南（密钥 / Agent / 编排 / MCP 配置说明）
 #   ├── lib/start.jar       预构建可执行 jar（无源码）
+#   ├── config/             用户可调整配置模板（agents.json / orchestrations.json / mcp-server.json.example）
+#   │                       加载顺序：运行目录 → 安装目录 config → classpath
 #   └── .env.example        密钥配置模板
 #
 # 用法:
@@ -152,6 +155,24 @@ if [[ -f "$PROJECT_ROOT/.env.example" ]]; then
 elif [[ -f "$PROJECT_ROOT/.env" ]]; then
     cp -f "$PROJECT_ROOT/.env" "$DIST_DIR/.env.example"
     warn "未找到 .env.example，已从 .env 复制为 .env.example（可能含密钥，请检查后再分发）"
+fi
+
+# 4. 用户可调整配置模板（agents / orchestrations / mcp-server）
+#    加载顺序：运行目录(user.dir) → 安装目录 config（install 时复制）→ classpath。
+#    安装后直接修改安装目录 config/ 下文件即可覆盖内置默认，无需重新打包
+CONFIG_SRC="$PROJECT_ROOT/start/src/main/resources"
+if [[ -d "$CONFIG_SRC" ]]; then
+    mkdir -p "$DIST_DIR/config"
+    for cfg in agents.json orchestrations.json mcp-server.json.example; do
+        if [[ -f "$CONFIG_SRC/$cfg" ]]; then
+            cp -f "$CONFIG_SRC/$cfg" "$DIST_DIR/config/$cfg"
+        fi
+    done
+fi
+
+# 5. 配置指南（随包分发，供用户按说明配置）
+if [[ -f "$PROJECT_ROOT/CONFIG-GUIDE.md" ]]; then
+    cp -f "$PROJECT_ROOT/CONFIG-GUIDE.md" "$DIST_DIR/CONFIG-GUIDE.md"
 fi
 
 ok "分发目录内容:"

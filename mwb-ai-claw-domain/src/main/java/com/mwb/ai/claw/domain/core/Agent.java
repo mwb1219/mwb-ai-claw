@@ -30,7 +30,7 @@ public class Agent {
     /** 模型配置 */
     private ModelConfig modelConfig;
 
-    /** 可用工具名称列表 */
+    /** 可用工具名称列表；空 = 绑定全部已注册工具（缺省行为），非空 = 强制仅绑定声明的工具 */
     private List<String> toolNames = new ArrayList<>();
 
     /** ReAct 最大推理步数 */

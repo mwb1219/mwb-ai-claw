@@ -1,10 +1,18 @@
 package com.mwb.ai.claw.infrastructure.observability;
 
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Timer;
-
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.Meter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tag;
+import io.micrometer.core.instrument.Timer;
 
 /**
  * 指标记录门面（claw.* 命名空间）：统一记录 LLM / 工具 / ReAct / API / 记忆指标。
@@ -81,5 +89,45 @@ public class MetricsRecorder {
     public void memorySynthesis(String type, String status) {
         Counter.builder("claw.memory.synthesis")
                 .tag("type", type).tag("status", status).register(registry).increment();
+    }
+
+    // ==================== 查询 ====================
+
+    /**
+     * 指标快照：遍历注册表全部 claw.* 指标，返回结构化的条目列表（供 shell /metrics 面板展示）。
+     * <p>
+     * 每项包含 {@code name} / {@code tags}（"k=v,k2=v2"），以及按类型补充的数值：
+     * Counter → {@code count}；Timer → {@code count}+{@code totalMs}+{@code meanMs}；
+     * 其余类型 → {@code value}。
+     */
+    public List<Map<String, Object>> snapshot() {
+        List<Map<String, Object>> meters = new ArrayList<>();
+        for (Meter meter : registry.getMeters()) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("name", meter.getId().getName());
+            StringBuilder tags = new StringBuilder();
+            for (Tag tag : meter.getId().getTagsAsIterable()) {
+                if (tags.length() > 0) {
+                    tags.append(',');
+                }
+                tags.append(tag.getKey()).append('=').append(tag.getValue());
+            }
+            m.put("tags", tags.toString());
+            if (meter instanceof Counter) {
+                m.put("count", ((Counter) meter).count());
+            } else if (meter instanceof Timer) {
+                Timer timer = (Timer) meter;
+                long count = timer.count();
+                m.put("count", count);
+                m.put("totalMs", timer.totalTime(TimeUnit.MILLISECONDS));
+                m.put("meanMs", count == 0 ? 0.0 : timer.totalTime(TimeUnit.MILLISECONDS) / count);
+            } else if (meter instanceof Gauge) {
+                m.put("value", ((Gauge) meter).value());
+            } else {
+                m.put("value", meter.measure().iterator().next().getValue());
+            }
+            meters.add(m);
+        }
+        return meters;
     }
 }

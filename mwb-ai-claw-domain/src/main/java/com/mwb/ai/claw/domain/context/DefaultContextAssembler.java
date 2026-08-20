@@ -75,6 +75,12 @@ public class DefaultContextAssembler implements ContextAssembler {
         request.setThinking(agent.getModelConfig().getThinking());
         request.setMessages(buildMessages(session, agent));
         request.setTools(buildTools(agent));
+        // 结构化输出（D2）：请求级 responseFormat/jsonSchema 经线程上下文注入
+        LlmRequestOptions options = LlmRequestOptions.get();
+        if (options != null) {
+            request.setResponseFormat(options.getResponseFormat());
+            request.setJsonSchema(options.getJsonSchema());
+        }
         return request;
     }
 
@@ -258,16 +264,19 @@ public class DefaultContextAssembler implements ContextAssembler {
     private List<ToolSpec> buildTools(Agent agent) {
         List<ToolSpec> tools = new ArrayList<>();
         Set<String> added = new HashSet<>();
-        // 1. Agent 显式配置的工具
-        for (String toolName : agent.getToolNames()) {
-            ToolSpec spec = toolGateway.getToolSpec(toolName);
-            if (spec != null && added.add(spec.getName())) {
-                tools.add(spec);
+        // 显式配置了工具 → 强制绑定：仅使用声明的工具（不再自动附加全局/MCP 工具）
+        if (agent.getToolNames() != null && !agent.getToolNames().isEmpty()) {
+            for (String toolName : agent.getToolNames()) {
+                ToolSpec spec = toolGateway.getToolSpec(toolName);
+                if (spec != null && added.add(spec.getName())) {
+                    tools.add(spec);
+                }
             }
+            return tools;
         }
-        // 2. 全局工具（MCP 动态注册），默认对所有 Agent 可见，无需在配置中声明
+        // 未显式配置工具（缺省）→ 绑定全部已注册工具（内置 + 全局/MCP）
         for (ToolSpec spec : toolGateway.listTools()) {
-            if (spec.isGlobal() && added.add(spec.getName())) {
+            if (added.add(spec.getName())) {
                 tools.add(spec);
             }
         }
@@ -278,6 +287,7 @@ public class DefaultContextAssembler implements ContextAssembler {
         LlmMessage m = new LlmMessage();
         m.setRole(msg.getRole());
         m.setContent(msg.getContent());
+        m.setParts(msg.getParts()); // D2 多模态：透传图片片段
         m.setToolCalls(msg.getToolCalls());
         m.setToolCallId(msg.getToolCallId());
         return m;

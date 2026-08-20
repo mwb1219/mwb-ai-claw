@@ -73,7 +73,9 @@ mwb-ai-claw 本地安装脚本 (Windows PowerShell)
 安装位置 (可通过 $env:MWB_AI_CLAW_HOME 覆盖):
     {0}
         ├── lib\start.jar        构建产物
+        ├── config\              Agent/编排/MCP 配置模板（修改后重启即生效）
         ├── bin\mwb-ai-claw.cmd  启动器批处理
+        ├── .env.example         密钥模板副本（参考/重置用）
         └── .env                 全局密钥配置（DEFAULT_API_KEY 等）
 
 PATH 配置:
@@ -235,7 +237,8 @@ if exist "%MWB_AI_CLAW_HOME%\.env" (
 )
 
 REM 透传用户参数；默认激活 shell profile
-java -jar "%JAR_PATH%" --spring.profiles.active=shell %*
+REM -Dmwb.ai.claw.home 注入安装目录：ConfigFileLocator 按「运行目录→安装目录 config→classpath」加载配置
+java -Dmwb.ai.claw.home="%MWB_AI_CLAW_HOME%" -jar "%JAR_PATH%" --spring.profiles.active=shell %*
 endlocal
 '@
     # .cmd 需要 enabledelayedexpansion 才能用 !line! 语法，重写启用
@@ -267,9 +270,9 @@ if exist "%MWB_AI_CLAW_HOME%\.env" (
 REM Shell 审批模式：默认 ask（application.yml 内置，命中审批规则时询问用户 y/N）；
 REM 可用 MWB_AI_CLAW_APPROVAL_MODE 环境变量覆盖（如 .env 中写 MWB_AI_CLAW_APPROVAL_MODE=auto）
 if not "%MWB_AI_CLAW_APPROVAL_MODE%"=="" (
-    java -jar "%JAR_PATH%" --spring.profiles.active=shell --agent.security.shell-approval-mode=%MWB_AI_CLAW_APPROVAL_MODE% %*
+    java -Dmwb.ai.claw.home="%MWB_AI_CLAW_HOME%" -jar "%JAR_PATH%" --spring.profiles.active=shell --agent.security.shell-approval-mode=%MWB_AI_CLAW_APPROVAL_MODE% %*
 ) else (
-    java -jar "%JAR_PATH%" --spring.profiles.active=shell %*
+    java -Dmwb.ai.claw.home="%MWB_AI_CLAW_HOME%" -jar "%JAR_PATH%" --spring.profiles.active=shell %*
 )
 endlocal
 '@
@@ -309,7 +312,8 @@ if (Test-Path $envFile) {
 
 # Shell 审批模式：默认 ask（application.yml 内置，命中审批规则时询问用户 y/N）；
 # 可用 MWB_AI_CLAW_APPROVAL_MODE 环境变量覆盖（如 .env 中写 MWB_AI_CLAW_APPROVAL_MODE=auto）
-$allArgs = @("--spring.profiles.active=shell")
+# -Dmwb.ai.claw.home 注入安装目录：ConfigFileLocator 按「运行目录→安装目录 config→classpath」加载配置
+$allArgs = @("-Dmwb.ai.claw.home=$home_dir", "--spring.profiles.active=shell")
 if ($env:MWB_AI_CLAW_APPROVAL_MODE) {
     $allArgs += "--agent.security.shell-approval-mode=$env:MWB_AI_CLAW_APPROVAL_MODE"
 }
@@ -319,6 +323,24 @@ $allArgs += $Args
 & java -jar $jarPath @allArgs
 '@
     Set-Content -Path $ps1Path -Value $ps1Content -Encoding UTF8
+
+    # 4. 复制用户可调整配置模板（agents.json / orchestrations.json / mcp-server.json.example）
+    #    加载顺序：运行目录(user.dir) → 安装目录 config（本目录）→ classpath。
+    #    用户直接修改本目录下的配置文件即可覆盖内置默认，重启后生效
+    $ConfigSrc = Join-Path $ProjectRoot "config"
+    if (Test-Path $ConfigSrc) {
+        $ConfigDir = Join-Path $InstallDir "config"
+        New-Item -ItemType Directory -Force -Path $ConfigDir | Out-Null
+        Copy-Item -Force (Join-Path $ConfigSrc "*") $ConfigDir
+        Write-OK "已复制配置模板: $ConfigDir"
+    }
+
+    # 5. 复制 .env.example 密钥模板副本（参考/重置用；实际密钥写在 InstallDir/.env）
+    $EnvExample = Join-Path $ProjectRoot ".env.example"
+    if (Test-Path $EnvExample) {
+        Copy-Item -Force $EnvExample (Join-Path $InstallDir ".env.example")
+        Write-OK "已复制密钥模板: $(Join-Path $InstallDir '.env.example')"
+    }
 }
 
 # ---------------- 初始化 .env ----------------
@@ -381,6 +403,10 @@ Write-Host ""
 Write-Host "  用法: 在任意目录执行 $CommandName 进入 Agent Shell" -ForegroundColor White
 Write-Host "  帮助: 进入后输入 /help 查看命令" -ForegroundColor White
 Write-Host "  审批: 默认 ask（高风险命令询问 y/N）；改为自动可在 $EnvFile 中设 MWB_AI_CLAW_APPROVAL_MODE=auto" -ForegroundColor White
+$ConfigDir = Join-Path $InstallDir "config"
+if (Test-Path $ConfigDir) {
+    Write-Host "  自定义: 将 $ConfigDir 下文件复制到运行目录即可覆盖默认配置（agents/orchestrations/mcp-server）" -ForegroundColor White
+}
 Write-Host ""
 
 # 检查 .env 中 DEFAULT_API_KEY 是否为空
