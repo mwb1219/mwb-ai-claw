@@ -3,9 +3,7 @@ package com.mwb.ai.claw.infrastructure.storage.jdbc;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Component;
 
 import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
 import com.mwb.ai.claw.domain.scope.AgentScope;
@@ -15,8 +13,6 @@ import com.mwb.ai.claw.domain.scope.AgentScope;
  * AGENT.md / MEMORY.md 内容（name 列区分）。tenant_id / user_id 用空字符串 '' 表示默认空间
  * （MySQL 主键列不允许 NULL）。
  */
-@Component
-@ConditionalOnProperty(name = "agent.storage.type", havingValue = "jdbc")
 public class JdbcLongTermMemoryGateway implements LongTermMemoryGateway {
 
     private static final String NAME_AGENT = "AGENT.md";

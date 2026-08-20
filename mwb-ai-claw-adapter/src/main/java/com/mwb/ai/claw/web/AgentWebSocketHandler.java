@@ -2,14 +2,19 @@ package com.mwb.ai.claw.web;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import javax.annotation.PreDestroy;
 import javax.annotation.Resource;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
@@ -69,7 +74,13 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
     @Resource
     private ApprovalService approvalService;
 
+    @Resource
+    private StreamTaskRegistry streamTaskRegistry;
+
     private final ExecutorService executor = Executors.newCachedThreadPool();
+
+    /** WS 会话 → Agent 会话 映射：连接关闭时据此回收仍在执行的流式任务 */
+    private final Map<String, String> wsSessionToAgentSession = new ConcurrentHashMap<>();
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
@@ -82,18 +93,25 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
         log.info("WebSocket 收到消息: id={}, payload={}", session.getId(),
                 payload.length() > 300 ? payload.substring(0, 300) + "..." : payload);
 
-        executor.execute(() -> {
+        java.util.concurrent.atomic.AtomicReference<Future<?>> futureRef =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        futureRef.set(executor.submit(() -> {
+            // 请求链路 MDC：traceId + sessionId 贯穿本任务日志
+            MDC.put("traceId", UUID.randomUUID().toString().replace("-", ""));
             // 业务线程从握手 attributes 解析 scope 写 AgentScopeContext（覆盖 chat/approve/reject/pending_tasks 四类消息），
             // 供 ChatCmdExe 装配 ctx 与 ApprovalService 定位审批节点使用。
             Object scopeAttr = session.getAttributes().get(WsAuthHandshakeInterceptor.SCOPE_ATTR);
             AgentScopeContext.set(scopeAttr instanceof AgentScope ? (AgentScope) scopeAttr : AgentScope.defaultScope());
             try {
                 WsRequest req = JsonUtils.fromJson(payload, WsRequest.class);
+                if (req.getSessionId() != null) {
+                    MDC.put("sessionId", req.getSessionId());
+                }
                 String type = req.getType() != null ? req.getType() : "chat";
 
                 switch (type) {
                     case "chat":
-                        handleChat(session, req);
+                        handleChat(session, req, futureRef.get());
                         break;
                     case "approve":
                     case "reject":
@@ -114,8 +132,9 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
                 } catch (Exception ignored) {}
             } finally {
                 AgentScopeContext.clear();
+                MDC.clear();
             }
-        });
+        }));
     }
 
     /**
@@ -146,8 +165,10 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
 
     /**
      * 处理聊天消息，执行完整的 ReAct 流式对话流程。
+     *
+     * @param taskFuture 当前执行任务（用于断连时取消，可能为 null）
      */
-    private void handleChat(WebSocketSession session, WsRequest req) throws Exception {
+    private void handleChat(WebSocketSession session, WsRequest req, Future<?> taskFuture) throws Exception {
         String message = req.getMessage();
         String sessionId = req.getSessionId();
         String agentId = req.getAgentId();
@@ -175,56 +196,64 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
         }
         sendEvent(session, "session", effectiveSessionId);
 
-        // === 阶段 2: 执行 ReAct 循环 ===
-        ChatCmd cmd = new ChatCmd();
-        cmd.setMessage(message);
-        cmd.setSessionId(effectiveSessionId);
-        cmd.setAgentId(agentId);
+        // 登记流式任务：断连时（afterConnectionClosed）据此取消，停止继续消耗 token
+        streamTaskRegistry.register(effectiveSessionId, taskFuture);
+        wsSessionToAgentSession.put(session.getId(), effectiveSessionId);
+        try {
+            // === 阶段 2: 执行 ReAct 循环 ===
+            ChatCmd cmd = new ChatCmd();
+            cmd.setMessage(message);
+            cmd.setSessionId(effectiveSessionId);
+            cmd.setAgentId(agentId);
 
-        // 进度回调：推送推理轨迹
-        ProgressCallback callback = step -> {
-            try {
-                sendEvent(session, "step", step);
-            } catch (Exception ignored) {}
-        };
-
-        // LLM 流式回调：推送 token 增量
-        LlmStreamCallback streamCallback = new LlmStreamCallback() {
-            @Override
-            public void onToken(String token) {
+            // 进度回调：推送推理轨迹
+            ProgressCallback callback = step -> {
                 try {
-                    sendEvent(session, "token", token);
+                    sendEvent(session, "step", step);
                 } catch (Exception ignored) {}
+            };
+
+            // LLM 流式回调：推送 token 增量
+            LlmStreamCallback streamCallback = new LlmStreamCallback() {
+                @Override
+                public void onToken(String token) {
+                    try {
+                        sendEvent(session, "token", token);
+                    } catch (Exception ignored) {}
+                }
+
+                @Override
+                public void onToolName(String toolName) {
+                    try {
+                        sendEvent(session, "tool_name", toolName);
+                    } catch (Exception ignored) {}
+                }
+
+                @Override
+                public void onToolArguments(String argDelta) {
+                    try {
+                        sendEvent(session, "tool_args", argDelta);
+                    } catch (Exception ignored) {}
+                }
+            };
+
+            SingleResponse<ChatResponseDTO> resp = chatCmdExe.execute(cmd, callback, streamCallback);
+            ChatResponseDTO data = resp.getData();
+
+            // === 阶段 3: 推送最终回复 ===
+            if (data != null && data.getReply() != null) {
+                sendEvent(session, "reply", data.getReply());
+            } else {
+                String errMsg = resp.getErrMessage() != null ? resp.getErrMessage() : "执行失败";
+                sendEvent(session, "error", errMsg);
             }
 
-            @Override
-            public void onToolName(String toolName) {
-                try {
-                    sendEvent(session, "tool_name", toolName);
-                } catch (Exception ignored) {}
-            }
-
-            @Override
-            public void onToolArguments(String argDelta) {
-                try {
-                    sendEvent(session, "tool_args", argDelta);
-                } catch (Exception ignored) {}
-            }
-        };
-
-        SingleResponse<ChatResponseDTO> resp = chatCmdExe.execute(cmd, callback, streamCallback);
-        ChatResponseDTO data = resp.getData();
-
-        // === 阶段 3: 推送最终回复 ===
-        if (data != null && data.getReply() != null) {
-            sendEvent(session, "reply", data.getReply());
-        } else {
-            String errMsg = resp.getErrMessage() != null ? resp.getErrMessage() : "执行失败";
-            sendEvent(session, "error", errMsg);
+            // === 阶段 4: 结束 ===
+            sendEvent(session, "done", null);
+        } finally {
+            streamTaskRegistry.unregister(effectiveSessionId, taskFuture);
+            wsSessionToAgentSession.remove(session.getId(), effectiveSessionId);
         }
-
-        // === 阶段 4: 结束 ===
-        sendEvent(session, "done", null);
     }
 
     /**
@@ -245,6 +274,11 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         log.info("WebSocket 连接关闭: id={}, status={}", session.getId(), status);
+        // 断连回收：取消该 WS 会话仍在执行的流式任务（若任务已结束，取消为无害 no-op）
+        String agentSessionId = wsSessionToAgentSession.remove(session.getId());
+        if (agentSessionId != null) {
+            streamTaskRegistry.cancel(agentSessionId);
+        }
     }
 
     @Override

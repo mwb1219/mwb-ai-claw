@@ -8,8 +8,6 @@ import com.mwb.ai.claw.infrastructure.util.JsonUtils;
 import com.mwb.ai.claw.infrastructure.util.TokenEstimator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
 import java.io.IOException;
@@ -32,8 +30,6 @@ import java.util.stream.Stream;
  * 目录：{memoryDir}/memory（默认 {user.dir}/.agent/memory）。
  * 多租户模式下按 namespace（tenant/user）分目录隔离；legacy 模式保持原扁平布局。
  */
-@Component
-@ConditionalOnProperty(name = "agent.storage.type", havingValue = "file", matchIfMissing = true)
 public class FileMemoryPageStore implements MemoryPageStore {
 
     private static final Logger log = LoggerFactory.getLogger(FileMemoryPageStore.class);

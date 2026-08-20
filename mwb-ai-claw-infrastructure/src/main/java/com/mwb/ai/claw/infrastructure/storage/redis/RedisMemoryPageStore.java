@@ -6,9 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.stereotype.Component;
 
 import com.mwb.ai.claw.domain.memory.MemoryPage;
 import com.mwb.ai.claw.domain.memory.MemoryPageStore;
@@ -26,8 +24,6 @@ import com.mwb.ai.claw.infrastructure.util.JsonUtils;
  * claw:{ns}:page-sessions:{type}         → Set（会话索引，供跨会话 listAll* 遍历）
  * </pre>
  */
-@Component
-@ConditionalOnProperty(name = "agent.storage.type", havingValue = "redis")
 public class RedisMemoryPageStore implements MemoryPageStore {
 
     private final StringRedisTemplate redis;

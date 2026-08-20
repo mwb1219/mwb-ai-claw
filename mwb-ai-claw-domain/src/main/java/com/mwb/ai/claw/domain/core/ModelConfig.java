@@ -11,7 +11,10 @@ public class ModelConfig {
     /** 模型标识，如 gpt-4o / deepseek-chat / qwen-plus */
     private String model;
 
-    /** OpenAI 兼容的 API Base URL */
+    /** Provider 类型：openai / anthropic / gemini / ollama（null 或未知默认 openai，向后兼容） */
+    private String provider;
+
+    /** OpenAI 兼容的 API Base URL（空则由 Provider 推断默认） */
     private String baseUrl;
 
     /** API Key */

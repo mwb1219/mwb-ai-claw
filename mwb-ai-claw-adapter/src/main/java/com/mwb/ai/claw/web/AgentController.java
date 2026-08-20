@@ -2,12 +2,14 @@ package com.mwb.ai.claw.web;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import javax.annotation.PreDestroy;
 import javax.annotation.Resource;
 
+import org.slf4j.MDC;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -44,6 +46,9 @@ public class AgentController {
     @Resource
     private ChatCmdExe chatCmdExe;
 
+    @Resource
+    private StreamTaskRegistry streamTaskRegistry;
+
     private final ExecutorService streamExecutor = Executors.newCachedThreadPool();
 
     /**
@@ -51,7 +56,16 @@ public class AgentController {
      */
     @PostMapping("/chat")
     public SingleResponse<ChatResponseDTO> chat(@RequestBody ChatCmd cmd) {
-        return agentService.chat(cmd);
+        // 请求链路 MDC：traceId + sessionId 贯穿本请求日志
+        MDC.put("traceId", UUID.randomUUID().toString().replace("-", ""));
+        if (cmd.getSessionId() != null) {
+            MDC.put("sessionId", cmd.getSessionId());
+        }
+        try {
+            return agentService.chat(cmd);
+        } finally {
+            MDC.clear();
+        }
     }
 
     /**
@@ -101,12 +115,24 @@ public class AgentController {
                                  @RequestParam(required = false) String sessionId,
                                  @RequestParam(required = false) String agentId) {
         SseEmitter emitter = new SseEmitter(120_000L);
+        // 请求链路 MDC：SSE 在异步线程执行，MDC 需在任务线程内设置
+        String traceId = UUID.randomUUID().toString().replace("-", "");
+        // 会话 ID 在执行线程内确定，用持有器供 emitter 回调回收任务
+        java.util.concurrent.atomic.AtomicReference<String> sessionHolder =
+                new java.util.concurrent.atomic.AtomicReference<>();
 
-        // 确保连接在完成/超时/错误时被正确关闭
-        emitter.onCompletion(() -> {});
-        emitter.onTimeout(() -> {});
+        // 断连 / 超时 / 错误时回收对应会话的执行任务（中断 ReAct 线程，停止继续消耗 token）
+        emitter.onCompletion(() -> streamTaskRegistry.cancel(sessionHolder.get()));
+        emitter.onTimeout(() -> streamTaskRegistry.cancel(sessionHolder.get()));
+        emitter.onError(e -> streamTaskRegistry.cancel(sessionHolder.get()));
 
-        streamExecutor.execute(() -> {
+        java.util.concurrent.atomic.AtomicReference<java.util.concurrent.Future<?>> futureRef =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        futureRef.set(streamExecutor.submit(() -> {
+            MDC.put("traceId", traceId);
+            if (sessionId != null) {
+                MDC.put("sessionId", sessionId);
+            }
             try {
                 // === 阶段 1: 获取或创建会话，立即推送 session ===
                 String effectiveSessionId = sessionId;
@@ -125,6 +151,8 @@ public class AgentController {
                     }
                     effectiveSessionId = sessionResp.getData().getSessionId();
                 }
+                sessionHolder.set(effectiveSessionId);
+                streamTaskRegistry.register(effectiveSessionId, futureRef.get());
                 emitter.send(SseEmitter.event().name("session").data(effectiveSessionId));
 
                 // === 阶段 2: 执行 ReAct 循环，逐步推送 step + token ===
@@ -189,8 +217,11 @@ public class AgentController {
                     emitter.send(SseEmitter.event().name("done").data(""));
                 } catch (Exception ignored) {}
                 emitter.completeWithError(e);
+            } finally {
+                streamTaskRegistry.unregister(sessionHolder.get(), futureRef.get());
+                MDC.clear();
             }
-        });
+        }));
 
         return emitter;
     }

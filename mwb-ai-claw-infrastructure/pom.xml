@@ -44,6 +44,12 @@
             <artifactId>jackson-databind</artifactId>
         </dependency>
 
+        <!-- 可观测性指标（版本由 spring-boot-dependencies BOM 管理；无 actuator 时用 SimpleMeterRegistry 内存计数） -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

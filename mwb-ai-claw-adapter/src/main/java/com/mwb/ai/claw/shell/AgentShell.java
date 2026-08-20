@@ -70,6 +70,7 @@ import com.mwb.ai.claw.infrastructure.tool.ToolSecurity;
 import com.mwb.ai.claw.infrastructure.tool.mcp.McpClientManager;
 import com.mwb.ai.claw.infrastructure.util.JsonUtils;
 import com.mwb.ai.claw.infrastructure.util.TokenEstimator;
+import com.mwb.ai.claw.shell.util.TemplateEngine;
 
 /**
  * Agent Shell：终端 REPL 交互模式。
@@ -148,6 +149,10 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
     private String ctxCacheSessionId;
     private int ctxMsgCount = -1;
     private int ctxTokens = 0;
+    /** 结构化输出模式（output=json 的自定义命令）：抑制常规展示，捕获最终回复统一格式化 */
+    private boolean jsonOutputMode = false;
+    /** 结构化输出模式下捕获的最终回复原文 */
+    private String capturedReply = null;
 
     // ANSI 风格
     private static final AttributedStyle STYLE_PROMPT = AttributedStyle.DEFAULT.foreground(AttributedStyle.CYAN).bold();
@@ -614,22 +619,51 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
         }
     }
 
-    /** 执行自定义命令：模板替换 {args}/{1} 占位符后作为消息发送 */
+    /** 执行自定义命令：模板引擎渲染后作为消息发送；output=json 时对回复做结构化提取展示 */
     private void handleCustomCommand(CustomCommand cc, String argsText) {
         String template = cc.getTemplate();
         if (template == null || template.isEmpty()) {
             println(STYLE_WARN, "命令 /" + cc.getName() + " 无模板内容");
             return;
         }
-        String message = template.replace("{args}", argsText);
-        String[] parts = argsText.split("\\s+");
-        for (int i = 1; i <= 9 && i <= parts.length; i++) {
-            message = message.replace("{" + i + "}", parts[i - 1]);
-        }
+        String message = new TemplateEngine(argsText).render(template);
         if (!cc.getDescription().isEmpty()) {
             println(STYLE_ACTION, "[/" + cc.getName() + "] " + cc.getDescription());
         }
-        chatOnce(message);
+        if ("json".equalsIgnoreCase(cc.getOutput())) {
+            jsonOutputMode = true;
+            capturedReply = null;
+            chatOnce(message);
+            jsonOutputMode = false;
+            if (capturedReply != null) {
+                displayStructuredJson(capturedReply);
+            }
+        } else {
+            chatOnce(message);
+        }
+    }
+
+    /** 结构化产物展示：output=json 时提取 JSON 并缩进格式化；提取失败告警并保留原文（不中断会话） */
+    private void displayStructuredJson(String reply) {
+        String json = JsonUtils.extractJson(reply);
+        if (json == null) {
+            println(STYLE_WARN, "（output=json 但未能从回复中提取到合法 JSON，保留原文）");
+            terminal.writer().print(markdownRenderer.render(reply));
+            terminal.writer().flush();
+            return;
+        }
+        try {
+            String pretty = JsonUtils.mapper().writerWithDefaultPrettyPrinter()
+                    .writeValueAsString(JsonUtils.readTree(json));
+            println(STYLE_INFO, "");
+            println(STYLE_PROMPT, "◈ 结构化产物 ◈");
+            terminal.writer().print(pretty);
+            terminal.writer().flush();
+        } catch (Exception e) {
+            println(STYLE_WARN, "（JSON 格式化失败，保留原文: " + e.getMessage() + "）");
+            terminal.writer().print(markdownRenderer.render(reply));
+            terminal.writer().flush();
+        }
     }
 
     // ==================== MCP 管理 ====================
@@ -1217,8 +1251,13 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
         beginResultSection();
         markdownRenderer.reset();
         String reply = data.getReply() != null ? data.getReply() : "（空回复）";
-        terminal.writer().print(markdownRenderer.render(reply));
-        terminal.writer().flush();
+        if (jsonOutputMode) {
+            // 结构化输出：捕获回复，由 handleCustomCommand 统一提取格式化展示
+            capturedReply = reply;
+        } else {
+            terminal.writer().print(markdownRenderer.render(reply));
+            terminal.writer().flush();
+        }
     }
 
     private void doStreamChat(ChatCmd cmd) {
@@ -1241,6 +1280,9 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
                 }
                 beginResultSection();
                 lineBuf.append(token);
+                if (jsonOutputMode) {
+                    return; // 结构化输出：仅累积不实时渲染，最终统一格式化展示
+                }
                 // 行缓冲按行渲染并输出，保证 Markdown（代码块等）跨行状态正确
                 int nl;
                 while ((nl = lineBuf.indexOf("\n")) >= 0) {
@@ -1268,8 +1310,12 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
                 } else {
                     // 最终回复轮：冲刷剩余半行
                     if (lineBuf.length() > 0) {
-                        terminal.writer().print(markdownRenderer.renderLine(lineBuf.toString()));
-                        terminal.writer().flush();
+                        if (jsonOutputMode) {
+                            capturedReply = lineBuf.toString();
+                        } else {
+                            terminal.writer().print(markdownRenderer.renderLine(lineBuf.toString()));
+                            terminal.writer().flush();
+                        }
                         lineBuf.setLength(0);
                     }
                     finalReplyStreamed = true;
@@ -1292,8 +1338,12 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
             beginResultSection();
             ChatResponseDTO data = resp.getData();
             String reply = (data != null && data.getReply() != null) ? data.getReply() : "（空回复）";
-            terminal.writer().print(markdownRenderer.render(reply));
-            terminal.writer().flush();
+            if (jsonOutputMode) {
+                capturedReply = reply;
+            } else {
+                terminal.writer().print(markdownRenderer.render(reply));
+                terminal.writer().flush();
+            }
         }
 
         sessionId = resp.getData().getSessionId();

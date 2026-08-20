@@ -4,9 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.stereotype.Component;
 
 import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.memory.MemoryGateway;
@@ -22,8 +20,6 @@ import com.mwb.ai.claw.infrastructure.util.JsonUtils;
  * claw:{ns}:sessions:index         → ZSet（member=sessionId, score=updateTime，倒序列表）
  * </pre>
  */
-@Component
-@ConditionalOnProperty(name = "agent.storage.type", havingValue = "redis")
 public class RedisSessionGateway implements MemoryGateway {
 
     private final StringRedisTemplate redis;

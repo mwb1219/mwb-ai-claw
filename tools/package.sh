@@ -122,8 +122,8 @@ else
 fi
 
 # 定位构建产物（spring-boot-maven-plugin repackage 产出 start-<ver>.jar，
-# 排除 .original 后缀文件）
-JAR="$(ls "$PROJECT_ROOT"/start/target/start-*.jar 2>/dev/null | grep -v '\.original$' | head -1 || true)"
+# 排除 javadoc / sources / .original 附属 jar）
+JAR="$(ls "$PROJECT_ROOT"/start/target/start-*.jar 2>/dev/null | grep -vE '(-javadoc\.jar$|-sources\.jar$|\.original$)' | head -1 || true)"
 if [[ -z "${JAR:-}" || ! -f "$JAR" ]]; then
     err "未找到构建产物 start/target/start-*.jar"
     err "请先执行 ./package.sh 或去掉 --skip-build"

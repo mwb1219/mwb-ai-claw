@@ -3,9 +3,7 @@ package com.mwb.ai.claw.infrastructure.storage.jdbc;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Component;
 
 import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.memory.MemoryGateway;
@@ -17,8 +15,6 @@ import com.mwb.ai.claw.infrastructure.util.JsonUtils;
  * <p>
  * tenant_id / user_id 用空字符串 '' 表示默认空间（MySQL 主键列不允许 NULL，与文件模式 legacy 语义对齐）。
  */
-@Component
-@ConditionalOnProperty(name = "agent.storage.type", havingValue = "jdbc")
 public class JdbcSessionGateway implements MemoryGateway {
 
     private final JdbcTemplate jdbc;

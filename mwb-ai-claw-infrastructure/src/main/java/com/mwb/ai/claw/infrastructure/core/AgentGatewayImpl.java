@@ -7,9 +7,6 @@ import com.mwb.ai.claw.domain.core.ModelConfig;
 import com.mwb.ai.claw.domain.core.AgentGateway;
 import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
 import com.mwb.ai.claw.domain.scope.AgentScopeContext;
-import org.springframework.stereotype.Component;
-
-import javax.annotation.Resource;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -17,18 +14,24 @@ import java.util.List;
  * Agent 网关实现：从配置属性加载默认 Agent 与专家 Agent，并注入 AGENT.md 扩展指令。
  * <p>
  * 支持多 Agent：默认 Agent 由 agent.* 单 Agent 配置构建，专家 Agent 由 agent.agents 列表构建。
+ * <p>
+ * 由 {@code ClawCoreAutoConfiguration} 以 {@code @ConditionalOnMissingBean} 注册，使用方可覆盖。
  */
-@Component
 public class AgentGatewayImpl implements AgentGateway {
 
-    @Resource
-    private AgentProperties agentProperties;
+    private final AgentProperties agentProperties;
 
-    @Resource
-    private LongTermMemoryGateway longTermMemoryGateway;
+    private final LongTermMemoryGateway longTermMemoryGateway;
 
-    @Resource
-    private AgentRegistryLoader agentRegistryLoader;
+    private final AgentRegistryLoader agentRegistryLoader;
+
+    public AgentGatewayImpl(AgentProperties agentProperties,
+                            LongTermMemoryGateway longTermMemoryGateway,
+                            AgentRegistryLoader agentRegistryLoader) {
+        this.agentProperties = agentProperties;
+        this.longTermMemoryGateway = longTermMemoryGateway;
+        this.agentRegistryLoader = agentRegistryLoader;
+    }
 
     @Override
     public Agent getAgent(String agentId) {
@@ -65,8 +68,9 @@ public class AgentGatewayImpl implements AgentGateway {
         agent.setName(agentProperties.getName());
         agent.setSystemPrompt(agentProperties.getSystemPrompt());
         agent.setAgentInstructions(longTermMemoryGateway.loadAgentInstructions(AgentScopeContext.get()));
-        agent.setModelConfig(buildModelConfig(agentProperties.getModel(), agentProperties.getBaseUrl(),
-                agentProperties.getApiKey(), agentProperties.getTemperature(), agentProperties.getMaxTokens()));
+        agent.setModelConfig(buildModelConfig(agentProperties.getModel(), agentProperties.getProvider(),
+                agentProperties.getBaseUrl(), agentProperties.getApiKey(),
+                agentProperties.getTemperature(), agentProperties.getMaxTokens()));
         agent.setToolNames(agentProperties.getTools());
         agent.setMaxSteps(agentProperties.getMaxSteps());
         return agent;
@@ -85,6 +89,7 @@ public class AgentGatewayImpl implements AgentGateway {
         // 模型字段合并：Agent 显式配置 > 默认配置
         agent.setModelConfig(buildModelConfig(
                 config.getModel() != null ? config.getModel() : agentProperties.getModel(),
+                config.getProvider() != null ? config.getProvider() : agentProperties.getProvider(),
                 config.getBaseUrl() != null ? config.getBaseUrl() : agentProperties.getBaseUrl(),
                 config.getApiKey() != null ? config.getApiKey() : agentProperties.getApiKey(),
                 config.getTemperature() != null ? config.getTemperature() : agentProperties.getTemperature(),
@@ -96,10 +101,11 @@ public class AgentGatewayImpl implements AgentGateway {
         return agent;
     }
 
-    private ModelConfig buildModelConfig(String model, String baseUrl, String apiKey,
+    private ModelConfig buildModelConfig(String model, String provider, String baseUrl, String apiKey,
                                          double temperature, int maxTokens) {
         ModelConfig modelConfig = new ModelConfig();
         modelConfig.setModel(model);
+        modelConfig.setProvider(provider);
         modelConfig.setBaseUrl(baseUrl);
         modelConfig.setApiKey(apiKey);
         modelConfig.setTemperature(temperature);

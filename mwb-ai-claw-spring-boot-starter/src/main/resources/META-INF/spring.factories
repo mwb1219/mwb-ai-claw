@@ -1,0 +1,3 @@
+# 服务端自动装配注册
+org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+com.mwb.ai.claw.starter.autoconfigure.ClawAutoConfiguration

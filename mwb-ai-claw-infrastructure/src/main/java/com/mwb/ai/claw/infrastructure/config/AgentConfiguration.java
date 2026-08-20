@@ -2,6 +2,8 @@ package com.mwb.ai.claw.infrastructure.config;
 
 import java.util.Arrays;
 
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestTemplate;
@@ -19,7 +21,6 @@ import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
 import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
 import com.mwb.ai.claw.domain.skill.SkillGateway;
 import com.mwb.ai.claw.domain.tool.ToolGateway;
-import org.springframework.beans.factory.ObjectProvider;
 
 /**
  * Agent 模块 Spring 装配：创建 RestTemplate 与领域服务（domain 普通类）Bean。
@@ -30,18 +31,25 @@ import org.springframework.beans.factory.ObjectProvider;
 public class AgentConfiguration {
 
     @Bean
-    public RestTemplate restTemplate() {
-        return new RestTemplate();
+    @ConditionalOnMissingBean
+    public RestTemplate restTemplate(AgentProperties properties) {
+        // LLM HTTP 超时可配置（agent.llm.connect-timeout-ms / read-timeout-ms），避免网络异常无限阻塞
+        org.springframework.http.client.SimpleClientHttpRequestFactory factory =
+                new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(properties.getLlm().getConnectTimeoutMs());
+        factory.setReadTimeout(properties.getLlm().getReadTimeoutMs());
+        return new RestTemplate(factory);
     }
 
     @Bean
     public ContextAssembler contextAssembler(ToolGateway toolGateway,
                                              LongTermMemoryGateway memoryGateway,
                                              LayeredMemoryGateway layeredMemoryGateway,
-                                             ObjectProvider<SkillGateway> skillGatewayProvider) {
+                                             ObjectProvider<SkillGateway> skillGatewayProvider,
+                                             AgentProperties properties) {
         // 技能开关关闭时无 SkillGateway Bean，ObjectProvider 兜底为 null（不注入技能清单）
         return new DefaultContextAssembler(toolGateway, memoryGateway, layeredMemoryGateway,
-                skillGatewayProvider.getIfAvailable());
+                skillGatewayProvider.getIfAvailable(), properties.getSecurity().isPromptInjectionGuard());
     }
 
     @Bean

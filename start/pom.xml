@@ -12,10 +12,15 @@
     <packaging>jar</packaging>
     <name>start</name>
 
+    <properties>
+        <!-- 服务端示例应用不发布到 Maven 仓库 -->
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>com.mwb.ai.claw</groupId>
-            <artifactId>mwb-ai-claw-adapter</artifactId>
+            <artifactId>mwb-ai-claw-spring-boot-starter</artifactId>
         </dependency>
 
         <dependency>
@@ -25,6 +30,12 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+        <!-- 结构化日志（JSON Profile：spring.profiles.active 含 json 时输出单行 JSON 日志） -->
+        <dependency>
+            <groupId>net.logstash.logback</groupId>
+            <artifactId>logstash-logback-encoder</artifactId>
+            <version>7.2</version>
         </dependency>
         <!-- JDBC 存储（agent.storage.type=jdbc）：嵌入式 H2（联调用，MySQL 兼容模式）+ 生产 MySQL 驱动 -->
         <dependency>

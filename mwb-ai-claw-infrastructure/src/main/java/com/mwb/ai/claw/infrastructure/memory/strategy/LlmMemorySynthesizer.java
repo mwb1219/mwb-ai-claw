@@ -17,7 +17,6 @@ import com.mwb.ai.claw.infrastructure.util.JsonUtils;
 import com.mwb.ai.claw.infrastructure.util.TokenEstimator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -33,7 +32,6 @@ import java.util.UUID;
  * - 小模型提炼：使用独立配置的提炼模型（synthesizer-model，留空继承主模型）；
  * - 提炼缓存：按输入内容哈希缓存 summarize/extract 结果，同一输入不重复调 LLM。
  */
-@Component
 public class LlmMemorySynthesizer implements MemorySynthesizer {
 
     private static final Logger log = LoggerFactory.getLogger(LlmMemorySynthesizer.class);

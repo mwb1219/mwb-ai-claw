@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.config;
+package com.mwb.ai.claw.start.config;
 
 import java.util.LinkedHashMap;
 import java.util.Map;

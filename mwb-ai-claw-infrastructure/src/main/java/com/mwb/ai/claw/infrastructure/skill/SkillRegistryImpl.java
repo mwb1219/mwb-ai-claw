@@ -5,8 +5,6 @@ import com.mwb.ai.claw.domain.skill.SkillGateway;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
 import java.util.ArrayList;
@@ -19,10 +17,8 @@ import java.util.stream.Collectors;
  * 技能注册表实现：启动时加载技能并索引，向上下文组装器与 use_skill 工具提供访问。
  * <p>
  * listSkills 仅返回 name + description（L1 发现层）；getSkill 返回含正文的完整技能（L2 指令层）。
- * 技能总开关关闭时（agent.skills-enabled=false）不创建本 Bean。
+ * 技能总开关关闭时（agent.skills-enabled=false）由 ClawCoreAutoConfiguration 决定不创建本 Bean。
  */
-@Component
-@ConditionalOnProperty(name = "agent.skills-enabled", havingValue = "true", matchIfMissing = true)
 public class SkillRegistryImpl implements SkillGateway {
 
     private static final Logger log = LoggerFactory.getLogger(SkillRegistryImpl.class);

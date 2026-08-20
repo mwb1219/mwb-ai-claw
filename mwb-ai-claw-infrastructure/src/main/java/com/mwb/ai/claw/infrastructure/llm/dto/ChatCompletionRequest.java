@@ -27,6 +27,10 @@ public class ChatCompletionRequest {
     /** 思考模式开关（如 DeepSeek：{"thinking":{"type":"disabled"}}） */
     private ThinkingConfig thinking;
 
+    /** 结构化输出（D2）：{"type":"json_object"} / {"type":"json_schema","json_schema":{...}} */
+    @JsonProperty("response_format")
+    private Object responseFormat;
+
     @Data
     public static class ThinkingConfig {
         /** enabled / disabled */

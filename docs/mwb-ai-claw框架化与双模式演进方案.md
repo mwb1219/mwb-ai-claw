@@ -171,31 +171,35 @@ domain 零 Spring 依赖，infrastructure 实现端口（依赖倒置）
 
 ### Phase A：服务端生产化（优先）
 
-- [ ] 多租户 / 用户维度（记忆命名空间、会话 key、检索隔离）
-- [ ] JDBC / Redis 持久化实现（Session / MemoryPageStore / Facts）
-- [ ] session 级并发锁（文件模式并发安全）
-- [ ] 认证鉴权（API Key / Token、租户级权限、工具级权限）
+- [x] 多租户 / 用户维度（记忆命名空间、会话 key、检索隔离）
+- [x] JDBC / Redis 持久化实现（Session / MemoryPageStore / Facts）
+- [x] session 级并发锁（文件模式并发安全）
+- [x] 认证鉴权（API Key / Token、租户级权限、工具级权限）
 
 ### Phase B：框架化改造（结构性）
 
-- [ ] 拆出 `mwb-ai-claw-spring-boot-starter`（自动装配 + `spring.factories` + `@ConditionalOnMissingBean`）
-- [ ] 新增 `ClawRuntime` 客户端嵌入式入口（无 Web 容器启动）
-- [ ] 示例工程模板：服务端示例 + 客户端嵌入式示例
-- [ ] Maven 发布准备（坐标、版本、源码/javadoc 插件）
+- [x] 拆出 `mwb-ai-claw-spring-boot-starter`（自动装配 + `spring.factories` + `@ConditionalOnMissingBean`）
+- [x] 新增 `ClawRuntime` 客户端嵌入式入口（无 Web 容器启动）
+- [x] 示例工程模板：服务端示例 + 客户端嵌入式示例
+- [x] Maven 发布准备（坐标、版本、源码/javadoc 插件）
 
 ### Phase C：可观测与韧性
 
-- [ ] Micrometer 指标（token / 延迟 / 成本）+ 结构化日志 + 每次运行用量记录
-- [ ] 流式取消 / 断连回收、LLM 重试与退避（429 / 5xx）
-- [ ] LLM 备用模型 fallback、token 预算保护、提示词注入防护
-- [ ] 测试补齐（SPI 契约测试、集成测试、端到端测试）与 CI
+- [x] Micrometer 指标（token / 延迟 / 成本）+ 结构化日志 + 每次运行用量记录
+- [x] 流式取消 / 断连回收、LLM 重试与退避（429 / 5xx）
+- [x] LLM 备用模型 fallback、token 预算保护、提示词注入防护
+- [x] 测试补齐（SPI 契约测试、集成测试、端到端测试）与 CI
+
+> 实施详情见 [feature-PhaseC-可观测性与韧性技术方案(SUBMIT).md](./feature-PhaseC-可观测性与韧性技术方案(SUBMIT).md)，已于 2026-08-20 完成。
 
 ### Phase D：模型与生态
 
-- [ ] 多 Provider 适配（Anthropic / Gemini / 本地 Ollama）
-- [ ] 结构化输出（JSON mode / 严格 schema）、多模态输入
-- [ ] 模板系统增强（模板变量 / 条件、产物结构化解析）
-- [ ] 技术栈升级：Java 17/21 + Spring Boot 3.x
+- [x] 多 Provider 适配（Anthropic / Gemini / 本地 Ollama）
+- [x] 结构化输出（JSON mode / 严格 schema）、多模态输入
+- [x] 模板系统增强（模板变量 / 条件、产物结构化解析）
+- [ ] 技术栈升级：Java 17/21 + Spring Boot 3.x（仅附录说明，本次暂不实施）
+
+> 实施详情见 [feature-PhaseD-模型与生态技术方案(SUBMIT).md](./feature-PhaseD-模型与生态技术方案(SUBMIT).md)。
 
 ---
 

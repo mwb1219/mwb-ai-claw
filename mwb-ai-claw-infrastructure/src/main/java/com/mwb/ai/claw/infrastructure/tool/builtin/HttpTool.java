@@ -78,7 +78,6 @@ public class HttpTool implements ToolExecutor {
             // 安全校验
             toolSecurity.validateHttpUrl(url);
 
-            StringBuilder result = new StringBuilder();
             HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
             conn.setRequestMethod(method);
             conn.setConnectTimeout(toolSecurity.getToolTimeoutSeconds() * 1000);
@@ -102,9 +101,8 @@ public class HttpTool implements ToolExecutor {
             }
 
             int statusCode = conn.getResponseCode();
-            result.append("HTTP ").append(statusCode).append("\n\n");
 
-            // 读取响应
+            // 读取响应（2xx 读正常流，非 2xx 读错误流）
             BufferedReader reader;
             if (statusCode >= 200 && statusCode < 300) {
                 reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8));
@@ -112,14 +110,18 @@ public class HttpTool implements ToolExecutor {
                 reader = new BufferedReader(new InputStreamReader(conn.getErrorStream(), StandardCharsets.UTF_8));
             }
             String line;
+            StringBuilder responseBody = new StringBuilder();
             while ((line = reader.readLine()) != null) {
-                result.append(line).append("\n");
+                responseBody.append(line).append("\n");
             }
             reader.close();
             conn.disconnect();
 
-            String output = toolSecurity.truncateOutput(result.toString());
-            return ToolResult.success(output);
+            // 非 2xx → 明确错误（含状态码 + 截断响应体），作为 Observation 反馈给 LLM 调整
+            if (statusCode < 200 || statusCode >= 300) {
+                return ToolResult.error("HTTP " + statusCode + ": " + toolSecurity.truncateOutput(responseBody.toString()));
+            }
+            return ToolResult.success(toolSecurity.truncateOutput(responseBody.toString()));
         } catch (SecurityException e) {
             log.warn("HTTP 安全校验失败: {}", e.getMessage());
             return ToolResult.error("安全拦截: " + e.getMessage());

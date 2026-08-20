@@ -435,7 +435,7 @@ public class TodoDelegateOrchestrator implements AgentOrchestrator {
                     + "{ \"todos\": [ { \"todoId\": \"t1\", \"title\": \"...\", \"description\": \"...\", "
                     + "\"agentId\": \"coder\", \"dependsOn\": [] } ] }";
 
-            String reply = runWithRetry(prompt, planner, null);
+            String reply = runQuietly(prompt, planner, null);
             if (reply == null || reply.trim().isEmpty()) {
                 return null;
             }
@@ -644,7 +644,7 @@ public class TodoDelegateOrchestrator implements AgentOrchestrator {
                     + "注意：已完成的 todoId 不要再次出现在 todos 中；todoId 不超过 "
                     + def.maxTodosOrDefault() + " 个。若无需调整，直接输出 {\"adjust\": []}。";
 
-            String reply = runWithRetry(prompt, planner, null);
+            String reply = runQuietly(prompt, planner, null);
             if (reply == null || reply.trim().isEmpty()) {
                 return null;
             }
@@ -766,7 +766,7 @@ public class TodoDelegateOrchestrator implements AgentOrchestrator {
             Agent agent = resolveAgent(agentId);
             applyThinking(agent);
             String prompt = task + "\n\n请直接完成上述任务，输出最终结果。";
-            String reply = runWithRetry(prompt, agent, streamCb);
+            String reply = runQuietly(prompt, agent, streamCb);
             if (reply == null || reply.trim().isEmpty()) {
                 if ("skip".equals(def.onFailureOrDefault())) {
                     log.warn("委托编排执行无产出，按 skip 策略继续: {}", label);
@@ -823,7 +823,7 @@ public class TodoDelegateOrchestrator implements AgentOrchestrator {
                     + "子任务结果：\n" + sb
                     + (anyFailed ? "\n（注意：部分子任务执行失败，请在答复中说明。）" : "")
                     + "\n\n请输出完整、可直接交付的最终答复。不要调用任何工具，直接输出。";
-            String reply = runWithRetry(prompt, planner, streamCb);
+            String reply = runQuietly(prompt, planner, streamCb);
             if (reply == null || reply.trim().isEmpty()) {
                 if ("skip".equals(def.onFailureOrDefault())) {
                     log.warn("委托编排汇总无产出，按 skip 策略拼接子任务结果: {}", path);
@@ -966,19 +966,6 @@ public class TodoDelegateOrchestrator implements AgentOrchestrator {
         }
 
         // ---------------- 公共辅助 ----------------
-
-        /** 空回复重试：执行失败 / 空回复按 retries 次数重试，均要求直接输出 */
-        String runWithRetry(String prompt, Agent agent, LlmStreamCallback streamCb) {
-            String reply = runQuietly(prompt, agent, streamCb);
-            int attempts = 0;
-            while ((reply == null || reply.trim().isEmpty()) && attempts < def.retriesOrDefault()) {
-                attempts++;
-                log.warn("委托编排执行回复为空，重试 {}: agent={}", attempts, agent.getAgentId());
-                reply = runQuietly(prompt + "\n\n（注意：你的上一条回复为空。请直接输出完整回答，不要留空。）",
-                        agent, streamCb);
-            }
-            return reply;
-        }
 
         /** 执行一次 runAgent（异常时返回 null，由调用方统一按失败策略处理） */
         String runQuietly(String prompt, Agent agent, LlmStreamCallback streamCb) {

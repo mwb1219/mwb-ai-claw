@@ -14,7 +14,7 @@
         <maven.compiler.target>${maven.compiler.source}</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <maven.deploy.skip>true</maven.deploy.skip>
+        <!-- 示例模块（start / example-embed）私有属性覆盖为 true，避免误发布 -->
 
         <spring-boot.version>2.7.2</spring-boot.version>
         <!-- 覆盖 Lombok 版本以兼容 JDK 21 及新版语言服务器编译器（1.18.30 会触发 lombok.javac.Javac 初始化失败） -->
@@ -27,6 +27,8 @@
         <module>mwb-ai-claw-app</module>
         <module>mwb-ai-claw-domain</module>
         <module>mwb-ai-claw-infrastructure</module>
+        <module>mwb-ai-claw-spring-boot-starter</module>
+        <module>example-embed</module>
         <module>start</module>
     </modules>
 
@@ -76,6 +78,11 @@
                 <artifactId>mwb-ai-claw-infrastructure</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>com.mwb.ai.claw</groupId>
+                <artifactId>mwb-ai-claw-spring-boot-starter</artifactId>
+                <version>${project.version}</version>
+            </dependency>
             <!--Project modules End-->
 
             <dependency>
@@ -95,6 +102,38 @@
     </dependencyManagement>
 
     <build>
+        <plugins>
+            <!-- 发布准备：所有模块生成源码 / javadoc 附件（供部署到 Maven 仓库使用） -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <goals>
+                            <goal>jar-no-fork</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>attach-javadocs</id>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                        <configuration>
+                            <!-- 既有注释含未转义 HTML（如 <sessionId>、&&），关闭 doclint 避免 JDK21 严格校验报错 -->
+                            <doclint>none</doclint>
+                            <failOnError>false</failOnError>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
         <pluginManagement>
             <plugins>
                 <plugin>

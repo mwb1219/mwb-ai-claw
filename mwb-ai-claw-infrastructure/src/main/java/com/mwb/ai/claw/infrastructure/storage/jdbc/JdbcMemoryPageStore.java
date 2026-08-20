@@ -3,9 +3,7 @@ package com.mwb.ai.claw.infrastructure.storage.jdbc;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Component;
 
 import com.mwb.ai.claw.domain.memory.MemoryPage;
 import com.mwb.ai.claw.domain.memory.MemoryPageStore;
@@ -18,8 +16,6 @@ import com.mwb.ai.claw.domain.scope.AgentScope;
  * - 记忆页表按 (tenant, user, page_id) 主键，page_type 区分 SUMMARY / ARCHIVE；
  * - tenant_id / user_id 用空字符串 '' 表示默认空间（MySQL 主键列不允许 NULL）。
  */
-@Component
-@ConditionalOnProperty(name = "agent.storage.type", havingValue = "jdbc")
 public class JdbcMemoryPageStore implements MemoryPageStore {
 
     private final JdbcTemplate jdbc;

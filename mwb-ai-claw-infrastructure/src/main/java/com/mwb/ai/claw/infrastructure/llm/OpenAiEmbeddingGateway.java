@@ -12,10 +12,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
-import javax.annotation.Resource;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -24,21 +22,22 @@ import java.util.Map;
  * <p>
  * 模型 / base-url / api-key 均可独立配置（agent.memory.embedding-*），缺省继承 agent.* 主配置；
  * 调用失败时优雅降级为空向量，由向量检索器回退到关键词检索，不阻塞主链路。
+ * <p>
+ * 由 {@code ClawCoreAutoConfiguration} 以 {@code @ConditionalOnMissingBean} 注册，使用方可覆盖。
  */
-@Component
 public class OpenAiEmbeddingGateway implements EmbeddingGateway {
 
     private static final Logger log = LoggerFactory.getLogger(OpenAiEmbeddingGateway.class);
 
-    @Resource
-    private RestTemplate restTemplate;
+    private final RestTemplate restTemplate;
 
     private final AgentProperties properties;
     private final LayeredMemoryConfig config;
 
-    public OpenAiEmbeddingGateway(AgentProperties properties) {
+    public OpenAiEmbeddingGateway(AgentProperties properties, RestTemplate restTemplate) {
         this.properties = properties;
         this.config = properties.getMemory();
+        this.restTemplate = restTemplate;
     }
 
     @Override

@@ -1,2 +1,3 @@
+# 服务端示例应用的环境变量加载器
 org.springframework.boot.env.EnvironmentPostProcessor=\
-com.mwb.ai.claw.config.DotenvEnvironmentPostProcessor
+com.mwb.ai.claw.start.config.DotenvEnvironmentPostProcessor

@@ -5,6 +5,8 @@ import lombok.Data;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.mwb.ai.claw.domain.core.ErrorCategory;
+
 /**
  * 协作结果：编排执行完成后的统一输出。
  */
@@ -13,6 +15,15 @@ public class CollaborationResult {
 
     /** 最终回复（routing=单 Agent 回复；conversational=收敛结论；delegate=汇总结论） */
     private String reply;
+
+    /** 执行是否成功（LLM error 终态 / 预算耗尽时置 false） */
+    private boolean success = true;
+
+    /** 失败时的明确错误信息（success=false 时有值） */
+    private String errorMessage;
+
+    /** 失败时的错误分类（success=false 时有值，供上层映射错误码） */
+    private ErrorCategory errorCategory;
 
     /** 主导 Agent id */
     private String agentId;

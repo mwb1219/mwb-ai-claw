@@ -80,13 +80,19 @@ public class ReActLoopService {
         int effectiveSteps = maxSteps;
         int step = 0;
 
-        while (step < effectiveSteps) {
+        while (step < effectiveSteps && !Thread.currentThread().isInterrupted()) {
             step++;
             // 1. 组装 LLM 请求（system + history + tools）
             LlmRequest request = contextAssembler.assemble(session, agent);
 
             // 2. 调用 LLM（依赖倒置）
             LlmResponse response = llmGateway.chat(request, agent.getModelConfig());
+
+            // 2.1 LLM 返回 error 终态（重试+fallback 后仍失败 / 4xx 业务错误 / 预算耗尽）：
+            //     中止循环，不写入 assistant 消息，由上层转错误响应（error 不得冒充最终回复）
+            if ("error".equals(response.getFinishReason())) {
+                return errorResult(response);
+            }
 
             List<ToolCall> toolCalls = response.getToolCalls();
             boolean noToolCalls = toolCalls == null || toolCalls.isEmpty();
@@ -138,6 +144,12 @@ public class ReActLoopService {
             // 继续下一轮循环，让 LLM 根据 Observation 再次推理
         }
 
+        // 任务被取消（断连回收）：返回取消结果，不再当作步数上限处理
+        if (Thread.currentThread().isInterrupted()) {
+            result.setReply("任务已取消");
+            return result;
+        }
+
         // 达到硬上限仍未完成
         result.setMaxStepsReached(true);
         result.setReply("达到最大推理步数限制(" + hardCap + ")，未能完成最终回复。");
@@ -164,12 +176,25 @@ public class ReActLoopService {
         int effectiveSteps = maxSteps;
         int step = 0;
 
-        while (step < effectiveSteps) {
+        while (step < effectiveSteps && !Thread.currentThread().isInterrupted()) {
             step++;
             LlmRequest request = contextAssembler.assemble(session, agent);
 
             // 流式调用 LLM
             LlmResponse response = llmGateway.streamChat(request, agent.getModelConfig(), streamCallback);
+
+            // LLM 返回 error 终态：若已流式输出部分内容则保留（作为部分结果正常返回）；
+            // 否则中止循环，不写入 assistant 消息，由上层转 error 事件
+            if ("error".equals(response.getFinishReason())) {
+                if (response.getContent() != null && !response.getContent().trim().isEmpty()) {
+                    // 已流式输出部分内容：保留已输出部分，写 assistant 消息后正常返回
+                    session.addAssistantMessage(response.getContent(), null);
+                    result.setReply(response.getContent());
+                    afterTurn(session, agent);
+                    return result;
+                }
+                return errorResult(response);
+            }
 
             List<ToolCall> toolCalls = response.getToolCalls();
             boolean noToolCalls = toolCalls == null || toolCalls.isEmpty();
@@ -217,9 +242,30 @@ public class ReActLoopService {
             }
         }
 
+        // 任务被取消（断连回收）：返回取消结果，不再当作步数上限处理
+        if (Thread.currentThread().isInterrupted()) {
+            result.setReply("任务已取消");
+            return result;
+        }
+
         result.setMaxStepsReached(true);
         result.setReply("达到最大推理步数限制(" + hardCap + ")，未能完成最终回复。");
         afterTurn(session, agent);
+        return result;
+    }
+
+    /**
+     * LLM error 终态 → 中止结果：success=false + 明确错误信息 + 错误分类，不写入 assistant 消息。
+     */
+    private ReActResult errorResult(LlmResponse response) {
+        ReActResult result = new ReActResult();
+        String errMsg = response.getContent() == null || response.getContent().trim().isEmpty()
+                ? "LLM 调用失败（无错误详情）" : response.getContent();
+        result.setSuccess(false);
+        result.setErrorMessage(errMsg);
+        result.setReply(errMsg);
+        result.setErrorCategory(response.getErrorCategory() != null
+                ? response.getErrorCategory() : ErrorCategory.TRANSIENT);
         return result;
     }
 

@@ -1,8 +1,6 @@
 package com.mwb.ai.claw.infrastructure.storage.redis;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.stereotype.Component;
 
 import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
 import com.mwb.ai.claw.domain.scope.AgentScope;
@@ -16,8 +14,6 @@ import com.mwb.ai.claw.domain.scope.AgentScope;
  * claw:{ns}:longterm:MEMORY.md    → String（长期记忆）
  * </pre>
  */
-@Component
-@ConditionalOnProperty(name = "agent.storage.type", havingValue = "redis")
 public class RedisLongTermMemoryGateway implements LongTermMemoryGateway {
 
     private static final String NAME_AGENT = "AGENT.md";

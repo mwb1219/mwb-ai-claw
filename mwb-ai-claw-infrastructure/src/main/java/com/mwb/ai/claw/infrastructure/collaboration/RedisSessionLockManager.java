@@ -5,10 +5,8 @@ import java.util.Collections;
 import java.util.UUID;
 import java.util.function.Supplier;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
-import org.springframework.stereotype.Component;
 
 import com.mwb.ai.claw.domain.scope.AgentScope;
 
@@ -20,8 +18,6 @@ import com.mwb.ai.claw.domain.scope.AgentScope;
  * <p>
  * 说明：sessionId 为空时不参与锁定位，直接执行（避免非会话操作被串行化）。
  */
-@Component
-@ConditionalOnProperty(name = "agent.storage.lock-type", havingValue = "redis")
 public class RedisSessionLockManager implements SessionLockManager {
 
     /** 锁超时（毫秒）：任务超过该时长自动释放，避免持有者异常后死锁 */

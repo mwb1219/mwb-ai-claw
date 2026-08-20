@@ -16,6 +16,9 @@ public class LlmMessage {
     /** 文本内容 */
     private String content;
 
+    /** 多模态内容片段（D2，可选；非空时优先于 content 文本序列化） */
+    private List<ContentPart> parts;
+
     /** assistant 消息携带的工具调用列表 */
     private List<ToolCall> toolCalls;
 

@@ -9,7 +9,6 @@ import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Component;
 
 import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.Message;
@@ -34,7 +33,6 @@ import com.mwb.ai.claw.infrastructure.util.TokenEstimator;
 /**
  * 分层记忆门面实现：工作记忆组装（预算内）+ 摘要换页（策略可插拔）+ 事实提炼与合并（异步）+ 检索。
  */
-@Component
 public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
 
     private static final Logger log = LoggerFactory.getLogger(LayeredMemoryGatewayImpl.class);

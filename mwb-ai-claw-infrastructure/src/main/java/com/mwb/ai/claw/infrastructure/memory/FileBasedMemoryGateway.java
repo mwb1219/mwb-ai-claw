@@ -5,8 +5,6 @@ import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
 import java.io.IOException;
@@ -21,8 +19,6 @@ import java.nio.file.Paths;
  * 目录默认取自 AgentProperties.memoryDir，若未配置则使用 ${user.dir}/.agent。
  * 多租户模式下按 namespace（tenant/user）分目录隔离；legacy 模式保持原扁平布局。
  */
-@Component
-@ConditionalOnProperty(name = "agent.storage.type", havingValue = "file", matchIfMissing = true)
 public class FileBasedMemoryGateway implements LongTermMemoryGateway {
 
     private static final Logger log = LoggerFactory.getLogger(FileBasedMemoryGateway.class);

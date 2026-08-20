@@ -110,6 +110,7 @@ public class CustomCommandLoader {
         CustomCommand cc = new CustomCommand();
         cc.setName(name.toLowerCase());
         cc.setDescription(fm.getOrDefault("description", ""));
+        cc.setOutput(fm.getOrDefault("output", "text").toLowerCase());
         cc.setTemplate(body.toString().trim());
         return cc;
     }

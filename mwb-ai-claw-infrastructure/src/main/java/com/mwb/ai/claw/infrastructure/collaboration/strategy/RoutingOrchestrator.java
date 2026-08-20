@@ -66,6 +66,9 @@ public class RoutingOrchestrator implements AgentOrchestrator {
 
         CollaborationResult cr = new CollaborationResult();
         cr.setReply(result.getReply());
+        cr.setSuccess(result.isSuccess());
+        cr.setErrorMessage(result.getErrorMessage());
+        cr.setErrorCategory(result.getErrorCategory());
         cr.setAgentId(agent.getAgentId());
         cr.setSessionId(session.getSessionId());
         cr.setOrchestrationId(ctx.getDefinition().getId());

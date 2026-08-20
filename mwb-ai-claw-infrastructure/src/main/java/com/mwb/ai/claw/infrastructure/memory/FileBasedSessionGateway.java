@@ -1,16 +1,5 @@
 package com.mwb.ai.claw.infrastructure.memory;
 
-import com.mwb.ai.claw.domain.core.Session;
-import com.mwb.ai.claw.domain.memory.MemoryGateway;
-import com.mwb.ai.claw.domain.scope.AgentScope;
-import com.mwb.ai.claw.infrastructure.config.AgentProperties;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Component;
-
-import javax.annotation.PostConstruct;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -23,6 +12,17 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Stream;
 
+import javax.annotation.PostConstruct;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.mwb.ai.claw.domain.core.Session;
+import com.mwb.ai.claw.domain.memory.MemoryGateway;
+import com.mwb.ai.claw.domain.scope.AgentScope;
+import com.mwb.ai.claw.infrastructure.config.AgentProperties;
+import com.mwb.ai.claw.infrastructure.util.JsonUtils;
+
 /**
  * 文件持久化版会话存储：每个会话保存为 .agent/sessions/[tenant/user/]<sessionId>.json。
  * <p>
@@ -31,8 +31,6 @@ import java.util.stream.Stream;
  * 未启用多租户（legacy 模式）时仍位于 sessions/&lt;sessionId&gt;.json，保持向后兼容。
  * 替代原先纯内存的 {@link com.mwb.ai.claw.infrastructure.memory.MemoryGatewayImpl}。
  */
-@Component("fileBasedSessionGateway")
-@ConditionalOnProperty(name = "agent.storage.type", havingValue = "file", matchIfMissing = true)
 public class FileBasedSessionGateway implements MemoryGateway {
 
     private static final Logger log = LoggerFactory.getLogger(FileBasedSessionGateway.class);

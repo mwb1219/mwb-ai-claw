@@ -16,12 +16,18 @@
 
 ## 二、整体架构
 
-项目采用 DDD 六模块分层，通过 Gateway 接口实现依赖倒置：
+项目采用 DDD 分层 + Starter 自动装配，通过 Gateway 接口实现依赖倒置：
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      start（启动）                           │
-│            Spring Boot Application                          │
+│                    start（服务端示例）                        │
+│            Spring Boot Application（web / shell 双模式）      │
+└─────────────────────────────────────────────────────────────┘
+                           ▲
+┌─────────────────────────────────────────────────────────────┐
+│           spring-boot-starter（自动装配入口）                  │
+│   ClawAutoConfiguration：@ComponentScan 装配 infra/app/       │
+│   adapter 各层 + infrastructure 的 ClawCoreAutoConfiguration │
 └─────────────────────────────────────────────────────────────┘
                            ▲
 ┌─────────────────────────────────────────────────────────────┐
@@ -37,6 +43,8 @@
 │   （含 orchestrationId）│ - SessionListQryExe               │
 │ - SessionDTO           │ - SessionDeleteCmdExe              │
 │                        │ - SessionAssembler                 │
+│                        │ - ClawRuntime（嵌入式入口，         │
+│                        │   无 Web 容器，供其他 JVM 应用调用）  │
 └───────────────────────┴────────────────────────────────────┘
                            ▲
 ┌─────────────────────────────────────────────────────────────┐
@@ -54,6 +62,7 @@
                            ▲
 ┌─────────────────────────────────────────────────────────────┐
 │                infrastructure（基础设施）                     │
+│   autoconfigure：ClawCoreAutoConfiguration                   │
 │   core：AgentGatewayImpl                                    │
 │   tool：ToolGatewayImpl + 内置工具 + MCP 适配                │
 │   memory：FileBasedSessionGateway + FileBasedMemoryGateway  │
@@ -67,7 +76,11 @@
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**依赖方向**：`adapter / app / infrastructure` → `client + domain`；`domain` 不依赖任何下层。
+**客户端嵌入式示例**：`example-embed` 模块演示通过 `ClawRuntime`（Builder 模式注入
+`apiKey / model / baseUrl` 及自定义组件）在无 Web 容器环境下直接调用 Agent 能力。
+
+**依赖方向**：`adapter / app / infrastructure` → `client + domain`；`domain` 不依赖任何下层；
+`starter → adapter → app → infrastructure`；`start / example-embed` 依赖 starter（示例层）。
 
 ## 三、已实现能力
 
@@ -164,11 +177,32 @@
 - [x] **后台 agent**：`--bg "任务"` 启动 + `/agent list` / `/agent attach <id>`（独立线程新会话执行）
 - [x] **状态栏**：prompt 行显示会话 ID + 上下文估算 token（`≈Ntk`）+ plan 模式标记
 
-### 3.10 待实施
+### 3.10 Phase 10：可观测性与韧性（PhaseC）✅
+
+- [x] **可观测性**：MetricsRecorder 指标埋点（token / 延迟 / 成本）+ logback `json` Profile + 每次运行用量记录（运行记录 JSONL 落盘）
+- [x] **LLM 韧性**：连接 / 读超时可配置（`agent.llm.connect-timeout-ms` / `read-timeout-ms`）、指数退避重试（429 / 5xx / 网络错误）、备用模型 fallback（`agent.llm.fallback-model`）、token 预算保护（`agent.llm.run-budget-tokens`）
+- [x] **流式取消 / 断连回收**：SSE / WebSocket 断连 → 任务 Future 取消，中断 ReAct 线程，避免断连后继续消耗 token
+- [x] **异常处理统一**：`ErrorCategory` 错误分类（瞬时 / 业务 / 预算）+ 统一错误码（`LLM_UNAVAILABLE` / `LLM_TIMEOUT` / `TOOL_TIMEOUT` / `RATE_LIMITED` / `BUDGET_EXCEEDED` / `SYSTEM_ERROR`）+ 工具执行统一超时兜底（`agent.security.tool-timeout-seconds`）+ ReAct error 终态不冒充回复
+- [x] **提示词注入防护**：system prompt 追加「安全与内容边界」约束段（默认开启，`agent.security.prompt-injection-guard`）
+- [x] **测试与 CI**：退避 / 错误分类 / token 预算 / 工具超时单测 + LLM 韧性集成测试（真实 HTTP 假 Server：429 重试 / fallback / 超时）+ E2E 冒烟（`tools/smoke.sh`）+ `tools/ci.sh` 全量流水线
+
+> 技术方案与实施清单见 [docs/feature-PhaseC-可观测性与韧性技术方案(SUBMIT).md](./docs/feature-PhaseC-可观测性与韧性技术方案(SUBMIT).md)
+
+### 3.11 Phase 11：模型与生态（PhaseD）✅
+
+- [x] **多 Provider 适配**：`agent.provider` 按模型配置路由（openai / anthropic / gemini / ollama），Anthropic（`/v1/messages`）、Gemini（`generateContent`）协议网关直连，Ollama 复用 OpenAI 兼容端点，未配置 provider 完全向后兼容
+- [x] **结构化输出**：`response_format`（json_object / json_schema 严格 schema）三协议翻译 + `JsonUtils.extractJson` 文本容错提取（markdown 围栏 / 前后缀）
+- [x] **多模态输入**：`ContentPart`（text / image_url / image_base64）三协议翻译（OpenAI content 数组 / Anthropic image blocks / Gemini inlineData）
+- [x] **模板系统增强**：`{{args}}` / `{{1}}`-`{{9}}` / `{{date}}` / `{{time}}` / `{{env:NAME}}` 变量 + `{{#if}}` 条件（支持 else 与嵌套），与旧 `{args}` 占位符并存；自定义命令 `output: json` 时回复经 extractJson 提取并格式化展示
+- [x] **测试与 CI**：协议翻译集成测试（OpenAI/Anthropic/Gemini 请求体断言）+ extractJson 容错单测 + TemplateEngine 单测 + `tools/smoke.sh` 扩展 provider 冒烟场景
+
+> 技术方案与实施清单见 [docs/feature-PhaseD-模型与生态技术方案(SUBMIT).md](./docs/feature-PhaseD-模型与生态技术方案(SUBMIT).md)
+
+### 3.12 待实施
 
 - [ ] IM 渠道接入：飞书、钉钉、Telegram
 - [ ] 浏览器控制工具（CDP）
-- [ ] 本地 Ollama 离线部署支持
+- [ ] 技术栈升级：Java 17/21 + Spring Boot 3.x（升级路径见 PhaseD 方案附录）
 - [ ] Agent 级技能绑定（agents.json `skills` 字段静态注入）、技能热加载、技能市场
 
 ## 四、领域模型
@@ -537,8 +571,9 @@ agent:
   name: mwb-ai-claw
   system-prompt: "你是 mwb-ai-claw 智能助手..."
   orchestration: routing             # 默认编排 id（引用 orchestrations.json 中的 id；多 Agent 协作编排经 invoke_* 工具由主 Agent 自主发起）
+  provider: openai                   # Provider 类型：openai | anthropic | gemini | ollama（默认 openai，未配置完全向后兼容）
   model: ${DEFAULT_MODEL:deepseek-chat}            # 通过环境变量引用，避免硬编码
-  base-url: ${DEFAULT_BASE_URL:https://api.deepseek.com}
+  base-url: ${DEFAULT_BASE_URL:https://api.deepseek.com}   # 空则按 provider 推断默认（如 anthropic=https://api.anthropic.com/v1）
   api-key: ${DEFAULT_API_KEY:}
   temperature: 0.7
   max-tokens: 8192                   # 思考模型 reasoning 计入 max_tokens，需预留足够空间（默认 2048）
@@ -849,5 +884,11 @@ description: 技能做什么 + 何时使用（触发词）。如：生成项目�
 ```bash
 # 运行长期记忆测试
 mvn test -pl mwb-ai-claw-infrastructure -Dtest=MemoryFilePersistenceTest
+
+# PhaseC/D：全量 CI（编译 + 测试 + 打包二进制分发包）
+tools/ci.sh
+
+# PhaseC/D：E2E 冒烟（web 18080，覆盖 LLM 成功 / LLM 失败错误码 / 工具超时兜底 / Anthropic·Gemini 协议直连）
+tools/smoke.sh
 ```
 

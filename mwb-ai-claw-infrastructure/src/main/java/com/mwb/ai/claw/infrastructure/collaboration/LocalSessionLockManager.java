@@ -4,9 +4,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Component;
-
 import com.mwb.ai.claw.domain.scope.AgentScope;
 
 /**
@@ -14,8 +11,6 @@ import com.mwb.ai.claw.domain.scope.AgentScope;
  * {@link ConcurrentHashMap} 持有锁实例，引用计数归零即清理，避免锁表无限增长。
  * 锁 key = scope.keyPrefix() + ":" + sessionId；同会话串行，不同会话 / 用户完全并行。
  */
-@Component
-@ConditionalOnProperty(name = "agent.storage.lock-type", havingValue = "local", matchIfMissing = true)
 public class LocalSessionLockManager implements SessionLockManager {
 
     /** 锁表项：ReentrantLock + 当前持有者计数（计数归零后从表移除） */

@@ -19,4 +19,13 @@ public class ReActResult {
 
     /** 是否达到最大步数限制 */
     private boolean maxStepsReached;
+
+    /** 执行是否成功（LLM 返回 error 终态 / 预算耗尽时置 false） */
+    private boolean success = true;
+
+    /** 失败时的明确错误信息（success=false 时有值） */
+    private String errorMessage;
+
+    /** 失败时的错误分类（success=false 时有值，供上层映射错误码） */
+    private ErrorCategory errorCategory;
 }

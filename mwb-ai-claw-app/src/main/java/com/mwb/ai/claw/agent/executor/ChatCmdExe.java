@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import com.mwb.ai.claw.agent.observability.RunUsageRecorder;
 import com.mwb.ai.claw.domain.collaboration.AgentOrchestrator;
 import com.mwb.ai.claw.domain.collaboration.CollaborationResult;
 import com.mwb.ai.claw.domain.collaboration.ExecutionUnit;
@@ -23,6 +24,7 @@ import com.mwb.ai.claw.exception.BizException;
 import com.mwb.ai.claw.infrastructure.collaboration.OrchestratorRegistry;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.config.OrchestrationConfigLoader;
+import com.mwb.ai.claw.infrastructure.llm.RunTokenBudget;
 
 /**
  * 对话执行器（编排分发器）：装配上下文 → 委托编排插件执行。
@@ -52,6 +54,9 @@ public class ChatCmdExe {
     @Resource
     private AgentProperties agentProperties;
 
+    @Resource
+    private RunUsageRecorder usageRecorder;
+
     public SingleResponse<ChatResponseDTO> execute(ChatCmd cmd) {
         return execute(cmd, null);
     }
@@ -64,47 +69,92 @@ public class ChatCmdExe {
     }
 
     /**
-     * 执行对话（带进度回调 + LLM 流式回调）
+     * 执行对话（带进度回调 + LLM 流式回调），并在执行前后记录一次运行用量（成功/异常均记录）。
      */
     public SingleResponse<ChatResponseDTO> execute(ChatCmd cmd, ProgressCallback callback,
                                                    LlmStreamCallback streamCallback) {
-        if (cmd.getMessage() == null || cmd.getMessage().trim().isEmpty()) {
-            throw new BizException(AgentErrorCode.B_AGENT_CONFIG_ERROR.getErrCode(), "消息内容不能为空");
+        long start = System.currentTimeMillis();
+        String orchestrationId = null;
+        // 单次运行 token 预算：>0 时在当前线程绑定，LLM 韧性装饰器按次累计，超限中止
+        long budgetTokens = agentProperties.getLlm().getRunBudgetTokens();
+        RunTokenBudget budget = budgetTokens > 0 ? RunTokenBudget.bind(budgetTokens) : null;
+        try {
+            if (cmd.getMessage() == null || cmd.getMessage().trim().isEmpty()) {
+                throw new BizException(AgentErrorCode.B_AGENT_CONFIG_ERROR.getErrCode(), "消息内容不能为空");
+            }
+
+            // 1. 选择编排：显式指定 > 默认（协作编排由主 Agent 经 invoke_* 工具自主发起，不再预选）
+            orchestrationId = resolveOrchestrationId(cmd);
+            OrchestrationDefinition definition = orchestrationLoader.get(orchestrationId);
+            log.info("编排选择: orchestrationId={}, 会话={}, 消息={}", orchestrationId,
+                    cmd.getSessionId(), cmd.getMessage());
+
+            // 2. 装配编排上下文
+            OrchestrationContext ctx = new OrchestrationContext();
+            ctx.setScope(AgentScopeContext.get());
+            ctx.setMessage(cmd.getMessage());
+            ctx.setSessionId(cmd.getSessionId());
+            ctx.setExplicitAgentId(cmd.getAgentId());
+            ctx.setExplicitOrchestrationId(cmd.getOrchestrationId());
+            ctx.setDefinition(definition);
+            ctx.setAgentGateway(agentGateway);
+            ctx.setExecutionUnit(executionUnit);
+            ctx.setCallback(callback);
+            ctx.setStreamCallback(streamCallback);
+
+            // 3. 委托编排插件执行
+            AgentOrchestrator orchestrator = orchestratorRegistry.resolve(definition);
+            CollaborationResult result = orchestrator.orchestrate(ctx);
+            log.info("对话完成: orchestrationId={}, agentId={}, 会话={}", orchestrationId,
+                    result.getAgentId(), result.getSessionId());
+
+            // 4. 组装响应（ReAct error 终态 → 失败响应，不冒充最终回复）
+            if (!result.isSuccess()) {
+                String code = mapErrorCode(result.getErrorCategory(), result.getErrorMessage());
+                recordUsage(cmd, orchestrationId, result, false, code, start);
+                return SingleResponse.buildFailure(code, result.getErrorMessage());
+            }
+            ChatResponseDTO dto = new ChatResponseDTO();
+            dto.setSessionId(result.getSessionId());
+            dto.setAgentId(result.getAgentId());
+            dto.setOrchestrationId(result.getOrchestrationId());
+            dto.setReply(result.getReply());
+            dto.setTraceSteps(result.getTraceSteps());
+
+            recordUsage(cmd, orchestrationId, result, true, null, start);
+            return SingleResponse.of(dto);
+        } catch (BizException e) {
+            recordUsage(cmd, orchestrationId, null, false, e.getErrCode(), start);
+            throw e;
+        } catch (Exception e) {
+            recordUsage(cmd, orchestrationId, null, false, "SYSTEM_ERROR", start);
+            throw e;
+        } finally {
+            if (budget != null) {
+                RunTokenBudget.unbind();
+            }
         }
+    }
 
-        // 1. 选择编排：显式指定 > 默认（协作编排由主 Agent 经 invoke_* 工具自主发起，不再预选）
-        String orchestrationId = resolveOrchestrationId(cmd);
-        OrchestrationDefinition definition = orchestrationLoader.get(orchestrationId);
-        log.info("编排选择: orchestrationId={}, 会话={}, 消息={}", orchestrationId,
-                cmd.getSessionId(), cmd.getMessage());
-
-        // 2. 装配编排上下文
-        OrchestrationContext ctx = new OrchestrationContext();
-        ctx.setScope(AgentScopeContext.get());
-        ctx.setMessage(cmd.getMessage());
-        ctx.setSessionId(cmd.getSessionId());
-        ctx.setExplicitAgentId(cmd.getAgentId());
-        ctx.setExplicitOrchestrationId(cmd.getOrchestrationId());
-        ctx.setDefinition(definition);
-        ctx.setAgentGateway(agentGateway);
-        ctx.setExecutionUnit(executionUnit);
-        ctx.setCallback(callback);
-        ctx.setStreamCallback(streamCallback);
-
-        // 3. 委托编排插件执行
-        AgentOrchestrator orchestrator = orchestratorRegistry.resolve(definition);
-        CollaborationResult result = orchestrator.orchestrate(ctx);
-        log.info("对话完成: orchestrationId={}, agentId={}, 会话={}", orchestrationId,
-                result.getAgentId(), result.getSessionId());
-
-        // 4. 组装响应
-        ChatResponseDTO dto = new ChatResponseDTO();
-        dto.setSessionId(result.getSessionId());
-        dto.setAgentId(result.getAgentId());
-        dto.setOrchestrationId(result.getOrchestrationId());
-        dto.setReply(result.getReply());
-        dto.setTraceSteps(result.getTraceSteps());
-        return SingleResponse.of(dto);
+    /**
+     * 记录一次运行用量摘要（失败也记录，便于排查与成本核算）。
+     */
+    private void recordUsage(ChatCmd cmd, String orchestrationId, CollaborationResult result,
+                             boolean success, String errorCode, long start) {
+        try {
+            RunUsageRecorder.RunUsage usage = new RunUsageRecorder.RunUsage();
+            usage.setSessionId(result != null ? result.getSessionId() : cmd.getSessionId());
+            usage.setAgentId(result != null ? result.getAgentId() : cmd.getAgentId());
+            usage.setOrchestration(orchestrationId);
+            usage.setModel(agentProperties.getModel());
+            usage.setDurationMs(System.currentTimeMillis() - start);
+            usage.setSuccess(success);
+            usage.setSteps(result != null ? result.getTraceSteps().size() : 0);
+            usage.setErrorCode(errorCode);
+            usageRecorder.record(usage);
+        } catch (Exception e) {
+            log.warn("记录运行用量失败: {}", e.getMessage());
+        }
     }
 
     /**
@@ -115,5 +165,33 @@ public class ChatCmdExe {
             return cmd.getOrchestrationId().trim();
         }
         return agentProperties.getOrchestration();
+    }
+
+    /**
+     * 错误码映射（C3）：按错误分类 + 错误信息映射统一错误码，供失败响应与运行记录使用。
+     * <ul>
+     *   <li>BUDGET → BUDGET_EXCEEDED（预算耗尽）；</li>
+     *   <li>TRANSIENT → LLM_UNAVAILABLE（重试+fallback 后仍失败），超时 → LLM_TIMEOUT，429 → RATE_LIMITED；</li>
+     *   <li>BUSINESS / 未知 → SYSTEM_ERROR（错误详情在 errMessage 透传）。</li>
+     * </ul>
+     */
+    private String mapErrorCode(com.mwb.ai.claw.domain.core.ErrorCategory category, String errorMessage) {
+        if (category == null) {
+            return "SYSTEM_ERROR";
+        }
+        switch (category) {
+            case BUDGET:
+                return "BUDGET_EXCEEDED";
+            case TRANSIENT:
+                if (errorMessage != null && errorMessage.contains("超时")) {
+                    return "LLM_TIMEOUT";
+                }
+                if (errorMessage != null && errorMessage.contains("429")) {
+                    return "RATE_LIMITED";
+                }
+                return "LLM_UNAVAILABLE";
+            default:
+                return "SYSTEM_ERROR";
+        }
     }
 }

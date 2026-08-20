@@ -3,7 +3,8 @@
 
     <!--定义参数,后面可以通过${APP_NAME}使用-->
     <property name="APP_NAME" value="start" />
-    <property name="LOG_PATH" value="${user.home}/${APP_NAME}/logs" />
+    <!-- 日志目录支持外部覆盖（CLAW_LOG_PATH），默认 ${user.home}/${APP_NAME}/logs -->
+    <property name="LOG_PATH" value="${CLAW_LOG_PATH:-${user.home}/${APP_NAME}/logs}" />
     <property name="LOG_FILE" value="${LOG_PATH}/application.log" />
 
     <appender name="APPLICATION"
@@ -28,16 +29,32 @@
         </encoder>
     </appender>
 
+    <!-- 结构化 JSON 日志（Profile=json，如 spring.profiles.active=web,json）：
+         单行 JSON 输出，含时间戳/级别/logger/message/MDC（sessionId/agentId/traceId 等） -->
+    <appender name="CONSOLE_JSON" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <customFields>{"app":"start"}</customFields>
+            <includeMdc>true</includeMdc>
+        </encoder>
+    </appender>
+
     <!--rootLogger：默认 INFO；shell 交互模式下仅输出 ERROR（避免 warn/info 日志干扰终端，
-        分层记忆等业务日志已提升为 WARN，在 shell 模式一并被抑制，web 模式仍可见）-->
-    <springProfile name="!shell">
+        分层记忆等业务日志已提升为 WARN，在 shell 模式一并被抑制，web 模式仍可见）；
+        json 模式输出单行 JSON（与 shell 互斥，优先于默认文本输出）-->
+    <springProfile name="json">
         <root level="INFO">
-            <appender-ref ref="CONSOLE" />
+            <appender-ref ref="CONSOLE_JSON" />
             <appender-ref ref="APPLICATION" />
         </root>
     </springProfile>
     <springProfile name="shell">
         <root level="ERROR">
+            <appender-ref ref="CONSOLE" />
+            <appender-ref ref="APPLICATION" />
+        </root>
+    </springProfile>
+    <springProfile name="!json &amp; !shell">
+        <root level="INFO">
             <appender-ref ref="CONSOLE" />
             <appender-ref ref="APPLICATION" />
         </root>
