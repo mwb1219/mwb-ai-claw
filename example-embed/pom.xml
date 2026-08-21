@@ -23,6 +23,11 @@
             <groupId>com.mwb.ai.claw</groupId>
             <artifactId>mwb-ai-claw-app</artifactId>
         </dependency>
+        <!-- 直接使用 domain 的流式回调类型（LlmStreamCallback / LlmResponse），显式声明 -->
+        <dependency>
+            <groupId>com.mwb.ai.claw</groupId>
+            <artifactId>mwb-ai-claw-domain</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

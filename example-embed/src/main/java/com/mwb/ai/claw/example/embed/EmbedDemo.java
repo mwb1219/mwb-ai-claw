@@ -3,6 +3,10 @@ package com.mwb.ai.claw.example.embed;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import org.springframework.util.StringUtils;
+
+import com.mwb.ai.claw.domain.llm.LlmResponse;
+import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
 import com.mwb.ai.claw.dto.ChatCmd;
 import com.mwb.ai.claw.dto.SingleResponse;
 import com.mwb.ai.claw.dto.data.ChatResponseDTO;
@@ -14,7 +18,7 @@ import com.mwb.ai.claw.runtime.ClawRuntime;
  * <p>
  * 配置加载顺序（与框架 {@link ConfigFileLocator} 一致）：
  * {@code .env}（运行目录 → 安装目录 ~/.mwb-ai-claw）→ 系统环境变量 → 内置默认值。
- * 复制根目录 .env.example 为 example-embed/.env 并填入密钥后直接运行：
+ * 复制根目录 .env 为 example-embed/.env 并填入密钥后直接运行：
  * <pre>{@code
  * cp example-embed/.env.example example-embed/.env   # 填入 DEFAULT_API_KEY 等
  * mvn -pl example-embed exec:java -Dexec.mainClass=com.mwb.ai.claw.example.embed.EmbedDemo
@@ -24,17 +28,27 @@ public class EmbedDemo {
 
     public static void main(String[] args) {
         // 1. 读取配置：.env（运行目录 / 安装目录）→ 系统环境变量 → 内置默认
+        System.out.println("运行目录(user.dir): " + System.getProperty("user.dir")
+                + "（.env 按此目录 → ~/.mwb-ai-claw 顺序加载）");
         Map<String, String> dotenv = loadDotenv();
         String apiKey = value(dotenv, "DEFAULT_API_KEY", "");
         String model = value(dotenv, "DEFAULT_MODEL", "deepseek-chat");
         String baseUrl = value(dotenv, "DEFAULT_BASE_URL", "https://api.deepseek.com/v1");
+        System.out.println("已加载配置: model=" + model + ", baseUrl=" + baseUrl
+                + ", apiKey=" + (apiKey.isEmpty() ? "(未配置)" : apiKey.substring(0, 6) + "***"));
 
-        // 2. 构建运行时：配置 LLM（不启动任何 Web 容器 / 端口）
-        try (ClawRuntime runtime = ClawRuntime.builder()
-                .apiKey(apiKey)
-                .model(model)
-                .baseUrl(baseUrl)
-                .build()) {
+        // 2. 构建运行时：配置 LLM（不启动任何 Web 容器 / 端口）；仅注入非空值，避免空串覆盖默认
+        ClawRuntime.Builder builder = ClawRuntime.builder();
+        if (StringUtils.hasText(apiKey)) {
+            builder.apiKey(apiKey);
+        }
+        if (StringUtils.hasText(model)) {
+            builder.model(model);
+        }
+        if (StringUtils.hasText(baseUrl)) {
+            builder.baseUrl(baseUrl);
+        }
+        try (ClawRuntime runtime = builder.build()) {
 
             // 3. 首次对话：自动创建会话
             ChatCmd first = new ChatCmd();
@@ -54,6 +68,88 @@ public class EmbedDemo {
             } else {
                 System.out.println("对话失败: " + resp.getErrMessage());
             }
+
+            // 5. 流式对话演示（增量 token 实时回调）
+            demoChatStream(runtime);
+        }
+    }
+
+    /** 流式对话演示：自动创建会话 + 复用会话追问，增量 token 经 LlmStreamCallback 实时输出 */
+    private static void demoChatStream(ClawRuntime runtime) {
+        System.out.println();
+        System.out.println("== 流式对话（自动创建会话，增量输出）==");
+        StringBuilder tokenBuffer = new StringBuilder();
+        SingleResponse<ChatResponseDTO> streamResp = runtime.chatStream(
+                "用一句话介绍你自己，并确认你支持流式输出。",
+                null,
+                new LlmStreamCallback() {
+                    @Override
+                    public void onToken(String token) {
+                        System.out.print(token);
+                        System.out.flush();
+                        tokenBuffer.append(token);
+                    }
+
+                    @Override
+                    public void onToolName(String toolName) {
+                        System.out.println();
+                        System.out.println("[工具调用] " + toolName);
+                    }
+
+                    @Override
+                    public void onToolArguments(String argDelta) {
+                        System.out.print(argDelta);
+                        System.out.flush();
+                    }
+
+                    @Override
+                    public void onComplete(LlmResponse response) {
+                        System.out.println();
+                        System.out.println("== 流式完成（聚合回复）==");
+                        System.out.println(response.getContent());
+                    }
+
+                    @Override
+                    public void onError(Throwable error) {
+                        System.out.println();
+                        System.out.println("[流式错误] " + error.getMessage());
+                    }
+                });
+        if (!streamResp.isSuccess()) {
+            System.out.println("流式对话失败: " + streamResp.getErrMessage());
+            return;
+        }
+        String streamSessionId = streamResp.getData().getSessionId();
+        System.out.println("sessionId: " + streamSessionId);
+        System.out.println("回调累计 token 文本: " + tokenBuffer);
+
+        System.out.println();
+        System.out.println("== 流式追问（复用同一会话，增量输出）==");
+        SingleResponse<ChatResponseDTO> streamFollowUp = runtime.chatStream(
+                streamSessionId, "请复述你上一条回复中提到的内容。",
+                null,
+                new LlmStreamCallback() {
+                    @Override
+                    public void onToken(String token) {
+                        System.out.print(token);
+                        System.out.flush();
+                    }
+
+                    @Override
+                    public void onComplete(LlmResponse response) {
+                        System.out.println();
+                        System.out.println("== 流式追问完成 ==");
+                        System.out.println(response.getContent());
+                    }
+
+                    @Override
+                    public void onError(Throwable error) {
+                        System.out.println();
+                        System.out.println("[流式错误] " + error.getMessage());
+                    }
+                });
+        if (!streamFollowUp.isSuccess()) {
+            System.out.println("流式追问失败: " + streamFollowUp.getErrMessage());
         }
     }
 

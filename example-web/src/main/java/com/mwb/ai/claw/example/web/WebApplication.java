@@ -12,7 +12,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * {@code ClawAutoConfiguration} 自动装配。
  * <p>
  * 默认 profile=web（内嵌 Tomcat，暴露 REST / SSE / WebSocket 接口，端口默认 8080）；
- * 完整配置见 src/main/resources/application.yml，密钥填入根目录 .env（复制 .env.example）。
+ * 完整配置见 src/main/resources/application.yml，密钥填入根目录 .env（复制 .env）。
  *
  * @author Frank Zhang
  */
