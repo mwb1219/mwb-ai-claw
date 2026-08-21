@@ -182,16 +182,16 @@
 
     <developers>
         <developer>
-            <id>mawenbin1219</id>
-            <name>mawenbin1219</name>
-            <email>mawenbin1219@users.noreply.github.com</email>
+            <id>mwb1219</id>
+            <name>mwb1219</name>
+            <email>mwb1219@users.noreply.github.com</email>
         </developer>
     </developers>
 
     <scm>
-        <connection>scm:git:https://github.com/mawenbin1219/mwb-ai-claw.git</connection>
-        <developerConnection>scm:git:git@github.com:mawenbin1219/mwb-ai-claw.git</developerConnection>
-        <url>https://github.com/mawenbin1219/mwb-ai-claw</url>
+        <connection>scm:git:https://github.com/mwb1219/mwb-ai-claw.git</connection>
+        <developerConnection>scm:git:git@github.com:mwb1219/mwb-ai-claw.git</developerConnection>
+        <url>https://github.com/mwb1219/mwb-ai-claw</url>
         <tag>HEAD</tag>
     </scm>
 </project>
