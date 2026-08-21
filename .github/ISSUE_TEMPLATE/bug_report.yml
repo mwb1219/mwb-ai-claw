@@ -1,0 +1,64 @@
+name: Bug report
+description: Report a bug to help us improve
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: Which version or commit hash are you running?
+      placeholder: "v1.0.0 or commit hash"
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      description: Which mode did you hit the issue in?
+      options:
+        - Shell
+        - Web / REST
+        - WebSocket
+        - Embedded (ClawRuntime)
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: To reproduce
+      description: Steps to reproduce the behavior.
+      placeholder: |
+        1. Run '...'
+        2. Do '...'
+        3. See error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen instead?
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs / stack trace
+      description: Paste any relevant logs or stack traces (redact API keys).
+      render: shell
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, JDK version, Maven version, LLM model used.
+      placeholder: "macOS 14, JDK 17, Maven 3.9, deepseek-chat"
