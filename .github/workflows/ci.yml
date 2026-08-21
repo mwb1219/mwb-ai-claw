@@ -55,6 +55,8 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [build, frontend]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # GITHUB_TOKEN 默认只读，创建 Release 需显式授予写权限
     steps:
       - name: Checkout
         uses: actions/checkout@v4
