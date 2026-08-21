@@ -12,6 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      max-parallel: 2 # 限制并发，避免首次构建对 Maven Central 触发 429 限流
       matrix:
         java: [8, 11, 17, 21] # 编译目标为 Java 8，多 JDK 验证运行兼容性
     steps:
