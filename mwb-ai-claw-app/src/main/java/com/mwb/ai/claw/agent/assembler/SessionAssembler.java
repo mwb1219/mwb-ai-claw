@@ -2,8 +2,10 @@ package com.mwb.ai.claw.agent.assembler;
 
 import com.mwb.ai.claw.domain.core.Message;
 import com.mwb.ai.claw.domain.core.Session;
+import com.mwb.ai.claw.domain.llm.ToolCall;
 import com.mwb.ai.claw.dto.data.MessageDTO;
 import com.mwb.ai.claw.dto.data.SessionDTO;
+import com.mwb.ai.claw.dto.data.ToolCallDTO;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,6 +32,7 @@ public class SessionAssembler {
             messages.add(toDTO(msg));
         }
         dto.setMessages(messages);
+        dto.setTraceSteps(session.getTraceSteps());
         return dto;
     }
 
@@ -38,6 +41,17 @@ public class SessionAssembler {
         dto.setRole(msg.getRole() == null ? null : msg.getRole().getValue());
         dto.setContent(msg.getContent());
         dto.setTimestamp(msg.getTimestamp());
+        if (msg.getToolCalls() != null && !msg.getToolCalls().isEmpty()) {
+            List<ToolCallDTO> calls = new ArrayList<>();
+            for (ToolCall tc : msg.getToolCalls()) {
+                ToolCallDTO d = new ToolCallDTO();
+                d.setId(tc.getId());
+                d.setName(tc.getName());
+                d.setArguments(tc.getArguments());
+                calls.add(d);
+            }
+            dto.setToolCalls(calls);
+        }
         return dto;
     }
 }

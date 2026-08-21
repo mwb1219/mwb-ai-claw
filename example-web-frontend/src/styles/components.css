@@ -102,44 +102,6 @@
   gap: 8px;
 }
 
-.config-toggle {
-  white-space: nowrap;
-}
-
-.conn-config {
-  position: absolute;
-  top: 56px;
-  right: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  width: 320px;
-  padding: 14px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 8px 24px var(--shadow-strong);
-  z-index: 20;
-}
-
-.conn-config label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.conn-config input {
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-input);
-  color: var(--text);
-  font-size: 13px;
-  font-family: 'JetBrains Mono', Consolas, monospace;
-}
-
 /* ==================== 侧边栏 / 会话列表 ==================== */
 .sidebar {
   width: 240px;
@@ -217,13 +179,26 @@
   color: var(--text-faint);
 }
 
-.session-del {
+.session-actions {
+  display: flex;
+  gap: 2px;
   opacity: 0;
   transition: opacity 0.15s ease;
 }
 
-.session-item:hover .session-del {
+.session-item:hover .session-actions {
   opacity: 1;
+}
+
+.session-rename-input {
+  min-width: 0;
+  padding: 2px 6px;
+  font-size: 13px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text);
+  outline: none;
 }
 
 /* ==================== 按钮 ==================== */
@@ -610,9 +585,66 @@
   border-color: var(--primary);
 }
 
+.thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .thinking-dots {
-  letter-spacing: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.thinking-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+  animation: dotPulse 1.2s infinite ease-in-out;
+}
+
+.thinking-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.thinking-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.thinking-text {
+  font-size: 12px;
   color: var(--text-faint);
+}
+
+.stream-dots {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 4px;
+  vertical-align: baseline;
+}
+
+.stream-dots span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--primary);
+  animation: dotPulse 1.4s ease-in-out infinite;
+}
+
+.stream-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.stream-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+.bubble-seg + .bubble-seg {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
 }
 
 /* 代码块（MarkdownView 渲染） */
@@ -1131,10 +1163,38 @@
   .msg {
     max-width: 95%;
   }
+}
 
-  .conn-config {
-    width: calc(100vw - 32px);
-  }
+/* ==================== 登录态校验加载 ==================== */
+.auth-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100vh;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.auth-loading-dots {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.auth-loading-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+  animation: dotPulse 1.4s ease-in-out infinite;
+}
+
+.auth-loading-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.auth-loading-dots span:nth-child(3) {
+  animation-delay: 0.4s;
 }
 
 /* ==================== 登录 / 注册 ==================== */

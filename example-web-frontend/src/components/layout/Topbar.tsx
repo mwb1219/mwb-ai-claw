@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { Bot, Database, LogOut, MessageSquare, ShieldCheck, User } from 'lucide-react';
 
@@ -7,12 +7,10 @@ import { userApi } from '../../api/client';
 import { useSettings } from '../../store/settings';
 import { useSessionStore } from '../../store/session';
 
-/** 顶部栏：品牌 + 导航 + 连接配置（后端地址 / AgentId / APIKey）+ 当前身份 + 退出 + 主题切换 */
+/** 顶部栏：品牌 + 导航 + 当前身份 + 退出 + 主题切换 */
 export function Topbar() {
   const navigate = useNavigate();
-  const { baseUrl, agentId, apiKey, currentUser, setBaseUrl, setAgentId, setApiKey, setCurrentUser } =
-    useSettings();
-  const [showConfig, setShowConfig] = useState(false);
+  const { apiKey, currentUser, setApiKey, setCurrentUser } = useSettings();
 
   // 登录后刷新当前身份（获取 tenantId / name）
   useEffect(() => {
@@ -64,52 +62,11 @@ export function Topbar() {
             {currentUser.username}
           </span>
         ) : null}
-        <button
-          type="button"
-          className="btn btn-default btn-sm config-toggle"
-          onClick={() => setShowConfig((v) => !v)}
-          title="连接配置"
-        >
-          连接
-        </button>
         <button type="button" className="btn btn-ghost btn-sm" title="退出登录" onClick={logout}>
           <LogOut size={16} />
         </button>
         <ThemeSwitch />
       </div>
-
-      {showConfig ? (
-        <div className="conn-config">
-          <label>
-            后端地址
-            <input
-              value={baseUrl}
-              placeholder="http://localhost:8080（留空 = 相对路径 / 代理）"
-              spellCheck={false}
-              onChange={(e) => setBaseUrl(e.target.value)}
-            />
-          </label>
-          <label>
-            Agent ID
-            <input
-              value={agentId}
-              placeholder="留空使用默认 Agent"
-              spellCheck={false}
-              onChange={(e) => setAgentId(e.target.value)}
-            />
-          </label>
-          <label>
-            API Key
-            <input
-              value={apiKey}
-              type="password"
-              placeholder="认证开启时必填"
-              spellCheck={false}
-              onChange={(e) => setApiKey(e.target.value)}
-            />
-          </label>
-        </div>
-      ) : null}
     </header>
   );
 }

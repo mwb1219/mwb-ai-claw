@@ -16,19 +16,23 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import com.mwb.ai.claw.dto.SingleResponse;
 import com.mwb.ai.claw.agent.executor.ChatCmdExe;
 import com.mwb.ai.claw.api.AgentServiceI;
 import com.mwb.ai.claw.domain.core.ProgressCallback;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
+import com.mwb.ai.claw.domain.scope.AgentScope;
+import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.dto.ChatCmd;
 import com.mwb.ai.claw.dto.CreateSessionCmd;
+import com.mwb.ai.claw.dto.SingleResponse;
+import com.mwb.ai.claw.dto.UpdateSessionCmd;
 import com.mwb.ai.claw.dto.data.ChatResponseDTO;
 import com.mwb.ai.claw.dto.data.SessionDTO;
 
@@ -77,6 +81,23 @@ public class AgentController {
     }
 
     /**
+     * 更新会话（当前支持修改标题）
+     */
+    @PutMapping("/session/{sessionId}")
+    public SingleResponse<SessionDTO> updateSession(@PathVariable String sessionId,
+                                                    @RequestBody UpdateSessionCmd cmd) {
+        return agentService.updateSession(sessionId, cmd);
+    }
+
+    /**
+     * 复制会话
+     */
+    @PostMapping("/session/{sessionId}/duplicate")
+    public SingleResponse<SessionDTO> duplicateSession(@PathVariable String sessionId) {
+        return agentService.duplicateSession(sessionId);
+    }
+
+    /**
      * 查询会话详情
      */
     @GetMapping("/session/{sessionId}")
@@ -117,6 +138,8 @@ public class AgentController {
         SseEmitter emitter = new SseEmitter(120_000L);
         // 请求链路 MDC：SSE 在异步线程执行，MDC 需在任务线程内设置
         String traceId = UUID.randomUUID().toString().replace("-", "");
+        // 捕获请求线程的 AgentScope：ThreadLocal 不跨线程传播，需显式带入异步任务线程
+        AgentScope scope = AgentScopeContext.get();
         // 会话 ID 在执行线程内确定，用持有器供 emitter 回调回收任务
         java.util.concurrent.atomic.AtomicReference<String> sessionHolder =
                 new java.util.concurrent.atomic.AtomicReference<>();
@@ -130,6 +153,7 @@ public class AgentController {
                 new java.util.concurrent.atomic.AtomicReference<>();
         futureRef.set(streamExecutor.submit(() -> {
             MDC.put("traceId", traceId);
+            AgentScopeContext.set(scope);
             if (sessionId != null) {
                 MDC.put("sessionId", sessionId);
             }
@@ -219,6 +243,7 @@ public class AgentController {
                 emitter.completeWithError(e);
             } finally {
                 streamTaskRegistry.unregister(sessionHolder.get(), futureRef.get());
+                AgentScopeContext.clear();
                 MDC.clear();
             }
         }));

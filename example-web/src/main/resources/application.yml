@@ -26,10 +26,7 @@ project:
 example:
   # example-web 固定单租户 id（用户维度的隔离空间标识，写入 AgentScope.tenantId）
   tenant-id: ${EXAMPLE_TENANT_ID:default}
-  # 用户存储后端：file（本地文件 users.json，默认，零依赖）| mysql（JDBC 持久化到 claw_user 表）
-  # mysql 时需数据源可达（spring.datasource），并先执行 schema.sql 建表；可用环境变量 USER_STORAGE_TYPE 覆盖
-  user-storage:
-    type: ${USER_STORAGE_TYPE:mysql}
+  # 用户数据持久化到 claw_user 表（JDBC），需数据源可达（spring.datasource）并先执行 schema.sql 建表
 
 # ================= Agent 配置（OpenAI 兼容） =================
 # 前缀 agent，对应 AgentProperties

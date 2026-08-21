@@ -6,16 +6,15 @@ import type { UserInfoDTO } from '../api/types';
 export type ThemeMode = 'light' | 'dark';
 
 interface SettingsState {
-  /** 后端地址；留空 = 相对路径（开发走 Vite 代理 / 生产同源托管） */
+  /** 后端地址；空 = 相对路径（开发走 Vite 代理到 8080 / 生产同源托管） */
   baseUrl: string;
+  /** Agent ID；固定空 = 使用默认 Agent */
   agentId: string;
   /** 认证 API Key（登录 / 注册后签发；REST 走 X-API-Key，SSE 走 ?apiKey=） */
   apiKey: string;
   theme: ThemeMode;
   /** 当前用户身份（username/name/tenantId），来自 GET /user/current */
   currentUser: UserInfoDTO | null;
-  setBaseUrl(baseUrl: string): void;
-  setAgentId(agentId: string): void;
   setApiKey(apiKey: string): void;
   setTheme(theme: ThemeMode): void;
   toggleTheme(): void;
@@ -50,8 +49,6 @@ export const useSettings = create<SettingsState>()(
       apiKey: '',
       theme: resolveInitialTheme(),
       currentUser: null,
-      setBaseUrl: (baseUrl) => set({ baseUrl: baseUrl.replace(/\/+$/, '') }),
-      setAgentId: (agentId) => set({ agentId }),
       setApiKey: (apiKey) => set({ apiKey }),
       setTheme: (theme) => set({ theme }),
       toggleTheme: () => set({ theme: get().theme === 'light' ? 'dark' : 'light' }),
@@ -59,7 +56,7 @@ export const useSettings = create<SettingsState>()(
     }),
     {
       name: 'claw-settings',
-      partialize: (state) => ({ baseUrl: state.baseUrl, agentId: state.agentId, apiKey: state.apiKey }),
+      partialize: (state) => ({ apiKey: state.apiKey }),
     },
   ),
 );

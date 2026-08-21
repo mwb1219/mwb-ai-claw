@@ -26,4 +26,7 @@ public class SessionDTO {
     private long updateTime;
 
     private List<MessageDTO> messages;
+
+    /** 推理轨迹步骤（[Thought]/[Action]/[Observation] 文本，按轮累加，供前端恢复展示） */
+    private List<String> traceSteps;
 }

@@ -54,6 +54,11 @@ public class RoutingOrchestrator implements AgentOrchestrator {
         ReActResult result = ctx.getExecutionUnit()
                 .runSession(session, agent, ctx.getCallback(), ctx.getStreamCallback());
 
+        // 累加本轮推理轨迹到会话：刷新后前端可从会话详情恢复展示轨迹与工具调用
+        if (result.getTraceSteps() != null && !result.getTraceSteps().isEmpty()) {
+            session.getTraceSteps().addAll(result.getTraceSteps());
+        }
+
         // 持久化会话
         ctx.getExecutionUnit().saveSession(session);
 

@@ -32,10 +32,14 @@ interface ChatState {
   appendStreamingContent(delta: string): void;
   setStreaming(streaming: boolean): void;
   addTraceStep(raw: string): void;
+  /** 从会话详情恢复多条轨迹（内部复用 addTraceStep 分类） */
+  restoreTrace(rawSteps: string[]): void;
   clearTrace(): void;
   startToolCall(name: string): void;
   appendToolArgs(delta: string): void;
   clearToolCalls(): void;
+  /** 从会话消息恢复工具调用记录（刷新后展示） */
+  setToolCalls(toolCalls: ToolCallItem[]): void;
   setStatus(text: string, type?: 'ok' | 'err' | 'busy' | ''): void;
 }
 
@@ -56,7 +60,7 @@ function classifyStep(raw: string): Pick<TraceStep, 'type' | 'label' | 'body'> {
   return { type: 'thought', label: 'THOUGHT', body: raw };
 }
 
-export const useChatStore = create<ChatState>((set) => ({
+export const useChatStore = create<ChatState>((set, get) => ({
   busy: false,
   streamingContent: '',
   streaming: false,
@@ -78,6 +82,10 @@ export const useChatStore = create<ChatState>((set) => ({
       };
     }),
   clearTrace: () => set({ traceSteps: [], toolCalls: [] }),
+  restoreTrace: (rawSteps) => {
+    rawSteps.forEach((raw) => get().addTraceStep(raw));
+  },
+  setToolCalls: (toolCalls) => set({ toolCalls }),
 
   startToolCall: (name) =>
     set((state) => ({ toolCalls: [...state.toolCalls, { id: `tl-${++toolSeq}`, name, args: '' }] })),

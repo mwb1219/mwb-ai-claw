@@ -6,9 +6,12 @@ import com.mwb.ai.claw.agent.executor.ChatCmdExe;
 import com.mwb.ai.claw.agent.executor.CreateSessionCmdExe;
 import com.mwb.ai.claw.agent.executor.SessionDeleteCmdExe;
 import com.mwb.ai.claw.agent.executor.SessionListQryExe;
+import com.mwb.ai.claw.agent.executor.SessionDuplicateCmdExe;
 import com.mwb.ai.claw.agent.executor.SessionQueryExe;
+import com.mwb.ai.claw.agent.executor.SessionUpdateCmdExe;
 import com.mwb.ai.claw.dto.ChatCmd;
 import com.mwb.ai.claw.dto.CreateSessionCmd;
+import com.mwb.ai.claw.dto.UpdateSessionCmd;
 import com.mwb.ai.claw.dto.data.ChatResponseDTO;
 import com.mwb.ai.claw.dto.data.SessionDTO;
 import org.springframework.stereotype.Service;
@@ -37,6 +40,12 @@ public class AgentServiceImpl implements AgentServiceI {
     @Resource
     private SessionDeleteCmdExe sessionDeleteCmdExe;
 
+    @Resource
+    private SessionUpdateCmdExe sessionUpdateCmdExe;
+
+    @Resource
+    private SessionDuplicateCmdExe sessionDuplicateCmdExe;
+
     @Override
     public SingleResponse<ChatResponseDTO> chat(ChatCmd cmd) {
         return chatCmdExe.execute(cmd);
@@ -60,5 +69,15 @@ public class AgentServiceImpl implements AgentServiceI {
     @Override
     public SingleResponse<Void> deleteSession(String sessionId) {
         return sessionDeleteCmdExe.execute(sessionId);
+    }
+
+    @Override
+    public SingleResponse<SessionDTO> updateSession(String sessionId, UpdateSessionCmd cmd) {
+        return sessionUpdateCmdExe.execute(sessionId, cmd);
+    }
+
+    @Override
+    public SingleResponse<SessionDTO> duplicateSession(String sessionId) {
+        return sessionDuplicateCmdExe.execute(sessionId);
     }
 }

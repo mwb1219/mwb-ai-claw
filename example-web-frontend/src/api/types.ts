@@ -37,12 +37,22 @@ export interface SessionDTO {
   createTime: number;
   updateTime: number;
   messages: MessageDTO[];
+  /** 推理轨迹步骤（[Thought]/[Action]/[Observation] 文本，按轮累加） */
+  traceSteps?: string[];
 }
 
 export interface MessageDTO {
   role: string; // user / assistant / system / tool
   content: string;
   timestamp: number;
+  /** assistant 消息携带的工具调用（用于刷新后恢复轨迹展示） */
+  toolCalls?: ToolCallDTO[];
+}
+
+export interface ToolCallDTO {
+  id: string;
+  name: string;
+  arguments: string;
 }
 
 // ==================== 用户 ====================

@@ -2,6 +2,8 @@ package com.mwb.ai.claw.dto.data;
 
 import lombok.Data;
 
+import java.util.List;
+
 /**
  * 消息 DTO
  */
@@ -16,4 +18,7 @@ public class MessageDTO {
 
     /** 时间戳（毫秒） */
     private long timestamp;
+
+    /** assistant 消息携带的工具调用 */
+    private List<ToolCallDTO> toolCalls;
 }

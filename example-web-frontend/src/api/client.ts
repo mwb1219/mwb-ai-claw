@@ -55,7 +55,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(`服务返回非 JSON 响应（HTTP ${resp.status}）`);
   }
   if (!resp.ok || !body.success) {
-    throw new ApiError(body.errMessage || `请求失败（HTTP ${resp.status}）`, body.errCode);
+    const errCode =
+      body.errCode ||
+      (resp.status === 401 || resp.status === 403 ? 'UNAUTHORIZED' : undefined);
+    throw new ApiError(body.errMessage || `请求失败（HTTP ${resp.status}）`, errCode);
   }
   return body.data as T;
 }
@@ -78,6 +81,17 @@ export const sessionApi = {
   remove(sessionId: string): Promise<void> {
     return request<void>(`/agent/session/${encodeURIComponent(sessionId)}`, {
       method: 'DELETE',
+    });
+  },
+  rename(sessionId: string, title: string): Promise<SessionDTO> {
+    return request<SessionDTO>(`/agent/session/${encodeURIComponent(sessionId)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ title }),
+    });
+  },
+  duplicate(sessionId: string): Promise<SessionDTO> {
+    return request<SessionDTO>(`/agent/session/${encodeURIComponent(sessionId)}/duplicate`, {
+      method: 'POST',
     });
   },
 };

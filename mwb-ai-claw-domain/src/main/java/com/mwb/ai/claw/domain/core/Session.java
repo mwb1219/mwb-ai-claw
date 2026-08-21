@@ -38,6 +38,9 @@ public class Session {
 
     private List<Message> messages = new ArrayList<>();
 
+    /** 推理轨迹步骤（[Thought]/[Action]/[Observation] 文本，按轮累加，供前端刷新后恢复展示） */
+    private List<String> traceSteps = new ArrayList<>();
+
     public Session() {
         this.status = SessionStatus.ACTIVE;
     }

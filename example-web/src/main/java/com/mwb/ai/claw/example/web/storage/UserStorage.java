@@ -9,7 +9,7 @@ import com.mwb.ai.claw.example.web.model.User;
  * 用户存储端口（storage 层）：example-web 用户数据的持久化抽象。
  * <p>
  * 同时继承框架 SPI {@link TenantGateway}（{@code resolveApiKey}），将 API Key 反解为
- * 固定租户 + 用户名。支持 file（本地文件）与 mysql（JDBC）两种实现，由 {@code example.user-storage.type} 切换。
+ * 固定租户 + 用户名。
  */
 public interface UserStorage extends TenantGateway {
 

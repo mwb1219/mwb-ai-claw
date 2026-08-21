@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 
+import { ApiError, userApi } from './api/client';
 import { Topbar } from './components/layout/Topbar';
 import { Sidebar } from './components/layout/Sidebar';
 import { StatusBar } from './components/layout/StatusBar';
@@ -10,9 +11,61 @@ import { ApprovalPage } from './pages/ApprovalPage';
 import { LoginPage } from './pages/LoginPage';
 import { applyTheme, useSettings } from './store/settings';
 
-/** 登录保护：无 apiKey 时重定向到登录页 */
+/** 认证错误判定：后端认证失败（errCode）或 HTTP 401/403 */
+function isAuthError(err: unknown): boolean {
+  return (
+    err instanceof ApiError &&
+    (err.errCode === 'B_AGENT_AUTH_FAILED' || err.errCode === 'UNAUTHORIZED')
+  );
+}
+
+/** 登录保护：进入主界面前校验登录态，未登录（含 Key 失效）重定向到登录页 */
 function RequireAuth({ children }: { children: React.ReactElement }) {
   const apiKey = useSettings((s) => s.apiKey);
+  const setApiKey = useSettings((s) => s.setApiKey);
+  const setCurrentUser = useSettings((s) => s.setCurrentUser);
+  const [checking, setChecking] = useState(() => !!apiKey);
+
+  useEffect(() => {
+    if (!apiKey) {
+      setCurrentUser(null);
+      setChecking(false);
+      return;
+    }
+    let cancelled = false;
+    setChecking(true);
+    userApi
+      .current()
+      .then((user) => {
+        if (!cancelled) setCurrentUser(user);
+      })
+      .catch((err: unknown) => {
+        // 仅当凭证确实无效时登出；网络故障（后端暂不可达）不清除 Key，避免误登出
+        if (!cancelled && isAuthError(err)) {
+          setApiKey('');
+          setCurrentUser(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setChecking(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [apiKey, setApiKey, setCurrentUser]);
+
+  if (checking) {
+    return (
+      <div className="auth-loading">
+        <span className="auth-loading-dots">
+          <span />
+          <span />
+          <span />
+        </span>
+        校验登录状态…
+      </div>
+    );
+  }
   if (!apiKey) {
     return <Navigate to="/login" replace />;
   }

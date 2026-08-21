@@ -16,19 +16,24 @@ const ROLE_META: Record<string, { label: string; icon: typeof Bot }> = {
   system: { label: 'SYS', icon: Bot },
 };
 
-function Bubble({ msg }: { msg: MessageDTO }) {
-  const meta = ROLE_META[msg.role] ?? { label: msg.role.toUpperCase(), icon: Bot };
+/** 合并后的消息组：连续同角色消息只展示一个头像，内容按序拼接 */
+function Bubble({ role, items }: { role: string; items: MessageDTO[] }) {
+  const meta = ROLE_META[role] ?? { label: role.toUpperCase(), icon: Bot };
   const Icon = meta.icon;
-  const renderMarkdown = msg.role === 'assistant' || msg.role === 'tool';
+  const renderMarkdown = role === 'assistant';
 
   return (
-    <div className={`msg msg-${msg.role}`}>
+    <div className={`msg msg-${role}`}>
       <div className="avatar">
         <Icon size={15} />
         <span className="avatar-label">{meta.label}</span>
       </div>
       <div className="bubble">
-        {renderMarkdown ? <MarkdownView content={msg.content} /> : msg.content}
+        {items.map((m, i) => (
+          <div className="bubble-seg" key={`${m.timestamp}-${i}`}>
+            {renderMarkdown ? <MarkdownView content={m.content} /> : m.content}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -44,7 +49,21 @@ export function MessageList({ messages }: MessageListProps) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingContent, streaming]);
 
-  const showWelcome = messages.length === 0 && !streaming;
+  // 过滤工具调用消息：只展示对话内容（user/assistant/system），工具调用在轨迹面板展示
+  const visibleMessages = messages.filter((m) => m.role !== 'tool');
+
+  // 连续相同角色的消息合并为一组，共用一个头像气泡
+  const groups: { role: string; items: MessageDTO[] }[] = [];
+  for (const m of visibleMessages) {
+    const last = groups[groups.length - 1];
+    if (last && last.role === m.role) {
+      last.items.push(m);
+    } else {
+      groups.push({ role: m.role, items: [m] });
+    }
+  }
+
+  const showWelcome = groups.length === 0 && !streaming;
 
   return (
     <div className="messages">
@@ -55,10 +74,9 @@ export function MessageList({ messages }: MessageListProps) {
           </div>
           <h2>mwb-ai-claw 控制台</h2>
           <p>输入消息与 Agent 对话，全程 SSE 流式输出，支持 ReAct 推理轨迹与工具调用展示。</p>
-          <p className="dim">提示：在右上角「连接」中可配置后端地址、Agent ID 与 API Key。</p>
         </div>
       ) : (
-        messages.map((m, i) => <Bubble key={`${m.timestamp}-${i}`} msg={m} />)
+        groups.map((g, i) => <Bubble key={i} role={g.role} items={g.items} />)
       )}
       {streaming ? (
         <div className="msg msg-assistant">
@@ -67,7 +85,25 @@ export function MessageList({ messages }: MessageListProps) {
             <span className="avatar-label">AI</span>
           </div>
           <div className="bubble streaming">
-            {streamingContent || <span className="thinking-dots">● ● ●</span>}
+            {streamingContent ? (
+              <>
+                {streamingContent}
+                <span className="stream-dots" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                </span>
+              </>
+            ) : (
+              <span className="thinking">
+                <span className="thinking-dots" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                </span>
+                <span className="thinking-text">思考中</span>
+              </span>
+            )}
           </div>
         </div>
       ) : null}
