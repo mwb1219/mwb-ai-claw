@@ -1,6 +1,7 @@
 ---
 title: 文档中心
 nav_order: 0
+permalink: /   # jekyll-readme-index 在 README 带 front matter 时不生成首页，改用 permalink 输出为 /index.html
 ---
 
 # mwb-ai-claw 文档中心
