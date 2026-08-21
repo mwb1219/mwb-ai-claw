@@ -1,0 +1,130 @@
+# 全部配置项速查
+
+> 配置来源三级加载（优先级从高到低）：**命令行参数 / 系统属性 > `.env` 环境变量 > 内置 `application.yml` 默认值**。
+> `.env` 变量经 `${VAR:default}` 占位符注入；配置文件（agents.json / orchestrations.json / mcp-server.json）另有「运行目录 > classpath」两级加载。
+
+## 1. 环境变量（.env）
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `DEFAULT_API_KEY` | （空） | 默认模型密钥，必填 |
+| `DEFAULT_MODEL` | `deepseek-chat` | 默认模型 |
+| `DEFAULT_BASE_URL` | `https://api.deepseek.com` | 默认 Base URL |
+| `CODER_MODEL` / `CODER_API_KEY` | 继承默认 | coder 专家独立模型 |
+| `RESEARCHER_MODEL` / `RESEARCHER_API_KEY` | 继承默认 | researcher 专家独立模型 |
+| `EMBEDDING_MODEL` / `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` | 继承默认 | 向量检索 embedding（DeepSeek 主模型不支持 embeddings，需单独配置） |
+| `SYNTHESIS_MODEL` / `SYNTHESIS_BASE_URL` / `SYNTHESIS_API_KEY` | 继承默认 | 小模型提炼（成本优化） |
+| `STORAGE_TYPE` | `file` | 存储后端：`file` / `db` |
+| `DB_URL` | `jdbc:h2:mem:clawdb;MODE=MySQL;...` | JDBC 连接（db 模式） |
+| `DB_USERNAME` | `sa` | JDBC 用户 |
+| `DB_PASSWORD` | （空） | JDBC 密码 |
+| `DB_DRIVER` | `org.h2.Driver` | JDBC 驱动（MySQL：`com.mysql.cj.jdbc.Driver`） |
+| `SQL_INIT_MODE` | `embedded` | SQL 初始化：`embedded`（仅嵌入式库）/ `never`（关闭） |
+
+## 2. Spring 基础（application.yml）
+
+| 配置 | 默认值 | 说明 |
+| --- | --- | --- |
+| `spring.profiles.active` | `web` | `web`（REST/SSE/WS）/ `shell`（终端 REPL） |
+| `spring.datasource.*` | H2 内存 | db 模式数据源（经 DB_* 变量覆盖） |
+
+## 3. Agent 核心（agent.*）
+
+| 配置 | 默认值 | 说明 |
+| --- | --- | --- |
+| `agent.agent-id` | `default` | Agent 标识 |
+| `agent.name` | `mwb-ai-claw` | 显示名称 |
+| `agent.system-prompt` | 内置 | 系统提示词 |
+| `agent.orchestration` | `routing` | 默认编排 id（引用 orchestrations.json） |
+| `agent.model` / `agent.base-url` / `agent.api-key` | env 引用 | 默认模型配置 |
+| `agent.temperature` | `0.7` | 采样温度 |
+| `agent.max-tokens` | `8192` | 单次最大 tokens |
+| `agent.max-steps` | `8` | ReAct 初始步数预算 |
+| `agent.max-steps-extension` | `2.0` | 步数扩展系数（硬上限 = max-steps × 系数） |
+| `agent.memory-dir` | `${user.dir}/.agent` | 记忆/运行数据目录 |
+| `agent.skills-enabled` | `true` | 技能总开关 |
+| `agent.skills-dir` | `${user.dir}/skills` | 技能根目录 |
+| `agent.tools` | 全部注册工具 | 强制仅绑定声明的工具列表 |
+| `agent.storage.type` | `file` | 存储后端（见 `STORAGE_TYPE`） |
+
+## 4. 分层记忆（agent.memory.*）
+
+| 配置 | 默认值 | 说明 |
+| --- | --- | --- |
+| `enabled` | `true` | 是否启用分层记忆 |
+| `context-window-tokens` | `200000` | 模型上下文窗口 |
+| `context-budget-ratio` | `0.6` | 记忆区占窗口比例 |
+| `prompt-budget-ratio` | `0.25` | System 区占记忆预算比例 |
+| `tool-budget-ratio` | `0.25` | Tools 区占记忆预算比例 |
+| `hot-window-size` | `20` | Hot 工作记忆最大条数 |
+| `summary-block-size` | `10` | 多少条消息合成一个摘要块 |
+| `importance-threshold` | `0.6` | 事实写入重要度阈值 |
+| `top-k` | `5` | 检索召回条数 |
+| `eviction-policy` | `importance` | 换页策略：`token` / `importance` |
+| `synthesis-async` | `true` | 提炼异步执行 |
+| `retriever` | `hybrid` | 检索器：`keyword` / `vector` / `hybrid` |
+| `vector-enabled` | `true` | 是否启用向量索引 |
+| `embedding-model` / `-base-url` / `-api-key` | 继承默认 | Embedding 配置 |
+| `archive-enabled` | `true` | 会话结束归档原文 |
+| `shared-retrieve` | `true` | 多 Agent 共享检索 |
+| `synthesizer-model` / `-base-url` / `-api-key` | 继承默认 | 提炼专用小模型 |
+| `synthesis-cache-size` | `50` | 提炼缓存容量（≤0 关闭） |
+
+## 5. 工具安全（agent.security.*）
+
+| 配置 | 默认值 | 说明 |
+| --- | --- | --- |
+| `enabled` | `true` | 沙箱总开关 |
+| `workspace-dir` | （空=不限制） | 文件操作根目录 |
+| `shell-whitelist` | 65 个命令 | 允许的 Shell 命令 |
+| `shell-blacklist` | 危险模式 | 命中即拒绝（优先级高于白名单） |
+| `shell-approval-mode` | `ask` | `auto` / `ask` / `read-only` |
+| `shell-approval-patterns` | 50+ 规则 | 高风险命令，ask 下请求确认 |
+| `tool-timeout-seconds` | `30` | 工具超时（超时转后台） |
+| `max-output-length` | `10000` | 工具输出截断 |
+| `http-allowed-hosts` | （空=全部允许） | HTTP 请求 host 白名单（防 SSRF） |
+| `prompt-injection-guard` | `true` | 提示词注入防护 |
+
+## 6. 鉴权（agent.auth.*）
+
+| 配置 | 默认值 | 说明 |
+| --- | --- | --- |
+| `enabled` | `false` | 是否启用 API Key 鉴权 |
+| `header` | `X-API-Key` | 请求头名 |
+| `api-keys` | （空） | tenantId → userId → apiKey 静态映射 |
+| `default-user` | `default` | 未配置权限时的兜底用户 |
+| `tool-permissions` | （空=全部允许） | 工具级静态授权 |
+
+## 7. LLM 韧性（agent.llm.*）
+
+| 配置 | 默认值 | 说明 |
+| --- | --- | --- |
+| `connect-timeout-ms` | `5000` | 连接超时 |
+| `read-timeout-ms` | `120000` | 读超时 |
+| `retry.max-attempts` | `3` | 重试次数 |
+| `retry.initial-backoff-ms` | `500` | 重试初始退避 |
+| `retry.max-backoff-ms` | `10000` | 最大退避 |
+| `fallback-model` / `-base-url` / `-api-key` | （空） | 备用模型降级 |
+| `run-budget-tokens` | `0` | 单次运行 token 预算（0=不限制） |
+
+## 8. 可观测性（agent.observability.*）
+
+| 配置 | 默认值 | 说明 |
+| --- | --- | --- |
+| `run-usage-log` | `true` | 是否记录运行用量 JSONL |
+| `run-usage-dir` | `{memory-dir}/runs` | 运行记录目录 |
+| `metrics-exporter` | `none` | `none` / `actuator` / `prometheus`（实际暴露依赖引入的依赖） |
+
+## 9. 外部 JSON 配置
+
+| 文件 | 说明 |
+| --- | --- |
+| `agents.json` | Agent 注册表（agentId/name/description/keywords/systemPrompt/tools/maxSteps/model/apiKey…） |
+| `orchestrations.json` | 编排注册表（id/type/description/keywords/agents/config） |
+| `mcp-server.json` | MCP Server 配置（stdio：command+args；streamable_http：type+url） |
+
+均支持运行目录覆盖 + `${VAR:default}` 占位符，详见 [配置详解](../guide/configuration.md) 与 [Agent 与编排配置](../guide/agents-config.md)。
+
+---
+
+相关：[配置详解](../guide/configuration.md) ｜ 源码模板：`start/src/main/resources/application.yml`、`.env.example`

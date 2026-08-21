@@ -1,0 +1,39 @@
+# 配置详解
+
+> 面向使用者：全面理解配置体系——`.env` 环境变量、`application.yml`、配置文件三级加载。
+> 完整配置项速查见 [reference/config-full.md](../reference/config-full.md)。
+
+## 1. 配置体系总览
+
+- [ ] 三层配置来源与优先级（命令行 > `.env` > 系统环境变量 > yml 默认值）
+- [ ] 配置文件三级加载：运行目录 → 安装目录 → classpath 内置
+- [ ] 安装目录定位：`mwb.ai.claw.home` / `MWB_AI_CLAW_HOME` / 默认 `~/.mwb-ai-claw`
+
+## 2. `.env` 环境变量
+
+- [ ] 复制模板：`cp .env.example .env`
+- [ ] 常用变量：`DEFAULT_API_KEY` / `DEFAULT_MODEL` / `DEFAULT_BASE_URL`
+- [ ] 存储变量：`STORAGE_TYPE`、`DB_URL` / `DB_USERNAME` / `DB_PASSWORD` / `DB_DRIVER` / `SQL_INIT_MODE`
+- [ ] Agent 级变量：`CODER_MODEL` / `CODER_API_KEY` 等（供 `agents.json` 引用）
+
+## 3. `application.yml` 核心段
+
+- [ ] `agent.*`：模型、步数、工具绑定、技能、记忆、安全、存储、鉴权
+- [ ] 工具绑定策略：缺省=全部，显式 `tools` = 强制仅绑定声明
+- [ ] 记忆参数：`agent.memory.*`（分层记忆预算/换页/检索）
+- [ ] 安全参数：`agent.security.*`（沙箱/审批/超时）
+
+## 4. 运行期可覆盖的配置
+
+- [ ] 命令行：`--agent.orchestration=team-discussion`
+- [ ] 系统属性：`-Dagent.storage.type=db`
+
+## 5. 常见配置场景
+
+- [ ] 切换存储后端 file → db
+- [ ] 开启鉴权（多租户隔离）
+- [ ] 自定义 Agent / 编排 / 技能 / MCP
+
+---
+
+相关：[快速开始](quick-start.md) ｜ [配置项速查](../reference/config-full.md) ｜ [Agent 与编排](agents-config.md)
