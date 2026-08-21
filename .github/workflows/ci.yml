@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [master]
+    tags: ['v*'] # tag 推送触发，供 release job 打包上传
   pull_request:
     branches: [master]
 
