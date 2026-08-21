@@ -1,3 +1,9 @@
+---
+title: 嵌入式集成（ClawRuntime）
+parent: 使用指南
+nav_order: 6
+---
+
 # 嵌入式集成（ClawRuntime）
 
 > 面向 Java 应用集成方：在无 Web 容器的 JVM 应用中直接调用 Agent 能力。

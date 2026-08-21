@@ -1,3 +1,9 @@
+---
+title: Web 模式使用
+parent: 使用指南
+nav_order: 5
+---
+
 # Web 模式使用
 
 > 面向服务端部署方：Web 模式的启动、接口与鉴权。

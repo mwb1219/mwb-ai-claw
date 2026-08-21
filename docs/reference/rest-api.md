@@ -1,3 +1,9 @@
+---
+title: REST API 速查
+parent: 速查参考
+nav_order: 1
+---
+
 # REST API 速查
 
 > 服务端 `web` 模式（默认）暴露的 HTTP 接口。统一返回 `SingleResponse`：

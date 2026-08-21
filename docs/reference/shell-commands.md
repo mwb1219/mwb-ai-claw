@@ -1,3 +1,9 @@
+---
+title: Shell 斜杠命令速查
+parent: 速查参考
+nav_order: 4
+---
+
 # Shell 斜杠命令速查
 
 > 终端 REPL 模式（`--spring.profiles.active=shell`）下的交互命令。

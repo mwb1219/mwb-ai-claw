@@ -1,3 +1,9 @@
+---
+title: 多 Agent 编排
+parent: 设计概要
+nav_order: 3
+---
+
 # 多 Agent 编排
 
 > 面向想理解原理的读者：单 Agent 之外，如何组织多专家协作完成任务。

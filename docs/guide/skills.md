@@ -1,3 +1,9 @@
+---
+title: 技能系统（Skill）
+parent: 使用指南
+nav_order: 8
+---
+
 # 技能系统（Skill）
 
 > 面向使用者：无需写代码，放一个目录即可让 Agent 获得新能力。
