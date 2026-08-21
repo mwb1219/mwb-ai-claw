@@ -1,0 +1,17 @@
+# GitHub Pages 站点配置（部署源：master 分支 /docs 目录）
+title: mwb-ai-claw
+description: Local-first AI Agent framework in Java (DDD + Spring Boot). ReAct loop, MCP, layered memory, multi-agent orchestration.
+baseurl: "/mwb-ai-claw" # 项目 Pages 站点路径，与仓库名一致
+url: "https://mwb1219.github.io"
+
+markdown: kramdown
+theme: minima
+
+# GitHub Pages 默认插件（显式声明以确保行为稳定）：
+# - jekyll-readme-index      README.md 作为站点首页（无需 index.md）
+# - jekyll-relative-links    相对链接 .md 自动转换为 .html
+# - jekyll-optional-front-matter  无 front matter 的 md 也渲染为页面
+plugins:
+  - jekyll-readme-index
+  - jekyll-relative-links
+  - jekyll-optional-front-matter
