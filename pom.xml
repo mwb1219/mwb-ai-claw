@@ -5,7 +5,7 @@
 
     <groupId>com.mwb.ai.claw</groupId>
     <artifactId>mwb-ai-claw-parent</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>1.0.0</version>
     <packaging>pom</packaging>
     <name>mwb-ai-claw</name>
 

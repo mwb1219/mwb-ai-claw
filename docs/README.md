@@ -53,4 +53,4 @@
 
 - 语言：中文；`README.md` 提供英文项目简介
 - 所有配置项、命令、API 路径以**当前代码**为准，如发现不一致请提 Issue
-- 贡献：欢迎补充/修正文档，遵循 [CONTRIBUTING](../CONTRIBUTING.md)（若已建立）
+- 贡献：欢迎补充/修正文档，遵循 [CONTRIBUTING](https://github.com/mwb1219/mwb-ai-claw/blob/master/CONTRIBUTING.md)（若已建立）
