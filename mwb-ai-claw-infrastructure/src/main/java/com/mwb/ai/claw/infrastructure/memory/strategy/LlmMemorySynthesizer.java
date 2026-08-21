@@ -52,7 +52,7 @@ public class LlmMemorySynthesizer implements MemorySynthesizer {
         sb.append("请将以下对话历史压缩为简洁的中文摘要，保留关键事实、决策与结论，不要遗漏重要细节：\n\n");
         for (int i = 0; i < block.size(); i++) {
             Message m = block.get(i);
-            sb.append(i + 1).append(".[").append(m.getRole()).append("] ")
+            sb.append(i + 1).append(".[").append(m.getRole().getValue()).append("] ")
                     .append(truncate(m.getContent(), 500)).append("\n");
         }
         String cacheKey = "summary:" + digest(sb.toString());
@@ -86,7 +86,7 @@ public class LlmMemorySynthesizer implements MemorySynthesizer {
                 .append("importance 表示该事实的重要性（0.9 非常重要，0.5 一般，0.2 不重要）。")
                 .append("最多提取 5 条，若无重要事实输出空数组 []。不要输出任何其他文字。\n\n对话内容：\n");
         for (Message m : messages) {
-            sb.append("[").append(m.getRole()).append("] ").append(truncate(m.getContent(), 400)).append("\n");
+            sb.append("[").append(m.getRole().getValue()).append("] ").append(truncate(m.getContent(), 400)).append("\n");
         }
         String cacheKey = "facts:" + digest(sb.toString());
         List<MemoryPage> cached = cache.get(scope, cacheKey);

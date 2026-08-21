@@ -1,0 +1,99 @@
+/* ============================================================
+ * mwb-ai-claw Web Console · 主题系统
+ * 两套调色板：light（浅蓝 + 白） / dark（深蓝黑）
+ * 通过 :root[data-theme] 切换，所有组件一律引用变量
+ * ============================================================ */
+
+:root {
+  color-scheme: light dark;
+}
+
+/* ---------- 亮色：浅蓝 + 白 ---------- */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f5f9ff;
+  --bg-surface: #ffffff;
+  --bg-hover: #e3f0ff;
+  --bg-active: #d6e9ff;
+  --bg-input: #ffffff;
+  --bg-muted: #eef4fb;
+
+  --text: #1c2733;
+  --text-secondary: #5b6b7c;
+  --text-faint: #8a9aac;
+
+  --border: #d6e4f5;
+  --border-strong: #b8cfea;
+
+  --primary: #1e88e5;
+  --primary-hover: #1976d2;
+  --primary-bg: #e3f2fd;
+  --primary-text: #0b5cad;
+
+  --success: #2e7d32;
+  --success-bg: #e8f5e9;
+  --warning: #b26a00;
+  --warning-bg: #fff8e1;
+  --danger: #c62828;
+  --danger-bg: #fdecea;
+  --info: #1e88e5;
+  --info-bg: #e3f2fd;
+
+  --code-bg: #f2f6fb;
+  --code-border: #dce7f3;
+  --shadow: rgba(30, 136, 229, 0.12);
+  --shadow-strong: rgba(30, 136, 229, 0.18);
+
+  --user-bubble: #dcecfe;
+  --user-bubble-text: #14324f;
+  --assistant-bubble: #ffffff;
+  --tool-bubble: #eef4fb;
+  --system-bubble: #fff8e1;
+
+  --scrollbar: #c3d6ec;
+}
+
+/* ---------- 暗色：深蓝黑 ---------- */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #0e1626;
+  --bg-surface: #16223a;
+  --bg-hover: #1d2c48;
+  --bg-active: #22365a;
+  --bg-input: #101a2d;
+  --bg-muted: #131f35;
+
+  --text: #e6edf7;
+  --text-secondary: #93a4bd;
+  --text-faint: #63758f;
+
+  --border: #263552;
+  --border-strong: #354a6e;
+
+  --primary: #4da3ff;
+  --primary-hover: #6fb4ff;
+  --primary-bg: #17324f;
+  --primary-text: #bfe0ff;
+
+  --success: #5ccb7a;
+  --success-bg: #123323;
+  --warning: #e8b64c;
+  --warning-bg: #33290f;
+  --danger: #ff7b72;
+  --danger-bg: #3a1d1d;
+  --info: #4da3ff;
+  --info-bg: #17324f;
+
+  --code-bg: #0f1a2e;
+  --code-border: #22314d;
+  --shadow: rgba(0, 0, 0, 0.45);
+  --shadow-strong: rgba(0, 0, 0, 0.6);
+
+  --user-bubble: #1d3a5c;
+  --user-bubble-text: #dbeafe;
+  --assistant-bubble: #16223a;
+  --tool-bubble: #131f35;
+  --system-bubble: #33290f;
+
+  --scrollbar: #33456b;
+}

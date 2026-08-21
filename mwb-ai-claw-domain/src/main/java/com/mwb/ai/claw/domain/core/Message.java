@@ -12,7 +12,7 @@ import java.util.List;
 @Data
 public class Message {
 
-    private String role;
+    private MessageRole role;
 
     private String content;
 
@@ -27,7 +27,7 @@ public class Message {
 
     private long timestamp;
 
-    public static Message of(String role, String content) {
+    public static Message of(MessageRole role, String content) {
         Message m = new Message();
         m.role = role;
         m.content = content;
@@ -35,7 +35,7 @@ public class Message {
         return m;
     }
 
-    public static Message of(String role, String content, List<ContentPart> parts) {
+    public static Message of(MessageRole role, String content, List<ContentPart> parts) {
         Message m = of(role, content);
         m.parts = parts;
         return m;
@@ -43,7 +43,7 @@ public class Message {
 
     public static Message assistant(String content, List<ToolCall> toolCalls) {
         Message m = new Message();
-        m.role = "assistant";
+        m.role = MessageRole.ASSISTANT;
         m.content = content;
         m.toolCalls = toolCalls;
         m.timestamp = System.currentTimeMillis();
@@ -52,7 +52,7 @@ public class Message {
 
     public static Message tool(String toolCallId, String content) {
         Message m = new Message();
-        m.role = "tool";
+        m.role = MessageRole.TOOL;
         m.toolCallId = toolCallId;
         m.content = content;
         m.timestamp = System.currentTimeMillis();

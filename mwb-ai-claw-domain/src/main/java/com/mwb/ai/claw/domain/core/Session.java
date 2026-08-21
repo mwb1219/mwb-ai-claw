@@ -53,7 +53,7 @@ public class Session {
 
     /** 追加用户消息；parts 非空时携带多模态片段（D2） */
     public void addUserMessage(String content, List<ContentPart> parts) {
-        this.messages.add(Message.of("user", content, parts));
+        this.messages.add(Message.of(MessageRole.USER, content, parts));
         refreshUpdateTime();
         // 自动设置标题：取第一条用户消息的前 30 个字符
         if ((title == null || title.startsWith("session-")) && messages.size() == 1) {

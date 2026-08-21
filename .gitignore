@@ -62,11 +62,16 @@ Desktop.ini
 # Node / Frontend
 # ============================================================
 node_modules/
+.vite/
+*.tsbuildinfo
+example-web-frontend/vite.config.js
+example-web-frontend/vite.config.d.ts
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
-frontend/dist/
+example-web-frontend/dist/
+example-web-frontend/*.local
 
 # ============================================================
 # Spring Boot

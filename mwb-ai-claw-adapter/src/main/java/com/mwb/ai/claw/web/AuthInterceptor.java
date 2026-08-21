@@ -4,6 +4,7 @@ import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -11,6 +12,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
 
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.domain.scope.AgentScopeContext;
+import com.mwb.ai.claw.domain.tenant.TenantGateway;
 import com.mwb.ai.claw.infrastructure.config.AuthProperties;
 
 /**
@@ -30,6 +32,13 @@ public class AuthInterceptor implements HandlerInterceptor {
     @Resource
     private AuthProperties authProperties;
 
+    /**
+     * 可选依赖：框架不强制提供租户存储，接入方未实现时保持 {@code null}，
+     * 鉴权仅回退到静态 {@code agent.auth.api-keys} 配置。
+     */
+    @Autowired(required = false)
+    private TenantGateway tenantGateway;
+
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
             throws Exception {
@@ -38,7 +47,14 @@ public class AuthInterceptor implements HandlerInterceptor {
             return true;
         }
         String apiKey = resolveApiKey(request);
-        String[] resolved = apiKey != null ? authProperties.resolve(apiKey) : null;
+        // 先查接入方租户存储（若有），再回退静态 agent.auth.api-keys（作为引导/兜底 Key）
+        String[] resolved = null;
+        if (apiKey != null && tenantGateway != null) {
+            resolved = tenantGateway.resolveApiKey(apiKey);
+        }
+        if (resolved == null && apiKey != null) {
+            resolved = authProperties.resolve(apiKey);
+        }
         if (resolved == null) {
             response.setStatus(HttpStatus.UNAUTHORIZED.value());
             response.setContentType("application/json;charset=UTF-8");

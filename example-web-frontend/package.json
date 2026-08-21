@@ -1,0 +1,29 @@
+{
+  "name": "example-web-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "example-web 前端控制台（React + TypeScript + Vite）：SSE 流式对话 / 会话管理 / 记忆可视化 / 人工审批 / 多租户管理",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --noEmit"
+  },
+  "dependencies": {
+    "lucide-react": "^0.462.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^9.0.1",
+    "react-router-dom": "^6.30.0",
+    "remark-gfm": "^4.0.0",
+    "zustand": "^4.5.7"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}

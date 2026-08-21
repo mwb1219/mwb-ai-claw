@@ -45,6 +45,7 @@ import com.mwb.ai.claw.agent.executor.ChatCmdExe;
 import com.mwb.ai.claw.agent.observability.RunUsageRecorder;
 import com.mwb.ai.claw.api.AgentServiceI;
 import com.mwb.ai.claw.domain.core.Message;
+import com.mwb.ai.claw.domain.core.MessageRole;
 import com.mwb.ai.claw.domain.core.ProgressCallback;
 import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.llm.ContentPart;
@@ -951,7 +952,7 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
         }
         List<Message> kept = new ArrayList<>(messages.subList(keepFrom, messages.size()));
         List<Message> newMessages = new ArrayList<>();
-        newMessages.add(Message.of("system", "以下是本会话早前对话的压缩摘要，之后的对话应在此基础上继续：\n" + summary));
+        newMessages.add(Message.of(MessageRole.SYSTEM, "以下是本会话早前对话的压缩摘要，之后的对话应在此基础上继续：\n" + summary));
         newMessages.addAll(kept);
         session.setMessages(newMessages);
         memoryGateway.saveSession(session);
@@ -984,10 +985,9 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
         int input = 0, output = 0, tool = 0;
         for (Message m : messages) {
             int t = TokenEstimator.estimate(m);
-            String role = m.getRole();
-            if ("assistant".equals(role)) {
+            if (MessageRole.ASSISTANT == m.getRole()) {
                 output += t;
-            } else if ("tool".equals(role)) {
+            } else if (MessageRole.TOOL == m.getRole()) {
                 tool += t;
             } else {
                 input += t;
@@ -1363,7 +1363,7 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
                 return; // 已有标题（手动重命名过）
             }
             for (Message m : session.getMessages()) {
-                if ("user".equals(m.getRole()) && m.getContent() != null && !m.getContent().trim().isEmpty()) {
+                if (MessageRole.USER == m.getRole() && m.getContent() != null && !m.getContent().trim().isEmpty()) {
                     String content = m.getContent().trim().replace('\n', ' ');
                     session.setTitle(content.length() > 20 ? content.substring(0, 20) + "…" : content);
                     memoryGateway.saveSession(session);

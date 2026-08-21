@@ -35,7 +35,7 @@ public class SessionAssembler {
 
     public static MessageDTO toDTO(Message msg) {
         MessageDTO dto = new MessageDTO();
-        dto.setRole(msg.getRole());
+        dto.setRole(msg.getRole() == null ? null : msg.getRole().getValue());
         dto.setContent(msg.getContent());
         dto.setTimestamp(msg.getTimestamp());
         return dto;

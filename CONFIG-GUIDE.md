@@ -52,7 +52,7 @@
 | `EMBEDDING_MODEL` / `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` | 向量检索专用模型（DeepSeek 不支持 embeddings，建议配 OpenAI 兼容的 text-embedding-3-small） |
 | `SYNTHESIS_MODEL` / `SYNTHESIS_BASE_URL` / `SYNTHESIS_API_KEY` | 摘要/事实提炼的小模型（成本优化） |
 | `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` / `DB_DRIVER` | 数据库连接（`agent.storage.type=db` 时生效；默认嵌入式 H2，生产配 MySQL 连接串） |
-| `SQL_INIT_MODE` | SQL 初始化模式：`embedded`（默认，仅 H2）| `always`（每次启动执行建表）| `never` |
+| `SQL_INIT_MODE` | SQL 初始化模式：`embedded`（默认，仅 H2）| `never`（关闭）|
 
 `.env` 支持 `${VAR}` 占位符引用，例如 `agents.json` 中的 `"model": "${CODER_MODEL:${DEFAULT_MODEL:deepseek-chat}}"`。
 

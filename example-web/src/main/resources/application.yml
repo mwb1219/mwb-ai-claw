@@ -7,7 +7,7 @@ spring:
   # ================= 数据源（agent.storage.type=db 时生效） =================
   # 默认：嵌入式 H2（MySQL 兼容模式，可直接执行 MySQL 语法 schema.sql，数据重启清空，仅联调用）
   # 生产 MySQL：设置环境变量 DB_URL / DB_USERNAME / DB_PASSWORD / DB_DRIVER，
-  #   并先执行 example-web/src/main/resources/schema.sql 建表（或设 SQL_INIT_MODE=always 自动初始化）
+  #   并先执行 example-web/src/main/resources/schema.sql 建表
   datasource:
     url: ${DB_URL:jdbc:h2:mem:clawdb;MODE=MySQL;DB_CLOSE_DELAY=-1}
     username: ${DB_USERNAME:sa}
@@ -15,12 +15,21 @@ spring:
     driver-class-name: ${DB_DRIVER:org.h2.Driver}
   sql:
     init:
-      # embedded=仅嵌入式库执行（默认 H2）；always=每次启动执行（MySQL 首次建表）；never=关闭
+      # embedded=仅嵌入式库执行（默认 H2）；never=关闭
       mode: ${SQL_INIT_MODE:embedded}
       schema-locations: classpath:schema.sql
 
 project:
   name: example-web
+
+# ================= 接入方业务配置 =================
+example:
+  # example-web 固定单租户 id（用户维度的隔离空间标识，写入 AgentScope.tenantId）
+  tenant-id: ${EXAMPLE_TENANT_ID:default}
+  # 用户存储后端：file（本地文件 users.json，默认，零依赖）| mysql（JDBC 持久化到 claw_user 表）
+  # mysql 时需数据源可达（spring.datasource），并先执行 schema.sql 建表；可用环境变量 USER_STORAGE_TYPE 覆盖
+  user-storage:
+    type: ${USER_STORAGE_TYPE:mysql}
 
 # ================= Agent 配置（OpenAI 兼容） =================
 # 前缀 agent，对应 AgentProperties
@@ -289,6 +298,20 @@ agent:
     max-output-length: 10000
     # HTTP 请求允许的 host 模式（空列表表示全部允许）
     http-allowed-hosts: []
+
+  # ===== 鉴权（agent.auth.*）=====
+  auth:
+    # 是否开启鉴权（示例工程默认开启；关闭后行为与单租户一致，scope=default）
+    enabled: ${AUTH_ENABLED:true}
+    # API Key 请求头（默认 X-API-Key；同时支持 Authorization: Bearer 与 SSE ?apiKey=）
+    header: X-API-Key
+    # 静态引导 Key（tenantId → userId → apiKey）：作为持久化用户之外的兜底/引导管理员 Key。
+    # 用户注册/登录已提供常规入口；本 Key 用于首次启动直接以管理员身份访问 /user 管理界面。
+    api-keys:
+      admin:                                        # 租户 id
+        admin: ${BOOTSTRAP_API_KEY:sk-admin-bootstrap}  # 用户 id: API Key
+    # 工具级权限：userId → 可用工具列表（缺省 = 全部允许）
+    tool-permissions: {}
 
 # ================= MCP Server 配置 =================
 # 已独立到 mcp-server.json 文件（与 Cursor / Claude 的 mcp.json 格式一致）。

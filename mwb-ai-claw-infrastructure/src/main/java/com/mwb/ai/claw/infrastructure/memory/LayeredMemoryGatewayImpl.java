@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 
 import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.Message;
+import com.mwb.ai.claw.domain.core.MessageRole;
 import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.llm.ToolCall;
 import com.mwb.ai.claw.domain.memory.EvictionContext;
@@ -236,7 +237,7 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
             if (sb.length() > 0) {
                 sb.append("\n");
             }
-            sb.append("[").append(m.getRole()).append("] ")
+            sb.append("[").append(m.getRole().getValue()).append("] ")
                     .append(m.getContent() == null ? "" : m.getContent());
         }
         return sb.toString();
@@ -336,7 +337,7 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
         // 定位最新 user 消息：它是当前任务的提问，必须保留
         int latestUserIdx = -1;
         for (int i = all.size() - 1; i >= 0; i--) {
-            if ("user".equals(all.get(i).getRole())) {
+            if (MessageRole.USER == all.get(i).getRole()) {
                 latestUserIdx = i;
                 break;
             }
@@ -347,11 +348,11 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
         List<Message> pendingTools = new ArrayList<>();
         for (int i = all.size() - 1; i >= 0; i--) {
             Message msg = all.get(i);
-            if ("tool".equals(msg.getRole())) {
+            if (MessageRole.TOOL == msg.getRole()) {
                 pendingTools.add(0, msg);
                 continue;
             }
-            if ("assistant".equals(msg.getRole())
+            if (MessageRole.ASSISTANT == msg.getRole()
                     && msg.getToolCalls() != null && !msg.getToolCalls().isEmpty()) {
                 // 仅并入该 assistant 实际声明了 id 的 tool 结果，避免错配
                 Set<String> callIds = new HashSet<>();
@@ -433,7 +434,7 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
     /** 最新 user 消息内容（用作共享检索查询词） */
     private String latestUserText(List<Message> all) {
         for (int i = all.size() - 1; i >= 0; i--) {
-            if ("user".equals(all.get(i).getRole())) {
+            if (MessageRole.USER == all.get(i).getRole()) {
                 return all.get(i).getContent();
             }
         }

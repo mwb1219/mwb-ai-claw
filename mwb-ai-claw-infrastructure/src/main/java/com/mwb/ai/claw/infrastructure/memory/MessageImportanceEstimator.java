@@ -3,6 +3,7 @@ package com.mwb.ai.claw.infrastructure.memory;
 import java.util.List;
 
 import com.mwb.ai.claw.domain.core.Message;
+import com.mwb.ai.claw.domain.core.MessageRole;
 
 /**
  * 消息重要度启发式估算（0-1）：用于重要度驱动的换页策略。
@@ -30,10 +31,9 @@ public class MessageImportanceEstimator {
             return 0.1;
         }
         double score = 0.4;
-        String role = message.getRole();
-        if (role != null && role.contains("user")) {
+        if (message.getRole() == MessageRole.USER) {
             score += 0.15;
-        } else if (role != null && role.contains("tool")) {
+        } else if (message.getRole() == MessageRole.TOOL) {
             score -= 0.1;
         }
         String content = message.getContent();
@@ -56,7 +56,7 @@ public class MessageImportanceEstimator {
     public static double maxUserImportance(List<Message> messages) {
         double max = 0;
         for (Message m : messages) {
-            if (m.getRole() != null && m.getRole().contains("user")) {
+            if (m.getRole() == MessageRole.USER) {
                 max = Math.max(max, estimate(m));
             }
         }

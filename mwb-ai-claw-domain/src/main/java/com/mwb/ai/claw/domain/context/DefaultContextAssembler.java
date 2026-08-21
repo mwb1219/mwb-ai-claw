@@ -285,7 +285,7 @@ public class DefaultContextAssembler implements ContextAssembler {
 
     private LlmMessage toLlmMessage(Message msg) {
         LlmMessage m = new LlmMessage();
-        m.setRole(msg.getRole());
+        m.setRole(msg.getRole() == null ? null : msg.getRole().getValue());
         m.setContent(msg.getContent());
         m.setParts(msg.getParts()); // D2 多模态：透传图片片段
         m.setToolCalls(msg.getToolCalls());
