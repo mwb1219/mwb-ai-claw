@@ -1,3 +1,9 @@
+---
+title: 配置详解
+parent: 使用指南
+nav_order: 3
+---
+
 # 配置详解
 
 > 面向使用者：全面理解配置体系——`.env` 环境变量、`application.yml`、配置文件三级加载。

@@ -1,3 +1,9 @@
+---
+title: WebSocket 事件协议
+parent: 速查参考
+nav_order: 2
+---
+
 # WebSocket 事件协议
 
 > 端点：`ws://localhost:8080/ws/agent`（Web 模式）。JSON 文本消息，事件以 JSON Lines 推送。

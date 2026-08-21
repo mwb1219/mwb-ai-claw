@@ -1,3 +1,9 @@
+---
+title: MCP 工具接入
+parent: 使用指南
+nav_order: 9
+---
+
 # MCP 工具接入
 
 > 面向使用者：通过 MCP（Model Context Protocol）标准协议接入外部工具生态。

@@ -1,3 +1,9 @@
+---
+title: Shell 模式使用
+parent: 使用指南
+nav_order: 4
+---
+
 # Shell 模式使用
 
 > 面向终端用户：`mwb-ai-claw` 交互式终端（REPL）的完整用法。

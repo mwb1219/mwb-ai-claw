@@ -1,3 +1,9 @@
+---
+title: Agent 注册表与编排配置
+parent: 使用指南
+nav_order: 7
+---
+
 # Agent 注册表与编排配置
 
 > 面向扩展方：配置专家 Agent（`agents.json`）与协作编排（`orchestrations.json`）。
