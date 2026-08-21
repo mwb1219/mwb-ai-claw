@@ -4,14 +4,26 @@ description: Local-first AI Agent framework in Java (DDD + Spring Boot). ReAct l
 baseurl: "/mwb-ai-claw" # 项目 Pages 站点路径，与仓库名一致
 url: "https://mwb1219.github.io"
 
-markdown: kramdown
-theme: minima
+# just-the-docs 文档主题（专业文档站外观：左侧导航 + 搜索）
+remote_theme: just-the-docs/just-the-docs
+color_scheme: light
 
-# GitHub Pages 默认插件（显式声明以确保行为稳定）：
-# - jekyll-readme-index      README.md 作为站点首页（无需 index.md）
-# - jekyll-relative-links    相对链接 .md 自动转换为 .html
+# 顶部辅助链接
+aux_links:
+  "GitHub 仓库": "https://github.com/mwb1219/mwb-ai-claw"
+
+# 页脚
+footer_content: "Copyright &copy; 2026 mwb1219. Distributed under <a href=\"https://www.apache.org/licenses/LICENSE-2.0\">Apache-2.0</a>."
+
+# GitHub Pages 插件（显式声明以确保行为稳定）：
+# - jekyll-readme-index        README.md 作为站点首页（无需 index.md）
+# - jekyll-relative-links      相对链接 .md 自动转换为 .html
 # - jekyll-optional-front-matter  无 front matter 的 md 也渲染为页面
+# - jekyll-titles-from-headings  页面标题取自一级标题（导航显示中文标题）
+# - jekyll-seo-tag             站点 SEO 元信息
 plugins:
   - jekyll-readme-index
   - jekyll-relative-links
   - jekyll-optional-front-matter
+  - jekyll-titles-from-headings
+  - jekyll-seo-tag
