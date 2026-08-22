@@ -6,6 +6,11 @@ import type {
   MemoryOverview,
   MemoryPage,
   PendingApprovalDTO,
+  RagDocument,
+  RagIngestionCommand,
+  RagIngestionResult,
+  RagQuery,
+  RagSearchResult,
   SessionDTO,
   SingleResponse,
   UserDTO,
@@ -163,5 +168,44 @@ export const memoryApi = {
     return request<MemoryPage[]>(
       `/memory/search?q=${encodeURIComponent(q)}&topK=${topK}`,
     );
+  },
+};
+
+// ==================== 独立 RAG 知识库 ====================
+
+export const ragApi = {
+  /** 列出指定知识库下的全部文档 */
+  list(knowledgeBaseId: string): Promise<RagDocument[]> {
+    return request<RagDocument[]>(
+      `/rag/knowledge-bases/${encodeURIComponent(knowledgeBaseId)}/documents`,
+    );
+  },
+  /** 摄入文档：解析 → 切分 → 向量化 → 写入索引 */
+  ingest(knowledgeBaseId: string, command: RagIngestionCommand): Promise<RagIngestionResult> {
+    return request<RagIngestionResult>(
+      `/rag/knowledge-bases/${encodeURIComponent(knowledgeBaseId)}/documents`,
+      { method: 'POST', body: JSON.stringify(command) },
+    );
+  },
+  /** 重建指定文档索引 */
+  reindex(knowledgeBaseId: string, documentId: string): Promise<RagIngestionResult> {
+    return request<RagIngestionResult>(
+      `/rag/knowledge-bases/${encodeURIComponent(knowledgeBaseId)}/documents/${encodeURIComponent(documentId)}/reindex`,
+      { method: 'POST' },
+    );
+  },
+  /** 删除文档及其索引 */
+  remove(knowledgeBaseId: string, documentId: string): Promise<void> {
+    return request<void>(
+      `/rag/knowledge-bases/${encodeURIComponent(knowledgeBaseId)}/documents/${encodeURIComponent(documentId)}`,
+      { method: 'DELETE' },
+    );
+  },
+  /** 独立 RAG 检索 */
+  search(query: RagQuery): Promise<RagSearchResult[]> {
+    return request<RagSearchResult[]>('/rag/search', {
+      method: 'POST',
+      body: JSON.stringify(query),
+    });
   },
 };

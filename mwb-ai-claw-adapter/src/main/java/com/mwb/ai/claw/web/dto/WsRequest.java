@@ -1,5 +1,7 @@
 package com.mwb.ai.claw.web.dto;
 
+import java.util.List;
+
 import lombok.Data;
 
 /**
@@ -19,6 +21,9 @@ public class WsRequest {
 
     /** Agent ID（可选） */
     private String agentId;
+
+    /** 本次对话使用的全局知识库 ID；空列表表示检索全部知识库。 */
+    private List<String> knowledgeBaseIds;
 
     /** 审批层级标识（approve / reject 时必填：根层 "root"，子层为 todoId 路径如 "t1/t1-1"） */
     private String layerKey;

@@ -33,4 +33,7 @@ public class ChatCmd {
 
     /** 多模态内容片段（D2）：非空时优先于 message 作为用户消息内容（image_url / image_base64） */
     private List<ContentPart> parts;
+
+    /** 本次对话使用的全局知识库 ID；空列表表示检索全部知识库。 */
+    private List<String> knowledgeBaseIds;
 }

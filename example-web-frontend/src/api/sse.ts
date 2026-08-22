@@ -12,10 +12,15 @@ import type { StreamCallbacks, StreamHandle, StreamRequest } from './types';
 
 /** 构造 SSE URL：baseUrl + path + 查询参数（含 apiKey 兜底） */
 function buildUrl(cmd: StreamRequest): string {
-  const { apiKey } = useSettings.getState();
+  const { apiKey, knowledgeBaseIds } = useSettings.getState();
   const params = new URLSearchParams({ message: cmd.message });
   if (cmd.sessionId) params.set('sessionId', cmd.sessionId);
   if (cmd.agentId) params.set('agentId', cmd.agentId);
+  // 独立 RAG：把选中的知识库列表透传给后端，注入 system prompt 的知识库参考
+  (cmd.knowledgeBaseIds && cmd.knowledgeBaseIds.length > 0
+    ? cmd.knowledgeBaseIds
+    : knowledgeBaseIds
+  ).forEach((id) => params.append('knowledgeBaseIds', id));
   if (apiKey) params.set('apiKey', apiKey);
   return `${resolveBaseUrl()}/agent/chat/stream?${params.toString()}`;
 }

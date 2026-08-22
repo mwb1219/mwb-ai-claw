@@ -96,6 +96,29 @@ agent:
     synthesizer-base-url: ${SYNTHESIS_BASE_URL:}    # 小模型提炼：Base URL（留空继承 agent.base-url）
     synthesizer-api-key: ${SYNTHESIS_API_KEY:}      # 小模型提炼：API Key（留空继承 agent.api-key）
     synthesis-cache-size: 50        # 提炼缓存容量（按输入内容哈希去重，避免重复调 LLM；<=0 关闭）
+  # ===== 独立 RAG 知识库（agent.rag.*，默认关闭；本例开启演示「写入 + 检索 + 上下文注入」）=====
+  # 与记忆系统完全隔离：独立领域模型 / 存储（${user.dir}/.agent/rag）/ Embedding 配置 / 检索链路
+  # RAG 依赖 Embedding 接口可用，请配置下面的 RAG_EMBEDDING_* 环境变量（OpenAI 兼容 /embeddings）
+  rag:
+    enabled: true                  # 总开关（关闭后 RAG Bean 与 /rag 接口不装配，行为与未接入前一致）
+    provider: local                # 索引实现：local（本地文件向量索引，零依赖）
+    # local:
+    #   dir: ""                    # 索引存储目录（默认 ${user.dir}/.agent/rag）
+    ingestion:
+      chunk-size: 500              # 单块文本长度上限（字符）
+      chunk-overlap: 50            # 相邻分块重叠（字符）
+      embedding-batch-size: 32     # 批量向量化单批条数
+    retrieval:
+      top-k: 5                     # 默认召回条数
+      min-score: 0.2               # 默认最低相似度阈值
+      require-knowledge-base-id: false   # 是否强制要求请求显式指定知识库
+    embedding:
+      # Embedding 模型（OpenAI 兼容）：未配置时 RAG 写入/检索会报错，用于演示请在 .env 配置
+      model: ${RAG_EMBEDDING_MODEL:}
+      base-url: ${RAG_EMBEDDING_BASE_URL:}
+      api-key: ${RAG_EMBEDDING_API_KEY:}
+    context:
+      max-chars: 8000              # 单次注入 system prompt 的知识内容字符上限
   # Agent 注册表（agents.json）与编排注册表（orchestrations.json）已独立到 example-web/src/main/resources 下
   # 可在运行目录放置同名文件覆盖（支持 ${VAR:default} 占位符），或使用 classpath 默认模板
   # 工具安全配置

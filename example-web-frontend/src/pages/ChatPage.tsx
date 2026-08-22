@@ -10,6 +10,7 @@ import type { ToolCallItem } from '../store/chat';
 import { useSettings } from '../store/settings';
 import { MessageList } from '../components/chat/MessageList';
 import { Composer } from '../components/chat/Composer';
+import { KnowledgeBaseSelector } from '../components/chat/KnowledgeBaseSelector';
 import { TraceTimeline } from '../components/chat/TraceTimeline';
 
 function makeMessage(role: string, content: string): MessageDTO {
@@ -213,6 +214,7 @@ export function ChatPage() {
   return (
     <div className="chat-layout">
       <section className="chat-main">
+        <KnowledgeBaseSelector />
         <MessageList messages={messages} />
         <Composer busy={busy} onSend={handleSend} onStop={handleStop} />
       </section>

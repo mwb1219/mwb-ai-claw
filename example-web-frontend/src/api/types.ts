@@ -146,8 +146,73 @@ export interface StreamRequest {
   message: string;
   sessionId?: string;
   agentId?: string;
+  /** 独立 RAG：本次对话注入的知识库列表（缺省取 settings 持久化的选择） */
+  knowledgeBaseIds?: string[];
 }
 
 export interface StreamHandle {
   close(): void;
+}
+
+// ==================== 独立 RAG 知识库 ====================
+// 后端来源：mwb-ai-claw-domain（rag/*）、mwb-ai-claw-adapter（RagController /rag/**）
+
+export type RagDocumentStatus = 'PROCESSING' | 'READY' | 'FAILED';
+
+/** RAG 文档及其索引状态 */
+export interface RagDocument {
+  documentId: string;
+  knowledgeBaseId: string;
+  name: string;
+  contentType: string;
+  checksum?: string;
+  version: number;
+  chunkCount: number;
+  status: RagDocumentStatus;
+  sourceContent?: string;
+  lastError?: string;
+  metadata?: Record<string, string>;
+  createTime: number;
+  updateTime: number;
+}
+
+/** 文档摄入命令 */
+export interface RagIngestionCommand {
+  knowledgeBaseId?: string;
+  documentId?: string;
+  name?: string;
+  contentType?: string;
+  content: string;
+  metadata?: Record<string, string>;
+}
+
+/** 文档摄入结果 */
+export interface RagIngestionResult {
+  knowledgeBaseId: string;
+  documentId: string;
+  version: number;
+  chunkCount: number;
+  skipped: boolean;
+  status: RagDocumentStatus;
+}
+
+/** 检索请求 */
+export interface RagQuery {
+  knowledgeBaseIds: string[];
+  text: string;
+  topK?: number;
+  minScore?: number;
+  filters?: Record<string, string>;
+}
+
+/** 检索命中及引用信息 */
+export interface RagSearchResult {
+  knowledgeBaseId: string;
+  documentId: string;
+  documentVersion: number;
+  chunkId: string;
+  sequence: number;
+  content: string;
+  score: number;
+  metadata?: Record<string, string>;
 }

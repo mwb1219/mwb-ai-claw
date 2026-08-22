@@ -12,6 +12,8 @@ interface SettingsState {
   agentId: string;
   /** 认证 API Key（登录 / 注册后签发；REST 走 X-API-Key，SSE 走 ?apiKey=） */
   apiKey: string;
+  /** 独立 RAG：当前选中的知识库列表（对话时注入知识库参考，持久化到本地） */
+  knowledgeBaseIds: string[];
   theme: ThemeMode;
   /** 当前用户身份（username/name/tenantId），来自 GET /user/current */
   currentUser: UserInfoDTO | null;
@@ -19,6 +21,9 @@ interface SettingsState {
   setTheme(theme: ThemeMode): void;
   toggleTheme(): void;
   setCurrentUser(user: UserInfoDTO | null): void;
+  setKnowledgeBaseIds(ids: string[]): void;
+  addKnowledgeBase(id: string): void;
+  removeKnowledgeBase(id: string): void;
 }
 
 /** 解析初始主题：localStorage → 系统偏好 → light */
@@ -47,16 +52,29 @@ export const useSettings = create<SettingsState>()(
       baseUrl: '',
       agentId: '',
       apiKey: '',
+      knowledgeBaseIds: [],
       theme: resolveInitialTheme(),
       currentUser: null,
       setApiKey: (apiKey) => set({ apiKey }),
       setTheme: (theme) => set({ theme }),
       toggleTheme: () => set({ theme: get().theme === 'light' ? 'dark' : 'light' }),
       setCurrentUser: (currentUser) => set({ currentUser }),
+      setKnowledgeBaseIds: (knowledgeBaseIds) => set({ knowledgeBaseIds }),
+      addKnowledgeBase: (id) => {
+        const ids = get().knowledgeBaseIds;
+        if (id.trim() && !ids.includes(id.trim())) {
+          set({ knowledgeBaseIds: [...ids, id.trim()] });
+        }
+      },
+      removeKnowledgeBase: (id) =>
+        set({ knowledgeBaseIds: get().knowledgeBaseIds.filter((x) => x !== id) }),
     }),
     {
       name: 'claw-settings',
-      partialize: (state) => ({ apiKey: state.apiKey }),
+      partialize: (state) => ({
+        apiKey: state.apiKey,
+        knowledgeBaseIds: state.knowledgeBaseIds,
+      }),
     },
   ),
 );

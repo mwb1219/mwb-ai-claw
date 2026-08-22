@@ -1,5 +1,13 @@
 package com.mwb.ai.claw.domain.context;
 
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.Message;
 import com.mwb.ai.claw.domain.core.Session;
@@ -7,20 +15,15 @@ import com.mwb.ai.claw.domain.llm.LlmMessage;
 import com.mwb.ai.claw.domain.llm.LlmRequest;
 import com.mwb.ai.claw.domain.llm.ToolCall;
 import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
-import com.mwb.ai.claw.domain.memory.MemoryPage;
 import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
+import com.mwb.ai.claw.domain.memory.MemoryPage;
+import com.mwb.ai.claw.domain.rag.RagContextProvider;
+import com.mwb.ai.claw.domain.rag.RagRequestContext;
 import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.domain.skill.Skill;
 import com.mwb.ai.claw.domain.skill.SkillGateway;
 import com.mwb.ai.claw.domain.tool.ToolGateway;
 import com.mwb.ai.claw.domain.tool.ToolSpec;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
 
 /**
  * 默认上下文组装器。
@@ -38,6 +41,7 @@ public class DefaultContextAssembler implements ContextAssembler {
     private final LongTermMemoryGateway memoryGateway;
     private final LayeredMemoryGateway layeredMemory;
     private final SkillGateway skillGateway;
+    private final RagContextProvider ragContextProvider;
 
     /** 提示词注入防护（默认 true）：system prompt 追加内容边界约束段（C4） */
     private final boolean promptInjectionGuard;
@@ -59,11 +63,18 @@ public class DefaultContextAssembler implements ContextAssembler {
     public DefaultContextAssembler(ToolGateway toolGateway, LongTermMemoryGateway memoryGateway,
                                    LayeredMemoryGateway layeredMemory, SkillGateway skillGateway,
                                    boolean promptInjectionGuard) {
+        this(toolGateway, memoryGateway, layeredMemory, skillGateway, promptInjectionGuard, null);
+    }
+
+    public DefaultContextAssembler(ToolGateway toolGateway, LongTermMemoryGateway memoryGateway,
+                                   LayeredMemoryGateway layeredMemory, SkillGateway skillGateway,
+                                   boolean promptInjectionGuard, RagContextProvider ragContextProvider) {
         this.toolGateway = toolGateway;
         this.memoryGateway = memoryGateway;
         this.layeredMemory = layeredMemory;
         this.skillGateway = skillGateway;
         this.promptInjectionGuard = promptInjectionGuard;
+        this.ragContextProvider = ragContextProvider;
     }
 
     @Override
@@ -87,15 +98,16 @@ public class DefaultContextAssembler implements ContextAssembler {
     private List<LlmMessage> buildMessages(Session session, Agent agent) {
         List<LlmMessage> messages = new ArrayList<>();
         boolean layered = layeredMemory != null && layeredMemory.isEnabled();
+        String ragContext = buildRagContext(session);
         if (layered) {
             // 分层记忆：System 区带事实/摘要，消息区取预算内 Hot 原文
             LayeredMemoryGateway.MemoryView view = layeredMemory.readContext(session, agent);
-            messages.add(LlmMessage.system(buildSystemPrompt(agent, view)));
+            messages.add(LlmMessage.system(buildSystemPrompt(agent, view, ragContext)));
             for (Message msg : view.getWorkingMessages()) {
                 messages.add(toLlmMessage(msg));
             }
         } else {
-            messages.add(LlmMessage.system(buildSystemPrompt(agent)));
+            messages.add(LlmMessage.system(buildSystemPrompt(agent, null, ragContext)));
             for (Message msg : session.getMessages()) {
                 messages.add(toLlmMessage(msg));
             }
@@ -176,10 +188,16 @@ public class DefaultContextAssembler implements ContextAssembler {
     }
 
     private String buildSystemPrompt(Agent agent) {
-        return buildSystemPrompt(agent, null);
+        return buildSystemPrompt(agent, null, "");
     }
 
     private String buildSystemPrompt(Agent agent, LayeredMemoryGateway.MemoryView view) {
+        return buildSystemPrompt(agent, view, "");
+    }
+
+    private String buildSystemPrompt(Agent agent,
+                                     LayeredMemoryGateway.MemoryView view,
+                                     String ragContext) {
         StringBuilder systemPrompt = new StringBuilder(agent.getSystemPrompt());
         if (agent.getAgentInstructions() != null && !agent.getAgentInstructions().trim().isEmpty()) {
             systemPrompt.append("\n\n## Agent 扩展指令\n")
@@ -196,12 +214,39 @@ public class DefaultContextAssembler implements ContextAssembler {
                         .append(memContent);
             }
         }
+        if (ragContext != null && !ragContext.trim().isEmpty()) {
+            systemPrompt.append(ragContext);
+        }
         appendSkills(systemPrompt);
         appendBudgetHint(systemPrompt, agent);
         if (promptInjectionGuard) {
             appendInjectionGuard(systemPrompt);
         }
         return systemPrompt.toString();
+    }
+
+    private String buildRagContext(Session session) {
+        if (ragContextProvider == null || session == null || session.getMessages() == null) {
+            return "";
+        }
+        List<Message> history = session.getMessages();
+        for (int i = history.size() - 1; i >= 0; i--) {
+            Message message = history.get(i);
+            if (message != null && message.getRole() != null
+                    && "user".equals(message.getRole().getValue())
+                    && message.getContent() != null && !message.getContent().trim().isEmpty()) {
+                String query = message.getContent();
+                String cached = RagRequestContext.cachedContext(query);
+                if (cached != null) {
+                    return cached;
+                }
+                String context = ragContextProvider.buildContext(
+                        query, RagRequestContext.knowledgeBaseIds());
+                RagRequestContext.cacheContext(query, context);
+                return context;
+            }
+        }
+        return "";
     }
 
     /**

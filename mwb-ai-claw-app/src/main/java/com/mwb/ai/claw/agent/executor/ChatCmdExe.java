@@ -16,6 +16,7 @@ import com.mwb.ai.claw.domain.collaboration.OrchestrationDefinition;
 import com.mwb.ai.claw.domain.core.AgentGateway;
 import com.mwb.ai.claw.domain.core.ProgressCallback;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
+import com.mwb.ai.claw.domain.rag.RagRequestContext;
 import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.dto.ChatCmd;
 import com.mwb.ai.claw.dto.SingleResponse;
@@ -81,6 +82,7 @@ public class ChatCmdExe {
         if (boundOptions) {
             LlmRequestOptions.bind(cmd.getResponseFormat(), cmd.getJsonSchema());
         }
+        RagRequestContext.bind(cmd.getKnowledgeBaseIds());
         // 单次运行 token 预算：>0 时在当前线程绑定，LLM 韧性装饰器按次累计，超限中止
         long budgetTokens = agentProperties.getLlm().getRunBudgetTokens();
         RunTokenBudget budget = budgetTokens > 0 ? RunTokenBudget.bind(budgetTokens) : null;
@@ -140,6 +142,7 @@ public class ChatCmdExe {
             if (boundOptions) {
                 LlmRequestOptions.unbind();
             }
+            RagRequestContext.unbind();
             if (budget != null) {
                 RunTokenBudget.unbind();
             }

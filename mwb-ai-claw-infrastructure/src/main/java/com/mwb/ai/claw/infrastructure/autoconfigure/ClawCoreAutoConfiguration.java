@@ -19,6 +19,16 @@ import com.mwb.ai.claw.domain.memory.MemoryGateway;
 import com.mwb.ai.claw.domain.memory.MemoryPageStore;
 import com.mwb.ai.claw.domain.memory.MemoryRetriever;
 import com.mwb.ai.claw.domain.memory.MemorySynthesizer;
+import com.mwb.ai.claw.domain.rag.RagChunker;
+import com.mwb.ai.claw.domain.rag.RagConfig;
+import com.mwb.ai.claw.domain.rag.RagContextProvider;
+import com.mwb.ai.claw.domain.rag.RagDocumentParser;
+import com.mwb.ai.claw.domain.rag.RagDocumentStore;
+import com.mwb.ai.claw.domain.rag.RagEmbeddingGateway;
+import com.mwb.ai.claw.domain.rag.RagIndexStore;
+import com.mwb.ai.claw.domain.rag.RagIngestionService;
+import com.mwb.ai.claw.domain.rag.RagReranker;
+import com.mwb.ai.claw.domain.rag.RagRetrievalService;
 import com.mwb.ai.claw.domain.skill.SkillGateway;
 import com.mwb.ai.claw.domain.tool.ToolExecutor;
 import com.mwb.ai.claw.domain.tool.ToolGateway;
@@ -46,6 +56,14 @@ import com.mwb.ai.claw.infrastructure.memory.storage.jdbc.JdbcMemoryPageStore;
 import com.mwb.ai.claw.infrastructure.memory.storage.jdbc.JdbcSessionGateway;
 import com.mwb.ai.claw.infrastructure.memory.strategy.LlmMemorySynthesizer;
 import com.mwb.ai.claw.infrastructure.observability.MetricsRecorder;
+import com.mwb.ai.claw.infrastructure.rag.DefaultRagContextProvider;
+import com.mwb.ai.claw.infrastructure.rag.DefaultRagIngestionService;
+import com.mwb.ai.claw.infrastructure.rag.DefaultRagRetrievalService;
+import com.mwb.ai.claw.infrastructure.rag.FileRagDocumentStore;
+import com.mwb.ai.claw.infrastructure.rag.LocalRagIndexStore;
+import com.mwb.ai.claw.infrastructure.rag.OpenAiRagEmbeddingGateway;
+import com.mwb.ai.claw.infrastructure.rag.TextRagChunker;
+import com.mwb.ai.claw.infrastructure.rag.TextRagDocumentParser;
 import com.mwb.ai.claw.infrastructure.skill.SkillLoader;
 import com.mwb.ai.claw.infrastructure.skill.SkillRegistryImpl;
 import com.mwb.ai.claw.infrastructure.tool.ToolGatewayImpl;
@@ -132,6 +150,84 @@ public class ClawCoreAutoConfiguration {
                                                          MemoryRetriever retriever,
                                                          MemorySynthesisExecutor synthesisExecutor) {
         return new LayeredMemoryGatewayImpl(properties, pageStore, synthesizer, retriever, synthesisExecutor);
+    }
+
+    // ==================== 独立 RAG ====================
+
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnProperty(name = "agent.rag.enabled", havingValue = "true")
+    public static class RagConfiguration {
+
+        @Bean
+        @ConditionalOnMissingBean(RagConfig.class)
+        public RagConfig ragConfig(AgentProperties properties) {
+            return properties.getRag();
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(RagDocumentParser.class)
+        public TextRagDocumentParser ragDocumentParser() {
+            return new TextRagDocumentParser();
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(RagChunker.class)
+        public TextRagChunker ragChunker(RagConfig config) {
+            return new TextRagChunker(config);
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(RagEmbeddingGateway.class)
+        public OpenAiRagEmbeddingGateway ragEmbeddingGateway(
+                RagConfig config, org.springframework.web.client.RestTemplate restTemplate) {
+            return new OpenAiRagEmbeddingGateway(config, restTemplate);
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(RagDocumentStore.class)
+        @ConditionalOnProperty(name = "agent.rag.provider", havingValue = "local", matchIfMissing = true)
+        public FileRagDocumentStore ragDocumentStore(RagConfig config) {
+            return new FileRagDocumentStore(config);
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(RagIndexStore.class)
+        @ConditionalOnProperty(name = "agent.rag.provider", havingValue = "local", matchIfMissing = true)
+        public LocalRagIndexStore ragIndexStore(RagConfig config) {
+            return new LocalRagIndexStore(config);
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(RagIngestionService.class)
+        public DefaultRagIngestionService ragIngestionService(
+                RagDocumentParser parser,
+                RagChunker chunker,
+                RagEmbeddingGateway embeddingGateway,
+                RagIndexStore indexStore,
+                RagDocumentStore documentStore,
+                RagConfig config) {
+            return new DefaultRagIngestionService(
+                    parser, chunker, embeddingGateway, indexStore, documentStore, config);
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(RagRetrievalService.class)
+        public DefaultRagRetrievalService ragRetrievalService(
+                RagEmbeddingGateway embeddingGateway,
+                RagIndexStore indexStore,
+                RagDocumentStore documentStore,
+                ObjectProvider<RagReranker> rerankerProvider,
+                RagConfig config) {
+            return new DefaultRagRetrievalService(
+                    embeddingGateway, indexStore, documentStore, rerankerProvider.getIfAvailable(), config);
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(RagContextProvider.class)
+        public DefaultRagContextProvider ragContextProvider(
+                RagRetrievalService retrievalService, RagConfig config) {
+            return new DefaultRagContextProvider(retrievalService, config);
+        }
     }
 
     // ==================== 技能 ====================

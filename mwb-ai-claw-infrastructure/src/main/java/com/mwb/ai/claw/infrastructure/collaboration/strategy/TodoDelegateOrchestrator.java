@@ -39,6 +39,7 @@ import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.AgentGateway;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
 import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
+import com.mwb.ai.claw.domain.rag.RagRequestContext;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.dto.data.AgentErrorCode;
 import com.mwb.ai.claw.exception.BizException;
@@ -389,7 +390,7 @@ public class TodoDelegateOrchestrator implements AgentOrchestrator {
             AtomicReference<Throwable> failure = new AtomicReference<>();
             List<CompletableFuture<Void>> futures = new ArrayList<>();
             for (TodoDefinition todo : wave) {
-                futures.add(CompletableFuture.runAsync(() -> {
+                futures.add(CompletableFuture.runAsync(RagRequestContext.wrap(() -> {
                     try {
                         NodeResult r = runTodo(todo, depth, siblingResults, path, null);
                         if (r != null) {
@@ -398,7 +399,7 @@ public class TodoDelegateOrchestrator implements AgentOrchestrator {
                     } catch (Throwable t) {
                         failure.compareAndSet(null, t);
                     }
-                }, pool));
+                }), pool));
             }
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
             if (failure.get() != null) {

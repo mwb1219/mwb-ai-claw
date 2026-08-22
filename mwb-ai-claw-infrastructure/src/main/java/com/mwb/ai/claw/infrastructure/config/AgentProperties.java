@@ -11,6 +11,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 import com.mwb.ai.claw.domain.memory.LayeredMemoryConfig;
+import com.mwb.ai.claw.domain.rag.RagConfig;
 
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -96,6 +97,9 @@ public class AgentProperties {
 
     /** 分层记忆配置（agent.memory.*） */
     private LayeredMemoryConfig memory = new LayeredMemoryConfig();
+
+    /** 独立 RAG 配置（agent.rag.*） */
+    private RagConfig rag = new RagConfig();
 
     /**
      * 专家 Agent 配置（可覆盖默认 Agent 的部分字段）

@@ -7,6 +7,7 @@ import { Sidebar } from './components/layout/Sidebar';
 import { StatusBar } from './components/layout/StatusBar';
 import { ChatPage } from './pages/ChatPage';
 import { MemoryPage } from './pages/MemoryPage';
+import { RagPage } from './pages/RagPage';
 import { ApprovalPage } from './pages/ApprovalPage';
 import { LoginPage } from './pages/LoginPage';
 import { applyTheme, useSettings } from './store/settings';
@@ -84,6 +85,7 @@ function MainLayout() {
             <Route path="/" element={<Navigate to="/chat" replace />} />
             <Route path="/chat" element={<ChatPage />} />
             <Route path="/memory" element={<MemoryPage />} />
+            <Route path="/rag" element={<RagPage />} />
             <Route path="/approval" element={<ApprovalPage />} />
           </Routes>
         </main>
