@@ -61,6 +61,7 @@ export default defineConfig({
             ],
           },
         ],
+        socialLinks: [{ icon: 'github', link: 'https://github.com/mwb1219/mwb-ai-claw' }],
       },
     },
     en: {
@@ -114,6 +115,7 @@ export default defineConfig({
             ],
           },
         ],
+        socialLinks: [{ icon: 'github', link: 'https://github.com/mwb1219/mwb-ai-claw' }],
       },
     },
   },
