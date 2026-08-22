@@ -11,7 +11,30 @@ nav_order: 6
 
 ## 1. Add the Dependency
 
-- [ ] Maven coordinates: `io.github.mwb1219:mwb-ai-claw-app` (or spring-boot-starter)
+> Published on Maven Central (`io.github.mwb1219`, requires JDK 8+). See [search.maven.org](https://search.maven.org/search?q=g:io.github.mwb1219) for available versions.
+
+- [ ] **Core module** (ClawRuntime embedding entry, runs without a web container):
+
+```xml
+<dependency>
+    <groupId>io.github.mwb1219</groupId>
+    <artifactId>mwb-ai-claw-app</artifactId>
+    <version>1.0.0</version>
+</dependency>
+```
+
+- [ ] **Or use the Spring Boot Starter** (server-side auto-configuration: REST / WebSocket / Shell, everything included):
+
+```xml
+<dependency>
+    <groupId>io.github.mwb1219</groupId>
+    <artifactId>mwb-ai-claw-spring-boot-starter</artifactId>
+    <version>1.0.0</version>
+</dependency>
+```
+
+> You may also add just `mwb-ai-claw-client` (client API) or `mwb-ai-claw-domain` (domain model) as needed.
+> When building from source: after `mvn install`, the `<version>` can be omitted (managed by the parent POM).
 
 ## 2. Build the Runtime
 

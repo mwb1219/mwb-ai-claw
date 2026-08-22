@@ -11,7 +11,30 @@ nav_order: 6
 
 ## 1. 引入依赖
 
-- [ ] Maven 坐标：`io.github.mwb1219:mwb-ai-claw-app`（或 spring-boot-starter）
+> 已发布至 Maven Central（`io.github.mwb1219`，要求 JDK 8+），版本可在 [search.maven.org](https://search.maven.org/search?q=g:io.github.mwb1219) 查询。
+
+- [ ] **核心模块**（ClawRuntime 嵌入入口，无 Web 容器也可运行）：
+
+```xml
+<dependency>
+    <groupId>io.github.mwb1219</groupId>
+    <artifactId>mwb-ai-claw-app</artifactId>
+    <version>1.0.0</version>
+</dependency>
+```
+
+- [ ] **或使用 Spring Boot Starter**（服务端自动装配：REST / WebSocket / Shell 等全部能力）：
+
+```xml
+<dependency>
+    <groupId>io.github.mwb1219</groupId>
+    <artifactId>mwb-ai-claw-spring-boot-starter</artifactId>
+    <version>1.0.0</version>
+</dependency>
+```
+
+> 按需可单独引入 `mwb-ai-claw-client`（客户端 API）、`mwb-ai-claw-domain`（领域模型）等模块。
+> 源码或本地仓库方式：`mvn install` 后可省去 `<version>`（由父 POM 统一管理）。
 
 ## 2. 构建运行时
 
