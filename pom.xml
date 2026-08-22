@@ -3,7 +3,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.mwb.ai.claw</groupId>
+    <groupId>io.github.mwb1219</groupId>
     <artifactId>mwb-ai-claw-parent</artifactId>
     <version>1.0.0</version>
     <packaging>pom</packaging>
@@ -55,32 +55,32 @@
         <dependencies>
             <!--Project modules-->
             <dependency>
-                <groupId>com.mwb.ai.claw</groupId>
+                <groupId>io.github.mwb1219</groupId>
                 <artifactId>mwb-ai-claw-adapter</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>com.mwb.ai.claw</groupId>
+                <groupId>io.github.mwb1219</groupId>
                 <artifactId>mwb-ai-claw-client</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>com.mwb.ai.claw</groupId>
+                <groupId>io.github.mwb1219</groupId>
                 <artifactId>mwb-ai-claw-app</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>com.mwb.ai.claw</groupId>
+                <groupId>io.github.mwb1219</groupId>
                 <artifactId>mwb-ai-claw-domain</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>com.mwb.ai.claw</groupId>
+                <groupId>io.github.mwb1219</groupId>
                 <artifactId>mwb-ai-claw-infrastructure</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>com.mwb.ai.claw</groupId>
+                <groupId>io.github.mwb1219</groupId>
                 <artifactId>mwb-ai-claw-spring-boot-starter</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -194,4 +194,16 @@
         <url>https://github.com/mwb1219/mwb-ai-claw</url>
         <tag>HEAD</tag>
     </scm>
+
+    <!-- 发布到 Maven Central（Central Portal）：deploy 走 API publisher，凭据见 ~/.m2/settings.xml 的 central server -->
+    <distributionManagement>
+        <repository>
+            <id>central</id>
+            <url>https://central.sonatype.com/api/v1/publisher</url>
+        </repository>
+        <snapshotRepository>
+            <id>central</id>
+            <url>https://central.sonatype.com/repository/maven-snapshots/</url>
+        </snapshotRepository>
+    </distributionManagement>
 </project>

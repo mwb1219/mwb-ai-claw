@@ -11,7 +11,7 @@ nav_order: 6
 
 ## 1. Add the Dependency
 
-- [ ] Maven coordinates: `com.mwb.ai.claw:mwb-ai-claw-app` (or spring-boot-starter)
+- [ ] Maven coordinates: `io.github.mwb1219:mwb-ai-claw-app` (or spring-boot-starter)
 
 ## 2. Build the Runtime
 

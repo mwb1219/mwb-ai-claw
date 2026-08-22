@@ -11,7 +11,7 @@ nav_order: 6
 
 ## 1. 引入依赖
 
-- [ ] Maven 坐标：`com.mwb.ai.claw:mwb-ai-claw-app`（或 spring-boot-starter）
+- [ ] Maven 坐标：`io.github.mwb1219:mwb-ai-claw-app`（或 spring-boot-starter）
 
 ## 2. 构建运行时
 
