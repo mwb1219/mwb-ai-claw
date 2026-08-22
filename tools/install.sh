@@ -227,10 +227,10 @@ if [[ ! -f "$JAR_PATH" ]]; then
     exit 1
 fi
 
-# 版本号来自 jar 内 pom.properties（META-INF/maven/com.mwb.ai.claw/start/pom.properties）
+# 版本号来自 jar 内 pom.properties（META-INF/maven/io.github.mwb1219/start/pom.properties）
 print_version() {
     local v
-    v="$(unzip -p "$JAR_PATH" META-INF/maven/com.mwb.ai.claw/start/pom.properties 2>/dev/null \
+    v="$(unzip -p "$JAR_PATH" META-INF/maven/io.github.mwb1219/start/pom.properties 2>/dev/null \
         | sed -n 's/^version=//p' | tr -d '\r')"
     echo "mwb-ai-claw ${v:-1.0.0-SNAPSHOT}"
 }
