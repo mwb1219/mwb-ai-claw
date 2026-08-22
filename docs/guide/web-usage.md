@@ -20,7 +20,7 @@ nav_order: 5
 - [ ] 对话：`POST /agent/chat`（同步）/ `GET /agent/chat/stream`（SSE 流式）
 - [ ] 会话：创建 / 查询 / 列表 / 删除
 - [ ] 记忆面板、审批接口
-- [ ] 请求体字段：`sessionId` / `agentId` / `orchestrationId` / `message`
+- [ ] 请求体字段：`sessionId` / `agentId` / `orchestrationId` / `message` / `responseFormat` / `jsonSchema` / `parts`（多模态）
 
 ## 3. WebSocket
 

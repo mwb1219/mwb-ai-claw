@@ -20,7 +20,7 @@ nav_order: 6
 | --- | --- |
 | 命令白名单 | 允许的 Shell 命令，**按命令段逐段校验**（引号感知切分，防 `ls; rm -rf` / `&&` 拼接绕过） |
 | 命令黑名单 | 危险模式优先拒绝：`rm -rf /`、`sudo`、`mkfs`、fork bomb、`chmod 777` 等 |
-| 审批三档 | `shell-approval-mode`：`auto` 自动执行 / `ask` 命中规则弹 Y/N（默认）/ `read-only` 拒绝；50+ 高风险规则（`git push`、`rm`、`npm install`、`curl -X` 等） |
+| 审批三档 | `shell-approval-mode`：`auto` 自动执行 / `ask` 命中规则弹 Y/N（默认）/ `read-only` 拒绝；59 条高风险规则（`git push`、`rm`、`npm install`、`curl -X` 等） |
 | 路径限制 | `FileTool` / `ShellTool` 仅允许在 `workspace-dir` 内操作 |
 | 超时控制 | `tool-timeout-seconds`（默认 30s），超时转后台任务由 `shell_status` 跟踪 |
 | 输出截断 | `max-output-length`（默认 10000 字符），先脱敏后截断 |

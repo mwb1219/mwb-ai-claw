@@ -17,7 +17,7 @@ nav_order: 7
 | LLM | `claw.llm.request` / `claw.llm.duration` / `claw.llm.token` / `claw.llm.retry` | model / status / kind |
 | 工具 | `claw.tool.execute` / `claw.tool.duration` / `claw.tool.timeout` | tool / status |
 | ReAct | `claw.react.turn` | status / steps |
-| API | `claw.api.request` | path / status |
+| API | `claw.api.request` / `claw.api.duration` | path / status |
 | 记忆 | `claw.memory.*` | 检索/提炼 |
 
 Shell 内 `/metrics` 实时查看快照；引入 actuator 后可经 `/actuator/metrics`、Prometheus 暴露。

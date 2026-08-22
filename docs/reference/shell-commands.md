@@ -85,7 +85,7 @@ nav_order: 4
 | `--verbose` | 观察结果完整显示 |
 | `--agent.*=...` | 覆盖任意 Spring 配置 |
 
-**特性**：命令历史保存至 `~/.mwb-ai-claw-history`；Tab 补全（斜杠命令 / 会话 ID / 文件路径）；自定义命令 `~/.claw/commands/*.md` 启动时加载注册。
+**特性**：命令历史保存至 `~/.mwb-ai-claw-history`；Tab 补全（斜杠命令 / 会话 ID / 文件路径）；自定义命令启动时从三处加载（按序命中即用）：`~/.claw/commands/*.md` → `{运行目录}/.claw/commands/*.md` → `{运行目录}/commands/*.md`。
 
 ---
 

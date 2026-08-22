@@ -22,7 +22,7 @@ nav_order: 8
 
 - [ ] frontmatter 规范：`name`（必须与目录名一致）/ `description`（触发信号）
 - [ ] 正文 ≤ 500 行，长文/脚本拆入 `resources/`，用 `$SKILL_DIR` 引用
-- [ ] 内置技能示例（`start/src/main/resources/skills/`）：code-review、git-workflow、database-design 等
+- [ ] 内置技能示例（`start/src/main/resources/skills/`，共 10 个）：code-review、git-workflow、database-design、ddd-modeling、unit-test-writing、doc-writing-guide、doc-review、project-structure-analysis、markdown-diagramming、web-research
 
 ## 4. 使用与校验
 
@@ -33,4 +33,4 @@ nav_order: 8
 
 ---
 
-相关：[配置详解](configuration.md) ｜ [记忆系统](web-usage.md)
+相关：[配置详解](configuration.md) ｜ [分层记忆设计](../design/memory-model.md)
