@@ -13,7 +13,7 @@ nav_order: 1
 
 | 方法 | 路径 | 说明 | 关键参数 |
 | --- | --- | --- | --- |
-| `POST` | `/agent/chat` | 同步对话 | body: `ChatCmd`（message / sessionId / agentId / orchestrationId / responseFormat / parts） |
+| `POST` | `/agent/chat` | 同步对话 | body: `ChatCmd`（message / sessionId / agentId / orchestrationId / responseFormat / jsonSchema / parts） |
 | `GET` | `/agent/chat/stream` | SSE 流式对话 | `message`、`sessionId?`、`agentId?` |
 | `POST` | `/agent/session` | 创建会话 | body: `CreateSessionCmd`（agentId?） |
 | `PUT` | `/agent/session/{sessionId}` | 更新会话（标题） | body: `UpdateSessionCmd` |
@@ -81,11 +81,13 @@ event: done       → 结束
 
 ## 4. 鉴权（可选）
 
-`agent.auth.enabled=true` 时所有 `/agent/**` 与 `/memory/**` 接口需要 API Key，三种携带方式：
+`agent.auth.enabled=true` 时所有 `/agent/**` 接口（含 SSE 流式）需要 API Key，三种携带方式：
 
 - `X-API-Key: <key>`（Header，可配置）
 - `Authorization: Bearer <key>`
 - `?apiKey=<key>`（SSE 场景，EventSource 无法自定义 Header）
+
+> `/memory/**` 记忆面板接口默认不参与鉴权（只读调试用途）；接入方可自行扩展拦截范围。
 
 ---
 

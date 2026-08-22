@@ -22,7 +22,7 @@ nav_order: 4
 
 - [ ] Token 预算模型：`context-window × budget-ratio`，System/Tools/Memory 按比例分配
 - [ ] 预算溢出或未摘要消息超阈值 → 最旧块压缩为摘要页
-- [ ] 换页策略可插拔：`token`（预算驱动，默认）/ `importance`（重要度驱动）
+- [ ] 换页策略可插拔：`importance`（重要度驱动，默认）/ `token`（预算驱动）
 
 ## 3. 检索召回
 

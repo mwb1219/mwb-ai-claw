@@ -11,14 +11,14 @@ nav_order: 7
 
 ## 1. 加载机制
 
-- [ ] 运行目录（user.dir）同名文件命中即用 → jar 内置 classpath 默认
+- [ ] 运行目录（user.dir）同名文件命中即用 → 安装目录 `~/.mwb-ai-claw/config/` 同名文件 → jar 内置 classpath 默认
 - [ ] `${VAR:default}` 占位符引用 `.env` 变量
 
 ## 2. agents.json（Agent 注册表）
 
-- [ ] 字段：`agentId` / `name` / `description` / `keywords` / `systemPrompt` / `tools` / `maxSteps` / `model` / `apiKey`
+- [ ] 字段：`agentId` / `name` / `description` / `keywords` / `systemPrompt` / `tools` / `maxSteps` / `maxTokens` / `model` / `baseUrl` / `apiKey` / `temperature` / `provider`
 - [ ] 工具绑定：缺省=全部已注册；显式 `tools` = 强制仅绑定声明
-- [ ] 独立模型：每 Agent 可配 `model` / `baseUrl` / `apiKey`
+- [ ] 独立模型：每 Agent 可配 `model` / `baseUrl` / `apiKey` / `provider` / `temperature` / `maxTokens`
 
 ## 3. orchestrations.json（编排注册表）
 

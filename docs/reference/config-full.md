@@ -7,7 +7,7 @@ nav_order: 3
 # 全部配置项速查
 
 > 配置来源三级加载（优先级从高到低）：**命令行参数 / 系统属性 > `.env` 环境变量 > 内置 `application.yml` 默认值**。
-> `.env` 变量经 `${VAR:default}` 占位符注入；配置文件（agents.json / orchestrations.json / mcp-server.json）另有「运行目录 > classpath」两级加载。
+> `.env` 变量经 `${VAR:default}` 占位符注入；配置文件（agents.json / orchestrations.json / mcp-server.json）另按「运行目录 → 安装目录 config → classpath」三级加载。
 
 ## 1. 环境变量（.env）
 
@@ -18,6 +18,9 @@ nav_order: 3
 | `DEFAULT_BASE_URL` | `https://api.deepseek.com` | 默认 Base URL |
 | `CODER_MODEL` / `CODER_API_KEY` | 继承默认 | coder 专家独立模型 |
 | `RESEARCHER_MODEL` / `RESEARCHER_API_KEY` | 继承默认 | researcher 专家独立模型 |
+| `ARCHITECT_MODEL` / `ARCHITECT_API_KEY` | 继承默认 | architect 专家独立模型 |
+| `REVIEWER_MODEL` / `REVIEWER_API_KEY` | 继承默认 | reviewer 专家独立模型 |
+| `MODERATOR_MODEL` / `MODERATOR_API_KEY` | 继承默认 | moderator 专家独立模型 |
 | `EMBEDDING_MODEL` / `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` | 继承默认 | 向量检索 embedding（DeepSeek 主模型不支持 embeddings，需单独配置） |
 | `SYNTHESIS_MODEL` / `SYNTHESIS_BASE_URL` / `SYNTHESIS_API_KEY` | 继承默认 | 小模型提炼（成本优化） |
 | `STORAGE_TYPE` | `file` | 存储后端：`file` / `db` |
@@ -40,6 +43,7 @@ nav_order: 3
 | --- | --- | --- |
 | `agent.agent-id` | `default` | Agent 标识 |
 | `agent.name` | `mwb-ai-claw` | 显示名称 |
+| `agent.provider` | `openai` | Provider 类型：`openai` / `anthropic` / `gemini` / `ollama`（空则兼容推断） |
 | `agent.system-prompt` | 内置 | 系统提示词 |
 | `agent.orchestration` | `routing` | 默认编排 id（引用 orchestrations.json） |
 | `agent.model` / `agent.base-url` / `agent.api-key` | env 引用 | 默认模型配置 |
@@ -64,6 +68,7 @@ nav_order: 3
 | `tool-budget-ratio` | `0.25` | Tools 区占记忆预算比例 |
 | `hot-window-size` | `20` | Hot 工作记忆最大条数 |
 | `summary-block-size` | `10` | 多少条消息合成一个摘要块 |
+| `max-summary-depth` | `3` | 摘要页最大压缩层级 |
 | `importance-threshold` | `0.6` | 事实写入重要度阈值 |
 | `top-k` | `5` | 检索召回条数 |
 | `eviction-policy` | `importance` | 换页策略：`token` / `importance` |
@@ -82,10 +87,10 @@ nav_order: 3
 | --- | --- | --- |
 | `enabled` | `true` | 沙箱总开关 |
 | `workspace-dir` | （空=不限制） | 文件操作根目录 |
-| `shell-whitelist` | 65 个命令 | 允许的 Shell 命令 |
+| `shell-whitelist` | 75 个命令 | 允许的 Shell 命令（ls/cat/git/python3/node/npm…） |
 | `shell-blacklist` | 危险模式 | 命中即拒绝（优先级高于白名单） |
 | `shell-approval-mode` | `ask` | `auto` / `ask` / `read-only` |
-| `shell-approval-patterns` | 50+ 规则 | 高风险命令，ask 下请求确认 |
+| `shell-approval-patterns` | 59 条规则 | 高风险命令，ask 下请求确认 |
 | `tool-timeout-seconds` | `30` | 工具超时（超时转后台） |
 | `max-output-length` | `10000` | 工具输出截断 |
 | `http-allowed-hosts` | （空=全部允许） | HTTP 请求 host 白名单（防 SSRF） |
@@ -112,6 +117,7 @@ nav_order: 3
 | `retry.max-backoff-ms` | `10000` | 最大退避 |
 | `fallback-model` / `-base-url` / `-api-key` | （空） | 备用模型降级 |
 | `run-budget-tokens` | `0` | 单次运行 token 预算（0=不限制） |
+| `max-single-message-tokens` | `12000` | 单条消息最大 token 数（超出截断告警） |
 
 ## 8. 可观测性（agent.observability.*）
 

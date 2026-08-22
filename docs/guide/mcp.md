@@ -10,7 +10,7 @@ nav_order: 9
 
 ## 1. 配置 mcp-server.json
 
-- [ ] 加载优先级：运行目录 `mcp-server.json`（命中即用）> classpath 默认模板
+- [ ] 加载优先级：运行目录 `mcp-server.json`（命中即用）→ 安装目录 `~/.mwb-ai-claw/config/mcp-server.json` → classpath 默认模板
 - [ ] 传输方式：`stdio`（command + args + env）/ `streamable_http`（type + url）
 
 ## 2. 示例
