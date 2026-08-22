@@ -25,8 +25,9 @@ nav_order: 2
 
 - [ ] 下载：GitHub Releases 页 → 选择最新版本 → 下载 `mwb-ai-claw-<version>-bin.tar.gz`
       https://github.com/mwb1219/mwb-ai-claw/releases
-- [ ] 安装：解压 → `cd mwb-ai-claw-<version>-bin` → `./install.sh`（一键安装为全局命令 `mwb-ai-claw`）
-- [ ] 配置：编辑 `~/.mwb-ai-claw/.env` 填入 `DEFAULT_API_KEY`
+- [ ] 安装（macOS / Linux）：解压 → `cd mwb-ai-claw-<version>-bin` → `./install.sh`
+- [ ] 安装（Windows）：解压 → 在包根目录执行 `powershell -ExecutionPolicy Bypass -File .\install.ps1`
+- [ ] 配置：编辑 `~/.mwb-ai-claw/.env`（Windows：`%USERPROFILE%\.mwb-ai-claw\.env`）填入 `DEFAULT_API_KEY`
 - [ ] 启动：`mwb-ai-claw` 直接进入 Shell 模式（终端 REPL）
 - [ ] 可选：本地打包 `./tools/package.sh` → `dist/mwb-ai-claw-<version>-bin.tar.gz`（供内网/离线环境分发）
 

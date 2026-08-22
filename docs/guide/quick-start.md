@@ -40,6 +40,8 @@ java -jar start/target/start-*.jar --spring.profiles.active=shell
 
 ### 方式二：下载二进制分发包（推荐新手 / 无源码环境）
 
+**macOS / Linux**：
+
 ```bash
 # 1. 从 GitHub Releases 下载最新安装包（无需 Maven / 源码，仅需 JDK 8+）
 #    下载页：https://github.com/mwb1219/mwb-ai-claw/releases
@@ -54,6 +56,21 @@ cd mwb-ai-claw-1.0.0-bin
 mwb-ai-claw
 ```
 
+**Windows（PowerShell）**：
+
+```powershell
+# 1. 下载 mwb-ai-claw-1.0.0-bin.tar.gz（Windows 10+ 自带 tar 可解压，或用 7-Zip）
+
+# 2. 解压后，在包根目录执行安装脚本（-ExecutionPolicy Bypass 绕过执行策略限制）
+tar -xzf mwb-ai-claw-1.0.0-bin.tar.gz
+cd mwb-ai-claw-1.0.0-bin
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+
+# 3. 编辑 %USERPROFILE%\.mwb-ai-claw\.env 填入 DEFAULT_API_KEY，然后启动 Agent Shell
+mwb-ai-claw
+```
+
+> 卸载（macOS / Linux）：`./install.sh --uninstall`；卸载（Windows）：`.\install.ps1 -Uninstall`。
 > 需要自行重新打包时：`./tools/package.sh` → `dist/mwb-ai-claw-<version>-bin.tar.gz`。
 
 ### 方式三：源码构建 + 安装为全局命令（类 `claude`）
