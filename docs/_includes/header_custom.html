@@ -1,0 +1,39 @@
+<!-- 语言切换入口：根据当前 URL 自动显示「English / 中文」，插入到右上角 aux 导航 -->
+<script>
+(function () {
+  function addLangSwitch() {
+    var base = '{{ site.baseurl }}' || '';
+    var path = window.location.pathname;
+    var rel = path;
+    if (base && rel.indexOf(base) === 0) {
+      rel = rel.slice(base.length);
+    }
+    if (!rel) rel = '/';
+    var isEn = rel === '/en' || rel === '/en/' || rel.indexOf('/en/') === 0;
+    var targetRel;
+    if (isEn) {
+      targetRel = rel.slice(3); // 去掉前缀 '/en'
+      if (targetRel === '') targetRel = '/';
+    } else {
+      targetRel = (rel === '/' ? '' : rel);
+      targetRel = '/en' + targetRel;
+    }
+    var ul = document.querySelector('.aux-nav-list');
+    if (!ul) return;
+    var li = document.createElement('li');
+    li.className = 'aux-nav-list-item';
+    var a = document.createElement('a');
+    a.className = 'site-button';
+    a.href = base + targetRel;
+    a.title = isEn ? 'Switch to Chinese' : 'Switch to English';
+    a.textContent = isEn ? '中文' : 'English';
+    li.appendChild(a);
+    ul.appendChild(li);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', addLangSwitch);
+  } else {
+    addLangSwitch();
+  }
+})();
+</script>
