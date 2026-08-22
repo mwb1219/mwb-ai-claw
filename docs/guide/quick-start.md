@@ -48,12 +48,23 @@ mwb-ai-claw                 # 任意目录直接进入 Agent Shell
 > 首次安装后编辑 `~/.mwb-ai-claw/.env` 填入 `DEFAULT_API_KEY`。
 > 支持参数透传，如 `mwb-ai-claw --agent.orchestration=todo-delegate`。
 
-### 方式三：二进制分发包（给无源码环境）
+### 方式三：下载二进制分发包（推荐新手 / 无源码环境）
 
 ```bash
-./tools/package.sh          # 产出 dist/mwb-ai-claw-<version>-bin.tar.gz
-# 分发后，解压 → cd mwb-ai-claw-<version>-bin → ./install.sh → 编辑 ~/.mwb-ai-claw/.env → mwb-ai-claw
+# 1. 从 GitHub Releases 下载最新安装包（无需 Maven / 源码，仅需 JDK 8+）
+#    下载页：https://github.com/mwb1219/mwb-ai-claw/releases
+#    资产：mwb-ai-claw-<version>-bin.tar.gz（当前 v1.0.0，约 26MB）
+
+# 2. 解压并一键安装为全局命令
+tar -xzf mwb-ai-claw-1.0.0-bin.tar.gz
+cd mwb-ai-claw-1.0.0-bin
+./install.sh
+
+# 3. 编辑 ~/.mwb-ai-claw/.env 填入 DEFAULT_API_KEY，然后启动 Agent Shell
+mwb-ai-claw
 ```
+
+> 需要自行重新打包时：`./tools/package.sh` → `dist/mwb-ai-claw-<version>-bin.tar.gz`。
 
 ## 3. 体验 Web 模式（可选）
 
