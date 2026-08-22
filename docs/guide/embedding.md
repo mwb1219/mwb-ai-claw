@@ -23,7 +23,7 @@ nav_order: 6
 </dependency>
 ```
 
-- [ ] **或使用 Spring Boot Starter**（服务端自动装配：REST / WebSocket / Shell 等全部能力）：
+- [ ] **或使用 Spring Boot Starter**（服务端自动装配：REST / WebSocket / Shell 等全部能力，见 [服务端集成](server-integration.md)）：
 
 ```xml
 <dependency>

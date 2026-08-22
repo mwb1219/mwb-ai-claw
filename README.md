@@ -71,7 +71,7 @@ Or use the Spring Boot Starter to get the full server-side stack (REST / WebSock
 </dependency>
 ```
 
-See [Embedding Integration](docs/guide/embedding.md) for usage details.
+See [Embedding Integration](docs/guide/embedding.md) and [Server Integration](docs/guide/server-integration.md) for usage details.
 
 ## Documentation
 

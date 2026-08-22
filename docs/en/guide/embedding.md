@@ -23,7 +23,7 @@ nav_order: 6
 </dependency>
 ```
 
-- [ ] **Or use the Spring Boot Starter** (server-side auto-configuration: REST / WebSocket / Shell, everything included):
+- [ ] **Or use the Spring Boot Starter** (server-side auto-configuration: REST / WebSocket / Shell, everything included; see [Server Integration](server-integration.md)):
 
 ```xml
 <dependency>
