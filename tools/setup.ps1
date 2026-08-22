@@ -78,7 +78,7 @@ if ($LASTEXITCODE -ne 0) {
 
 # ---------------- 解析产物路径 ----------------
 $pomContent = Get-Content (Join-Path $ProjectRoot "pom.xml") -Raw
-$versionMatch = [regex]::Match($pomContent, '<version>([^<]+)</version>')
+$versionMatch = [regex]::Match($pomContent, '<revision>([^<]+)</revision>')
 if (-not $versionMatch.Success) {
     Write-Err "无法从 pom.xml 解析版本号"
     exit 1

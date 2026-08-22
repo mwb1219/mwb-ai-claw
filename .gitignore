@@ -11,6 +11,7 @@ target/
 *.tar.gz
 *.rar
 dependency-reduced-pom.xml
+.flattened-pom.xml
 !.mvn/wrapper/maven-wrapper.jar
 
 # ============================================================

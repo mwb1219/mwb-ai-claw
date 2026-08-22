@@ -58,8 +58,8 @@ case "${1:-}" in
 esac
 
 # ---------------- 版本号 ----------------
-# 从父 pom.xml 解析 <version>（首条非 dependencyManagement 的项目版本）
-VERSION="$(grep -m1 '<version>[0-9]' "$PROJECT_ROOT/pom.xml" | sed 's/.*<version>\([^<]*\)<\/version>.*/\1/' || true)"
+# 从根 pom.xml 解析统一版本号（revision 属性）
+VERSION="$(grep -m1 '<revision>' "$PROJECT_ROOT/pom.xml" | sed 's/.*<revision>\([^<]*\)<\/revision>.*/\1/' || true)"
 if [[ -z "${VERSION:-}" ]]; then
     err "无法从 pom.xml 解析版本号"
     exit 1

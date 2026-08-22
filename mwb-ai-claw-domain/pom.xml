@@ -4,7 +4,7 @@
     <parent>
         <groupId>io.github.mwb1219</groupId>
         <artifactId>mwb-ai-claw-parent</artifactId>
-        <version>1.0.0</version>
+        <version>${revision}</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
