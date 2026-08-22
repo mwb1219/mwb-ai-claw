@@ -11,6 +11,8 @@
     <artifactId>mwb-ai-claw-app</artifactId>
     <packaging>jar</packaging>
     <name>mwb-ai-claw-app</name>
+    <description>mwb-ai-claw-app: 应用核心模块，提供面向 Agent 应用的门面服务与编排入口。</description>
+    <url>https://github.com/mwb1219/mwb-ai-claw</url>
 
     <dependencies>
         <dependency>

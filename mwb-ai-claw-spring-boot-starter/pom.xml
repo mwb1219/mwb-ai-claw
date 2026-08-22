@@ -12,6 +12,7 @@
     <packaging>jar</packaging>
     <name>mwb-ai-claw-spring-boot-starter</name>
     <description>mwb-ai-claw 服务端自动装配 Starter：一行依赖引入即可获得 Agent 核心能力（记忆 / LLM / 工具 / 编排 / REST / WebSocket）</description>
+    <url>https://github.com/mwb1219/mwb-ai-claw</url>
 
     <dependencies>
         <dependency>

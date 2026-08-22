@@ -11,6 +11,8 @@
     <artifactId>mwb-ai-claw-domain</artifactId>
     <packaging>jar</packaging>
     <name>mwb-ai-claw-domain</name>
+    <description>mwb-ai-claw-domain: 领域模型与核心抽象（Agent、记忆、LLM 编排、工具调用、多智能体协作）。</description>
+    <url>https://github.com/mwb1219/mwb-ai-claw</url>
 
     <dependencies>
         <dependency>

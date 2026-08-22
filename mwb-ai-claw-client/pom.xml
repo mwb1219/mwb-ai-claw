@@ -11,6 +11,8 @@
     <artifactId>mwb-ai-claw-client</artifactId>
     <packaging>jar</packaging>
     <name>mwb-ai-claw-client</name>
+    <description>mwb-ai-claw-client: 客户端 API，用于接入并编排 AI 智能体（LLM 编排、工具调用、记忆管理）。</description>
+    <url>https://github.com/mwb1219/mwb-ai-claw</url>
 
     <dependencies>
         <!-- 引用 domain 数据模型（ContentPart 等，供 ChatCmd 携带多模态片段与结构化输出参数） -->

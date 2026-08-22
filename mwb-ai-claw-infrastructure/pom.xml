@@ -11,6 +11,8 @@
     <artifactId>mwb-ai-claw-infrastructure</artifactId>
     <packaging>jar</packaging>
     <name>mwb-ai-claw-infrastructure</name>
+    <description>mwb-ai-claw-infrastructure: 基础设施实现（LLM 网关、工具执行、存储、可观测性）。</description>
+    <url>https://github.com/mwb1219/mwb-ai-claw</url>
 
     <dependencies>
         <dependency>

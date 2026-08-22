@@ -11,6 +11,8 @@
     <artifactId>mwb-ai-claw-adapter</artifactId>
     <packaging>jar</packaging>
     <name>mwb-ai-claw-adapter</name>
+    <description>mwb-ai-claw-adapter: 适配层，将核心能力适配为 REST / WebSocket / Spring Boot 等外部接口。</description>
+    <url>https://github.com/mwb1219/mwb-ai-claw</url>
 
     <dependencies>
         <dependency>

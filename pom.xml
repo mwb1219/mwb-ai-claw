@@ -8,6 +8,8 @@
     <version>1.0.0</version>
     <packaging>pom</packaging>
     <name>mwb-ai-claw</name>
+    <description>mwb-ai-claw: 一个 AI 原生智能体框架，自动编排 LLM、工具调用、记忆与多智能体协作（Multi-Agent Collaboration）。</description>
+    <url>https://github.com/mwb1219/mwb-ai-claw</url>
 
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
@@ -158,6 +160,12 @@
                 <extensions>true</extensions>
                 <configuration>
                     <publishingServerId>central</publishingServerId>
+                    <!-- central-publishing-maven-plugin 不识别 maven.deploy.skip，示例/启动器模块按 artifactId 排除 -->
+                    <excludeArtifacts>
+                        <excludeArtifact>start</excludeArtifact>
+                        <excludeArtifact>example-embed</excludeArtifact>
+                        <excludeArtifact>example-web</excludeArtifact>
+                    </excludeArtifacts>
                 </configuration>
             </plugin>
         </plugins>
