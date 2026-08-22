@@ -1,10 +1,11 @@
-<!-- 语言切换入口：根据当前 URL 自动显示「English / 中文」，插入到右上角 aux 导航 -->
+<!-- 语言切换入口：右上角「English / 中文」按钮 + 侧边栏导航按语言分区 -->
 <script>
 (function () {
-  function addLangSwitch() {
-    var base = '{{ site.baseurl }}' || '';
-    var path = window.location.pathname;
-    var rel = path;
+  var base = '{{ site.baseurl }}' || '';
+
+  // 根据当前 URL 判断语言并计算目标语言对应页面
+  function langSwitch() {
+    var rel = window.location.pathname;
     if (base && rel.indexOf(base) === 0) {
       rel = rel.slice(base.length);
     }
@@ -15,25 +16,53 @@
       targetRel = rel.slice(3); // 去掉前缀 '/en'
       if (targetRel === '') targetRel = '/';
     } else {
-      targetRel = (rel === '/' ? '' : rel);
+      targetRel = (rel === '/' ? '/' : rel);
       targetRel = '/en' + targetRel;
     }
+    return { isEn: isEn, target: base + targetRel };
+  }
+
+  // 右上角语言切换按钮（aux 导航，与「GitHub 仓库」并列）
+  function addLangSwitch(s) {
     var ul = document.querySelector('.aux-nav-list');
     if (!ul) return;
     var li = document.createElement('li');
     li.className = 'aux-nav-list-item';
     var a = document.createElement('a');
     a.className = 'site-button';
-    a.href = base + targetRel;
-    a.title = isEn ? 'Switch to Chinese' : 'Switch to English';
-    a.textContent = isEn ? '中文' : 'English';
+    a.href = s.target;
+    a.title = s.isEn ? 'Switch to Chinese' : 'Switch to English';
+    a.textContent = s.isEn ? '中文' : 'English';
     li.appendChild(a);
     ul.appendChild(li);
   }
+
+  // 侧边栏导航分区：中文页只显示中文导航树，英文页只显示英文导航树
+  function filterNav(isEn) {
+    var root = document.querySelector('.site-nav > .nav-list');
+    if (!root) return;
+    for (var i = 0; i < root.children.length; i++) {
+      var li = root.children[i];
+      var link = li.querySelector(':scope > .nav-list-link');
+      if (!link) continue;
+      var href = link.getAttribute('href') || '';
+      var isEnNav = /\/en(\/|$)/.test(href);
+      if (isEn !== isEnNav) {
+        li.style.display = 'none';
+      }
+    }
+  }
+
+  function init() {
+    var s = langSwitch();
+    addLangSwitch(s);
+    filterNav(s.isEn);
+  }
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', addLangSwitch);
+    document.addEventListener('DOMContentLoaded', init);
   } else {
-    addLangSwitch();
+    init();
   }
 })();
 </script>
