@@ -11,7 +11,30 @@ nav_order: 6
 
 ## 1. 引入依赖
 
-- [ ] Maven 坐标：`io.github.mwb1219:mwb-ai-claw-app`（或 spring-boot-starter）
+> 已发布至 Maven Central（`io.github.mwb1219`，要求 JDK 8+），版本可在 [search.maven.org](https://search.maven.org/search?q=g:io.github.mwb1219) 查询。
+
+- [ ] **核心模块**（ClawRuntime 嵌入入口，无 Web 容器也可运行）：
+
+```xml
+<dependency>
+    <groupId>io.github.mwb1219</groupId>
+    <artifactId>mwb-ai-claw-app</artifactId>
+    <version>1.0.0</version>
+</dependency>
+```
+
+- [ ] **或使用 Spring Boot Starter**（服务端自动装配：REST / WebSocket / Shell 等全部能力，见 [服务端集成](server-integration.md)）：
+
+```xml
+<dependency>
+    <groupId>io.github.mwb1219</groupId>
+    <artifactId>mwb-ai-claw-spring-boot-starter</artifactId>
+    <version>1.0.0</version>
+</dependency>
+```
+
+> 按需可单独引入 `mwb-ai-claw-client`（客户端 API）、`mwb-ai-claw-domain`（领域模型）等模块。
+> 源码或本地仓库方式：`mvn install` 后可省去 `<version>`（由父 POM 统一管理）。
 
 ## 2. 构建运行时
 
@@ -44,6 +67,26 @@ nav_order: 6
 - [ ] `.env`（运行目录 → 安装目录）→ 系统环境变量 → 内置默认
 - [ ] 复用 `ConfigFileLocator.readConfigFile(".env")`（见 example-embed）
 
+## 8. 示例项目：example-embed
+
+> 仓库 [`example-embed/`](https://github.com/mwb1219/mwb-ai-claw/tree/master/example-embed) 演示 `ClawRuntime` 在无 Web 容器的 JVM 应用中的完整接入。
+
+- [ ] 覆盖场景：首次对话（自动创建会话）、同会话追问（上下文连续）、流式对话（`LlmStreamCallback` 增量回调）、`.env` 配置加载
+- [ ] 关键代码：[EmbedDemo.java](https://github.com/mwb1219/mwb-ai-claw/blob/master/example-embed/src/main/java/com/mwb/ai/claw/example/embed/EmbedDemo.java)
+- [ ] 运行：
+
+```bash
+# 1. 准备密钥：.env 按 运行目录 → ~/.mwb-ai-claw 顺序加载
+cp .env.example .env        # 填入 DEFAULT_API_KEY
+
+# 2. 构建核心模块并直接运行示例
+mvn -q -pl example-embed -am install -DskipTests
+mvn -q -pl example-embed org.codehaus.mojo:exec-maven-plugin:3.1.0:java \
+    -Dexec.mainClass=com.mwb.ai.claw.example.embed.EmbedDemo
+```
+
+> 也可在 IDE 中直接运行 `EmbedDemo.main()`。
+
 ---
 
-相关：[快速开始](quick-start.md) ｜ [配置详解](configuration.md) ｜ 示例代码 `example-embed/src/main/java/.../EmbedDemo.java`
+相关：[快速开始](quick-start.md) ｜ [配置详解](configuration.md) ｜ [服务端集成（Spring Boot Starter）](server-integration.md)

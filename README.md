@@ -3,6 +3,8 @@
 > A local-first AI Agent framework in Java, built on COLA architecture (DDD). Inspired by OpenClaw — an out-of-the-box personal AI assistant that can actually get things done.
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.mwb1219/mwb-ai-claw-app?color=blue)](https://search.maven.org/artifact/io.github.mwb1219/mwb-ai-claw-app)
+[![Docs](https://img.shields.io/badge/docs-online-blue)](https://mwb1219.github.io/mwb-ai-claw/)
 
 ## Features
 
@@ -47,9 +49,36 @@ java -jar start/target/start-*.jar --spring.profiles.active=web
 
 Web mode provides REST chat, SSE streaming, WebSocket, session management, and a frontend console.
 
+## Use as a Maven dependency
+
+Published on Maven Central (`io.github.mwb1219`, requires JDK 8+). Embed `ClawRuntime` in your own Java app with the core module:
+
+```xml
+<dependency>
+    <groupId>io.github.mwb1219</groupId>
+    <artifactId>mwb-ai-claw-app</artifactId>
+    <version>1.0.0</version>
+</dependency>
+```
+
+Or use the Spring Boot Starter to get the full server-side stack (REST / WebSocket / Shell):
+
+```xml
+<dependency>
+    <groupId>io.github.mwb1219</groupId>
+    <artifactId>mwb-ai-claw-spring-boot-starter</artifactId>
+    <version>1.0.0</version>
+</dependency>
+```
+
+See [Embedding Integration](docs/guide/embedding.md) and [Server Integration](docs/guide/server-integration.md) for usage details.
+
 ## Documentation
 
-Full documentation (Chinese) lives in [docs/](docs/README.md) — quick start, configuration reference, REST / WebSocket / Shell command references, and design overviews. 中文文档中心：[docs/README.md](docs/README.md)（快速开始 / 配置 / API / 设计概要）。
+- 中文文档站：https://mwb1219.github.io/mwb-ai-claw/
+- English site: https://mwb1219.github.io/mwb-ai-claw/en/
+
+Full documentation (quick start, configuration, REST / WebSocket / Shell references, design overviews) is also maintained in [docs/](docs/).
 
 ## License
 
