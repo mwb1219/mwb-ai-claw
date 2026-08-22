@@ -67,6 +67,26 @@ nav_order: 6
 - [ ] `.env` (run directory → install directory) → system environment variables → built-in defaults
 - [ ] Reuse `ConfigFileLocator.readConfigFile(".env")` (see example-embed)
 
+## 8. Example Project: example-embed
+
+> The [`example-embed/`](https://github.com/mwb1219/mwb-ai-claw/tree/master/example-embed) module demonstrates a complete `ClawRuntime` integration in a JVM application without a web container.
+
+- [ ] Covers: first chat (session auto-created), follow-up in the same session (context continuity), streaming chat (`LlmStreamCallback` incremental callbacks), `.env` config loading
+- [ ] Key source: [EmbedDemo.java](https://github.com/mwb1219/mwb-ai-claw/blob/master/example-embed/src/main/java/com/mwb/ai/claw/example/embed/EmbedDemo.java)
+- [ ] Run:
+
+```bash
+# 1. Prepare your key: .env is loaded from run dir → ~/.mwb-ai-claw
+cp .env.example .env        # fill in DEFAULT_API_KEY
+
+# 2. Build core modules and run the demo
+mvn -q -pl example-embed -am install -DskipTests
+mvn -q -pl example-embed org.codehaus.mojo:exec-maven-plugin:3.1.0:java \
+    -Dexec.mainClass=com.mwb.ai.claw.example.embed.EmbedDemo
+```
+
+> Alternatively run `EmbedDemo.main()` directly from your IDE.
+
 ---
 
-See also: [Quick Start](quick-start.md) ｜ [Configuration](configuration.md) ｜ Sample code `example-embed/src/main/java/.../EmbedDemo.java`
+See also: [Quick Start](quick-start.md) ｜ [Configuration](configuration.md) ｜ [Server Integration (Spring Boot Starter)](server-integration.md)

@@ -55,6 +55,28 @@ nav_order: 10
 | Capabilities | Everything (incl. REST / WebSocket / Shell endpoints) | Programmatic API (no HTTP endpoints) |
 | Wiring | Auto-configured by `ClawAutoConfiguration` | Manual via `ClawRuntime.builder()` |
 
+## 7. Example Project: example-web
+
+> The [`example-web/`](https://github.com/mwb1219/mwb-ai-claw/tree/master/example-web) module demonstrates a complete Starter consumer: a Spring Boot server application + user system (register / login / auth) + frontend console.
+
+- [ ] Covers: Starter auto-configuration (REST / SSE / WebSocket), multi-tenant auth (`X-API-Key`), storage switching (H2 for dev / MySQL for production), Agent / orchestration / MCP configuration
+- [ ] Key source: [WebApplication.java](https://github.com/mwb1219/mwb-ai-claw/blob/master/example-web/src/main/java/com/mwb/ai/claw/example/web/WebApplication.java); config in `src/main/resources/application.yml`
+- [ ] Frontend: `example-web-frontend/` (build output `dist/`)
+- [ ] Run:
+
+```bash
+# 1. Prepare your key (.env loaded from run dir → ~/.mwb-ai-claw)
+cp .env.example .env        # fill in DEFAULT_API_KEY
+
+# 2. Build and start (default profile=web, port 8080)
+mvn -q -pl example-web -am package -DskipTests
+java -jar example-web/target/example-web-*.jar
+
+# 3. Open http://localhost:8080 in your browser
+```
+
+- [ ] Switch storage: `--agent.storage.type=db` (H2 for development), or set `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` for MySQL (run `src/main/resources/schema.sql` first)
+
 ---
 
 See also: [Embedding Integration](embedding.md) ｜ [Web Mode Usage](web-usage.md) ｜ [Configuration](configuration.md)

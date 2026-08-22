@@ -67,6 +67,26 @@ nav_order: 6
 - [ ] `.env`（运行目录 → 安装目录）→ 系统环境变量 → 内置默认
 - [ ] 复用 `ConfigFileLocator.readConfigFile(".env")`（见 example-embed）
 
+## 8. 示例项目：example-embed
+
+> 仓库 [`example-embed/`](https://github.com/mwb1219/mwb-ai-claw/tree/master/example-embed) 演示 `ClawRuntime` 在无 Web 容器的 JVM 应用中的完整接入。
+
+- [ ] 覆盖场景：首次对话（自动创建会话）、同会话追问（上下文连续）、流式对话（`LlmStreamCallback` 增量回调）、`.env` 配置加载
+- [ ] 关键代码：[EmbedDemo.java](https://github.com/mwb1219/mwb-ai-claw/blob/master/example-embed/src/main/java/com/mwb/ai/claw/example/embed/EmbedDemo.java)
+- [ ] 运行：
+
+```bash
+# 1. 准备密钥：.env 按 运行目录 → ~/.mwb-ai-claw 顺序加载
+cp .env.example .env        # 填入 DEFAULT_API_KEY
+
+# 2. 构建核心模块并直接运行示例
+mvn -q -pl example-embed -am install -DskipTests
+mvn -q -pl example-embed org.codehaus.mojo:exec-maven-plugin:3.1.0:java \
+    -Dexec.mainClass=com.mwb.ai.claw.example.embed.EmbedDemo
+```
+
+> 也可在 IDE 中直接运行 `EmbedDemo.main()`。
+
 ---
 
-相关：[快速开始](quick-start.md) ｜ [配置详解](configuration.md) ｜ 示例代码 `example-embed/src/main/java/.../EmbedDemo.java`
+相关：[快速开始](quick-start.md) ｜ [配置详解](configuration.md) ｜ [服务端集成（Spring Boot Starter）](server-integration.md)

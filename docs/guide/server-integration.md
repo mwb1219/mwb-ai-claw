@@ -55,6 +55,28 @@ nav_order: 10
 | 能力 | 全部（含 REST / WebSocket / Shell 端点） | 编程式调用（无 HTTP 端点） |
 | 装配方式 | `ClawAutoConfiguration` 自动装配 | `ClawRuntime.builder()` 手动构建 |
 
+## 7. 示例项目：example-web
+
+> 仓库 [`example-web/`](https://github.com/mwb1219/mwb-ai-claw/tree/master/example-web) 演示 Starter 使用方的完整接入：Spring Boot 服务端应用 + 用户系统（注册 / 登录 / 鉴权）+ 前端控制台。
+
+- [ ] 覆盖场景：Starter 自动装配（REST / SSE / WebSocket）、多租户鉴权（`X-API-Key`）、存储切换（H2 联调用 / MySQL 生产）、Agent / 编排 / MCP 配置
+- [ ] 关键代码：[WebApplication.java](https://github.com/mwb1219/mwb-ai-claw/blob/master/example-web/src/main/java/com/mwb/ai/claw/example/web/WebApplication.java)，配置见同目录 `src/main/resources/application.yml`
+- [ ] 前端：`example-web-frontend/`（构建产物 `dist/`）
+- [ ] 运行：
+
+```bash
+# 1. 准备密钥（.env 加载顺序：运行目录 → ~/.mwb-ai-claw）
+cp .env.example .env        # 填入 DEFAULT_API_KEY
+
+# 2. 构建并启动（默认 profile=web，端口 8080）
+mvn -q -pl example-web -am package -DskipTests
+java -jar example-web/target/example-web-*.jar
+
+# 3. 浏览器访问 http://localhost:8080
+```
+
+- [ ] 切换存储：`--agent.storage.type=db`（H2 联调用），或设 `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` 接入 MySQL（先执行 `src/main/resources/schema.sql` 建表）
+
 ---
 
 相关：[嵌入式集成](embedding.md) ｜ [Web 模式使用](web-usage.md) ｜ [配置详解](configuration.md)
