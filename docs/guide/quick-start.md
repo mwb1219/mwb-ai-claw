@@ -11,10 +11,10 @@ nav_order: 1
 
 ## 1. 环境要求
 
-| 模式 | 要求 |
-| --- | --- |
-| 源码运行 | JDK 8+、Maven 3.6+ |
-| 二进制分发包 | 仅 JDK 8+（无需 Maven / 源码） |
+| 模式 | 要求 | 对应方式 |
+| --- | --- | --- |
+| 源码构建 | JDK 8+、Maven 3.6+ | 方式一 / 三 |
+| 二进制分发包 | 仅 JDK 8+（无需 Maven / 源码） | 方式二 |
 
 ## 2. 选择一种方式运行
 
@@ -38,24 +38,14 @@ java -jar start/target/start-*.jar --spring.profiles.active=shell
 > 你好，介绍一下你自己
 ```
 
-### 方式二：安装为全局命令（类 `claude`）
-
-```bash
-./tools/install.sh          # 构建并安装到 ~/.mwb-ai-claw，软链到 PATH
-mwb-ai-claw                 # 任意目录直接进入 Agent Shell
-```
-
-> 首次安装后编辑 `~/.mwb-ai-claw/.env` 填入 `DEFAULT_API_KEY`。
-> 支持参数透传，如 `mwb-ai-claw --agent.orchestration=todo-delegate`。
-
-### 方式三：下载二进制分发包（推荐新手 / 无源码环境）
+### 方式二：下载二进制分发包（推荐新手 / 无源码环境）
 
 ```bash
 # 1. 从 GitHub Releases 下载最新安装包（无需 Maven / 源码，仅需 JDK 8+）
 #    下载页：https://github.com/mwb1219/mwb-ai-claw/releases
 #    资产：mwb-ai-claw-<version>-bin.tar.gz（当前 v1.0.0，约 26MB）
 
-# 2. 解压并一键安装为全局命令
+# 2. 解压并安装为全局命令（包内已含预构建 jar，install.sh 直接安装，无需 mvn）
 tar -xzf mwb-ai-claw-1.0.0-bin.tar.gz
 cd mwb-ai-claw-1.0.0-bin
 ./install.sh
@@ -65,6 +55,17 @@ mwb-ai-claw
 ```
 
 > 需要自行重新打包时：`./tools/package.sh` → `dist/mwb-ai-claw-<version>-bin.tar.gz`。
+
+### 方式三：源码构建 + 安装为全局命令（类 `claude`）
+
+```bash
+./tools/install.sh          # 源码模式下自动执行 mvn package 构建，并安装到 ~/.mwb-ai-claw（软链到 PATH）
+mwb-ai-claw                 # 任意目录直接进入 Agent Shell
+```
+
+> 需要源码与 JDK 8+、Maven 3.6+ 环境。
+> 首次安装后编辑 `~/.mwb-ai-claw/.env` 填入 `DEFAULT_API_KEY`。
+> 支持参数透传，如 `mwb-ai-claw --agent.orchestration=todo-delegate`。
 
 ## 3. 体验 Web 模式（可选）
 
