@@ -66,6 +66,20 @@ mwb-ai-claw                 # 任意目录直接进入 Agent Shell
 > 需要源码与 JDK 8+、Maven 3.6+ 环境。
 > 首次安装后编辑 `~/.mwb-ai-claw/.env` 填入 `DEFAULT_API_KEY`。
 > 支持参数透传，如 `mwb-ai-claw --agent.orchestration=todo-delegate`。
+> 卸载：`./tools/install.sh --uninstall`；安装根目录可用环境变量 `MWB_AI_CLAW_HOME` 覆盖（默认 `~/.mwb-ai-claw`）。
+
+#### tools/ 脚本速查（源码环境常用）
+
+| 脚本 | 用途 |
+| --- | --- |
+| `install.sh` / `install.ps1` | 安装为全局命令。源码模式自动 `mvn package` 构建；解压二进制包后的 `install.sh` 直接用包内 jar，无需 mvn |
+| `package.sh` / `package.ps1` | 打二进制分发包：`dist/mwb-ai-claw-<version>-bin.tar.gz`（`--skip-build` 可复用已构建 jar） |
+| `setup.sh` / `setup.ps1` | 维护者一键「构建 + 打包 + 安装」全流程验证（`--skip-build` 跳过 Maven 构建） |
+| `smoke.sh` | E2E 冒烟测试：5 个场景（echo / fail / tool / anthropic / gemini），自动启动 mock LLM 校验 |
+| `mock_llm.py` | smoke.sh 配套的 mock LLM 服务器（`python3 tools/mock_llm.py --port 19996 --mode echo`） |
+| `ci.sh` | 全量 CI：`mvn clean test` + 打包（与 GitHub Actions 流程一致） |
+
+> 完整配置说明见 [CONFIG-GUIDE.md](https://github.com/mwb1219/mwb-ai-claw/blob/master/CONFIG-GUIDE.md)（密钥 / Agent / 编排 / MCP / 技能）。
 
 ## 3. 体验 Web 模式（可选）
 
