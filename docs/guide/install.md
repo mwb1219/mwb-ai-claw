@@ -21,14 +21,20 @@ nav_order: 2
 - [ ] 安装布局：`~/.mwb-ai-claw/{lib,bin,config,skills,.env}`
 - [ ] 卸载：`./tools/install.sh --uninstall`
 
-## 3. 二进制分发包（tools/package.sh）
+## 3. 二进制分发包（推荐：直接下载）
 
-- [ ] 打包：`./tools/package.sh` → `dist/mwb-ai-claw-<version>-bin.tar.gz`
-- [ ] 分发安装流程（解压 → install.sh → 配置 .env）
+- [ ] 下载：GitHub Releases 页 → 选择最新版本 → 下载 `mwb-ai-claw-<version>-bin.tar.gz`
+      https://github.com/mwb1219/mwb-ai-claw/releases
+- [ ] 安装（macOS / Linux）：解压 → `cd mwb-ai-claw-<version>-bin` → `./install.sh`
+- [ ] 安装（Windows）：解压 → 在包根目录执行 `powershell -ExecutionPolicy Bypass -File .\install.ps1`
+- [ ] 配置：编辑 `~/.mwb-ai-claw/.env`（Windows：`%USERPROFILE%\.mwb-ai-claw\.env`）填入 `DEFAULT_API_KEY`
+- [ ] 启动：`mwb-ai-claw` 直接进入 Shell 模式（终端 REPL）
+- [ ] 可选：本地打包 `./tools/package.sh` → `dist/mwb-ai-claw-<version>-bin.tar.gz`（供内网/离线环境分发）
 
 ## 4. 运行模式
 
 - [ ] Shell 模式：`--spring.profiles.active=shell`（终端 REPL）
+      > 分发包安装后直接运行 `mwb-ai-claw` 即进入 Shell 模式，无需指定参数
 - [ ] Web 模式：`--spring.profiles.active=web`（REST / WS / 前端）
 - [ ] 嵌入式：`ClawRuntime`（见 [embedding.md](embedding.md)）
 - [ ] 常用启动参数（`--server.port`、`--agent.orchestration=...` 等）

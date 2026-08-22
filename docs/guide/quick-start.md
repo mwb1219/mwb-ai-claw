@@ -11,10 +11,10 @@ nav_order: 1
 
 ## 1. 环境要求
 
-| 模式 | 要求 |
-| --- | --- |
-| 源码运行 | JDK 8+、Maven 3.6+ |
-| 二进制分发包 | 仅 JDK 8+（无需 Maven / 源码） |
+| 模式 | 要求 | 对应方式 |
+| --- | --- | --- |
+| 源码构建 | JDK 8+、Maven 3.6+ | 方式一 / 三 |
+| 二进制分发包 | 仅 JDK 8+（无需 Maven / 源码） | 方式二 |
 
 ## 2. 选择一种方式运行
 
@@ -38,22 +38,65 @@ java -jar start/target/start-*.jar --spring.profiles.active=shell
 > 你好，介绍一下你自己
 ```
 
-### 方式二：安装为全局命令（类 `claude`）
+### 方式二：下载二进制分发包（推荐新手 / 无源码环境）
+
+**macOS / Linux**：
 
 ```bash
-./tools/install.sh          # 构建并安装到 ~/.mwb-ai-claw，软链到 PATH
+# 1. 从 GitHub Releases 下载最新安装包（无需 Maven / 源码，仅需 JDK 8+）
+#    下载页：https://github.com/mwb1219/mwb-ai-claw/releases
+#    资产：mwb-ai-claw-<version>-bin.tar.gz（当前 v1.0.0，约 26MB）
+
+# 2. 解压并安装为全局命令（包内已含预构建 jar，install.sh 直接安装，无需 mvn）
+tar -xzf mwb-ai-claw-1.0.0-bin.tar.gz
+cd mwb-ai-claw-1.0.0-bin
+./install.sh
+
+# 3. 编辑 ~/.mwb-ai-claw/.env 填入 DEFAULT_API_KEY，然后启动 Agent Shell
+mwb-ai-claw
+```
+
+**Windows（PowerShell）**：
+
+```powershell
+# 1. 下载 mwb-ai-claw-1.0.0-bin.tar.gz（Windows 10+ 自带 tar 可解压，或用 7-Zip）
+
+# 2. 解压后，在包根目录执行安装脚本（-ExecutionPolicy Bypass 绕过执行策略限制）
+tar -xzf mwb-ai-claw-1.0.0-bin.tar.gz
+cd mwb-ai-claw-1.0.0-bin
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+
+# 3. 编辑 %USERPROFILE%\.mwb-ai-claw\.env 填入 DEFAULT_API_KEY，然后启动 Agent Shell
+mwb-ai-claw
+```
+
+> 卸载（macOS / Linux）：`./install.sh --uninstall`；卸载（Windows）：`.\install.ps1 -Uninstall`。
+> 需要自行重新打包时：`./tools/package.sh` → `dist/mwb-ai-claw-<version>-bin.tar.gz`。
+
+### 方式三：源码构建 + 安装为全局命令（类 `claude`）
+
+```bash
+./tools/install.sh          # 源码模式下自动执行 mvn package 构建，并安装到 ~/.mwb-ai-claw（软链到 PATH）
 mwb-ai-claw                 # 任意目录直接进入 Agent Shell
 ```
 
+> 需要源码与 JDK 8+、Maven 3.6+ 环境。
 > 首次安装后编辑 `~/.mwb-ai-claw/.env` 填入 `DEFAULT_API_KEY`。
 > 支持参数透传，如 `mwb-ai-claw --agent.orchestration=todo-delegate`。
+> 卸载：`./tools/install.sh --uninstall`；安装根目录可用环境变量 `MWB_AI_CLAW_HOME` 覆盖（默认 `~/.mwb-ai-claw`）。
 
-### 方式三：二进制分发包（给无源码环境）
+#### tools/ 脚本速查（源码环境常用）
 
-```bash
-./tools/package.sh          # 产出 dist/mwb-ai-claw-<version>-bin.tar.gz
-# 分发后，解压 → cd mwb-ai-claw-<version>-bin → ./install.sh → 编辑 ~/.mwb-ai-claw/.env → mwb-ai-claw
-```
+| 脚本 | 用途 |
+| --- | --- |
+| `install.sh` / `install.ps1` | 安装为全局命令。源码模式自动 `mvn package` 构建；解压二进制包后的 `install.sh` 直接用包内 jar，无需 mvn |
+| `package.sh` / `package.ps1` | 打二进制分发包：`dist/mwb-ai-claw-<version>-bin.tar.gz`（`--skip-build` 可复用已构建 jar） |
+| `setup.sh` / `setup.ps1` | 维护者一键「构建 + 打包 + 安装」全流程验证（`--skip-build` 跳过 Maven 构建） |
+| `smoke.sh` | E2E 冒烟测试：5 个场景（echo / fail / tool / anthropic / gemini），自动启动 mock LLM 校验 |
+| `mock_llm.py` | smoke.sh 配套的 mock LLM 服务器（`python3 tools/mock_llm.py --port 19996 --mode echo`） |
+| `ci.sh` | 全量 CI：`mvn clean test` + 打包（与 GitHub Actions 流程一致） |
+
+> 完整配置说明见 [CONFIG-GUIDE.md](https://github.com/mwb1219/mwb-ai-claw/blob/master/CONFIG-GUIDE.md)（密钥 / Agent / 编排 / MCP / 技能）。
 
 ## 3. 体验 Web 模式（可选）
 
