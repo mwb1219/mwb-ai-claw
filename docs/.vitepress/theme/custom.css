@@ -1,0 +1,39 @@
+/* ============================================================
+   侧边栏树形结构微调：更贴近 just-the-docs 风格
+   ============================================================ */
+
+/* 父级分组标题：加粗、字号略大，与子项之间用细分隔线 */
+.VPSidebarItem.level-0 > .item {
+  border-bottom: 1px solid var(--vp-c-divider);
+  padding: 8px 0;
+}
+
+.VPSidebarItem.level-0 > .item .text {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+/* 子项容器：左侧竖线 + 缩进，形成树形层级感 */
+.VPSidebarItem.level-0 .items {
+  border-left: 1px solid var(--vp-c-divider);
+  margin-left: 13px;
+  padding-left: 12px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+/* 子项链接留白，层次更清晰 */
+.VPSidebarItem.level-1 > .item {
+  padding: 3px 0;
+}
+
+/* 折叠箭头平滑旋转 */
+.VPSidebarItem .caret {
+  transition: transform 0.25s ease;
+}
+
+/* 当前激活项：浅色背景 + 圆角（左侧品牌色竖条由默认主题渲染） */
+.VPSidebarItem.is-active > .item .link {
+  background-color: var(--vp-c-bg-soft);
+  border-radius: 4px;
+}

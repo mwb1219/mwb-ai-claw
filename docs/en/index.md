@@ -1,8 +1,5 @@
 ---
 title: Documentation (English)
-has_children: true
-nav_order: 4
-permalink: /en/   # 英文文档首页，输出为 /en/index.html
 ---
 
 # mwb-ai-claw Documentation
@@ -10,7 +7,7 @@ permalink: /en/   # 英文文档首页，输出为 /en/index.html
 > English documentation hub. Organized as **User Guide → Design Overview → Quick Reference**.
 > New to the project? Start with the [Quick Start](guide/quick-start.md).
 
-> 中文文档：[docs/README.md](../README.md) — 文档以中文为第一语言，英文版为翻译镜像。
+> 中文文档：[Chinese](../index.md) — 文档以中文为第一语言，英文版为翻译镜像。
 
 ## Quick Start (3 minutes)
 
