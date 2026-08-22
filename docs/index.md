@@ -1,7 +1,5 @@
 ---
 title: 文档中心
-nav_order: 0
-permalink: /   # jekyll-readme-index 在 README 带 front matter 时不生成首页，改用 permalink 输出为 /index.html
 ---
 
 # mwb-ai-claw 文档中心
@@ -9,7 +7,7 @@ permalink: /   # jekyll-readme-index 在 README 带 front matter 时不生成首
 > 面向开源用户的文档总览。按**使用指南 → 设计概要 → 速查参考**三层组织，
 > 首次使用请从「快速开始」进入。
 >
-> 🌐 English version: [docs/en/README.md](en/README.md)
+> 🌐 English version: [English](en/index.md)
 
 ## 快速开始（3 分钟）
 
@@ -59,6 +57,6 @@ permalink: /   # jekyll-readme-index 在 README 带 front matter 时不生成首
 
 ## 文档约定
 
-- 语言：中文为第一语言；完整英文镜像见 [docs/en/](en/README.md)
+- 语言：中文为第一语言；完整英文镜像见 [English](en/index.md)
 - 所有配置项、命令、API 路径以**当前代码**为准，如发现不一致请提 Issue
 - 贡献：欢迎补充/修正文档，遵循 [CONTRIBUTING](https://github.com/mwb1219/mwb-ai-claw/blob/master/CONTRIBUTING.md)（若已建立）
