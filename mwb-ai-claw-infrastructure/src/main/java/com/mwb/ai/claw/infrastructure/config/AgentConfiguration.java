@@ -17,9 +17,9 @@ import com.mwb.ai.claw.domain.core.strategy.CompositeAgentRouter;
 import com.mwb.ai.claw.domain.core.strategy.LlmBasedAgentRouter;
 import com.mwb.ai.claw.domain.core.strategy.RuleBasedAgentRouter;
 import com.mwb.ai.claw.domain.llm.LlmGateway;
-import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
-import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
-import com.mwb.ai.claw.domain.rag.RagContextProvider;
+import com.mwb.ai.claw.domain.memory.gateway.LayeredMemoryGateway;
+import com.mwb.ai.claw.domain.memory.gateway.LongTermMemoryGateway;
+import com.mwb.ai.claw.domain.rag.context.RagContextProvider;
 import com.mwb.ai.claw.domain.skill.SkillGateway;
 import com.mwb.ai.claw.domain.tool.ToolGateway;
 

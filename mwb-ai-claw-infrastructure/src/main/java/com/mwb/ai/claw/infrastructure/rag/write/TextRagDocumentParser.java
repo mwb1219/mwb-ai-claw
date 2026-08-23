@@ -1,12 +1,12 @@
-package com.mwb.ai.claw.infrastructure.rag;
+package com.mwb.ai.claw.infrastructure.rag.write;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-import com.mwb.ai.claw.domain.rag.ParsedDocument;
-import com.mwb.ai.claw.domain.rag.RagDocumentParser;
-import com.mwb.ai.claw.domain.rag.RagDocumentSource;
+import com.mwb.ai.claw.domain.rag.model.ParsedDocument;
+import com.mwb.ai.claw.domain.rag.model.RagDocumentSource;
+import com.mwb.ai.claw.domain.rag.write.RagDocumentParser;
 
 /**
  * 纯文本与 Markdown 文档解析器。

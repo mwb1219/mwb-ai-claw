@@ -1,8 +1,9 @@
-package com.mwb.ai.claw.domain.collaboration;
+package com.mwb.ai.claw.domain.collaboration.spi;
 
 import java.nio.file.Path;
 import java.util.function.Supplier;
 
+import com.mwb.ai.claw.domain.collaboration.model.CollaborationResult;
 import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.ProgressCallback;
 import com.mwb.ai.claw.domain.core.ReActResult;

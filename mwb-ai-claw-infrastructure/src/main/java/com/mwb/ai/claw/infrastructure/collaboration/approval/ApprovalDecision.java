@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.infrastructure.collaboration;
+package com.mwb.ai.claw.infrastructure.collaboration.approval;
 
 /**
  * 人工审批决策（P1 交互与上下文）：

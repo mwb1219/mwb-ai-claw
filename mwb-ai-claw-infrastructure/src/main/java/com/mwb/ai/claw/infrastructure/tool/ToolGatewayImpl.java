@@ -1,7 +1,7 @@
 package com.mwb.ai.claw.infrastructure.tool;
 
 import com.mwb.ai.claw.domain.core.ProgressCallback;
-import com.mwb.ai.claw.domain.rag.RagRequestContext;
+import com.mwb.ai.claw.domain.rag.context.RagRequestContext;
 import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.domain.tool.DynamicToolRegistry;
 import com.mwb.ai.claw.domain.tool.ToolExecutor;

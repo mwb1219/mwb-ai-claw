@@ -10,8 +10,8 @@ import javax.annotation.PostConstruct;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
-import com.mwb.ai.claw.domain.memory.LayeredMemoryConfig;
-import com.mwb.ai.claw.domain.rag.RagConfig;
+import com.mwb.ai.claw.domain.memory.model.LayeredMemoryConfig;
+import com.mwb.ai.claw.domain.rag.config.RagConfig;
 
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;

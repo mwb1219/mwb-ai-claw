@@ -1,7 +1,7 @@
 package com.mwb.ai.claw.infrastructure.util;
 
 import com.mwb.ai.claw.domain.core.Message;
-import com.mwb.ai.claw.domain.memory.MemoryPage;
+import com.mwb.ai.claw.domain.memory.model.MemoryPage;
 
 import java.util.List;
 

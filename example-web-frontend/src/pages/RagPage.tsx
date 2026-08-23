@@ -46,10 +46,10 @@ export function RagPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // 摄入表单
+  // 摄入表单（文件上传）
   const [docName, setDocName] = useState('');
   const [docId, setDocId] = useState('');
-  const [docContent, setDocContent] = useState('');
+  const [file, setFile] = useState<File | null>(null);
   const [ingesting, setIngesting] = useState(false);
 
   // 检索调试
@@ -101,19 +101,14 @@ export function RagPage() {
   };
 
   const ingest = async () => {
-    if (!currentKb || !docContent.trim()) return;
+    if (!currentKb || !file) return;
     setIngesting(true);
     setError('');
     try {
-      await ragApi.ingest(currentKb, {
-        documentId: docId.trim() || undefined,
-        name: docName.trim() || undefined,
-        contentType: 'text/plain',
-        content: docContent,
-      });
+      await ragApi.upload(currentKb, file, docId, docName);
       setDocName('');
       setDocId('');
-      setDocContent('');
+      setFile(null);
       await loadDocs(currentKb);
     } catch (err) {
       setError((err as Error).message);
@@ -244,21 +239,29 @@ export function RagPage() {
               />
             </label>
             <label className="form-field form-field-wide">
-              <span className="form-label">内容</span>
-              <textarea
-                value={docContent}
-                rows={7}
-                placeholder="粘贴文档正文（Markdown / 纯文本），提交后自动解析 → 切分 → 向量化 → 写入索引"
-                onChange={(e) => setDocContent(e.target.value)}
+              <span className="form-label">文档文件</span>
+              <input
+                type="file"
+                accept=".txt,.md,.markdown,text/plain,text/markdown"
+                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               />
+              {file ? (
+                <span className="text-faint">
+                  {file.name}（{(file.size / 1024).toFixed(1)} KB）
+                </span>
+              ) : (
+                <span className="text-faint">
+                  支持 Markdown / 纯文本，提交后自动解析 → 切分 → 向量化 → 写入索引，无大小限制
+                </span>
+              )}
             </label>
             <Button
               variant="primary"
               icon={FilePlus2}
-              disabled={!currentKb || !docContent.trim() || ingesting}
+              disabled={!currentKb || !file || ingesting}
               onClick={() => void ingest()}
             >
-              {ingesting ? '写入中…' : '摄入文档'}
+              {ingesting ? '上传中…' : '上传文档'}
             </Button>
           </div>
         </Card>

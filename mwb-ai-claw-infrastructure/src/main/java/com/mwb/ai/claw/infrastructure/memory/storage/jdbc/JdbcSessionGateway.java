@@ -6,7 +6,7 @@ import java.util.List;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.mwb.ai.claw.domain.core.Session;
-import com.mwb.ai.claw.domain.memory.MemoryGateway;
+import com.mwb.ai.claw.domain.memory.gateway.MemoryGateway;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.infrastructure.util.JsonUtils;
 

@@ -16,15 +16,15 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.mwb.ai.claw.dto.SingleResponse;
-import com.mwb.ai.claw.domain.memory.LayeredMemoryConfig;
-import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
-import com.mwb.ai.claw.domain.memory.MemoryPage;
-import com.mwb.ai.claw.domain.memory.MemoryPageStore;
+import com.mwb.ai.claw.domain.memory.gateway.LayeredMemoryGateway;
+import com.mwb.ai.claw.domain.memory.model.LayeredMemoryConfig;
+import com.mwb.ai.claw.domain.memory.model.MemoryPage;
+import com.mwb.ai.claw.domain.memory.store.MemoryPageStore;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
-import com.mwb.ai.claw.infrastructure.memory.MemorySynthesisExecutor;
-import com.mwb.ai.claw.infrastructure.memory.SynthesisCache;
+import com.mwb.ai.claw.infrastructure.memory.synthesis.MemorySynthesisExecutor;
+import com.mwb.ai.claw.infrastructure.memory.synthesis.SynthesisCache;
 import com.mwb.ai.claw.infrastructure.util.TokenEstimator;
 
 /**

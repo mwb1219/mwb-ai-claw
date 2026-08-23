@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.infrastructure.rag;
+package com.mwb.ai.claw.infrastructure.rag.context;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -6,11 +6,11 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.mwb.ai.claw.domain.rag.RagConfig;
-import com.mwb.ai.claw.domain.rag.RagContextProvider;
-import com.mwb.ai.claw.domain.rag.RagQuery;
-import com.mwb.ai.claw.domain.rag.RagRetrievalService;
-import com.mwb.ai.claw.domain.rag.RagSearchResult;
+import com.mwb.ai.claw.domain.rag.config.RagConfig;
+import com.mwb.ai.claw.domain.rag.context.RagContextProvider;
+import com.mwb.ai.claw.domain.rag.model.RagQuery;
+import com.mwb.ai.claw.domain.rag.model.RagSearchResult;
+import com.mwb.ai.claw.domain.rag.retrieve.RagRetrievalService;
 
 /**
  * 将 RAG 命中格式化为独立的知识库上下文区。

@@ -17,11 +17,12 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestTemplate;
 
-import com.mwb.ai.claw.domain.rag.RagEmbeddingGateway;
-import com.mwb.ai.claw.domain.rag.RagIngestionService;
-import com.mwb.ai.claw.domain.rag.RagRetrievalService;
+import com.mwb.ai.claw.domain.rag.embed.RagEmbeddingGateway;
+import com.mwb.ai.claw.domain.rag.retrieve.RagRetrievalService;
+import com.mwb.ai.claw.domain.rag.write.RagIngestionService;
 import com.mwb.ai.claw.infrastructure.autoconfigure.ClawCoreAutoConfiguration;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
+import com.mwb.ai.claw.infrastructure.rag.embed.OpenAiRagEmbeddingGateway;
 
 /**
  * RAG 开关和 SPI 覆盖规则测试。

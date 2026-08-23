@@ -12,7 +12,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestTemplate;
 
-import com.mwb.ai.claw.domain.rag.RagConfig;
+import com.mwb.ai.claw.domain.rag.config.RagConfig;
+import com.mwb.ai.claw.infrastructure.rag.embed.OpenAiRagEmbeddingGateway;
 
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;

@@ -31,24 +31,24 @@ import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.mwb.ai.claw.domain.collaboration.AgentOrchestrator;
-import com.mwb.ai.claw.domain.collaboration.CollaborationResult;
-import com.mwb.ai.claw.domain.collaboration.OrchestrationContext;
-import com.mwb.ai.claw.domain.collaboration.OrchestrationDefinition;
+import com.mwb.ai.claw.domain.collaboration.model.CollaborationResult;
+import com.mwb.ai.claw.domain.collaboration.model.OrchestrationContext;
+import com.mwb.ai.claw.domain.collaboration.model.OrchestrationDefinition;
+import com.mwb.ai.claw.domain.collaboration.spi.AgentOrchestrator;
 import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.AgentGateway;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
-import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
-import com.mwb.ai.claw.domain.rag.RagRequestContext;
+import com.mwb.ai.claw.domain.memory.gateway.LayeredMemoryGateway;
+import com.mwb.ai.claw.domain.rag.context.RagRequestContext;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.dto.data.AgentErrorCode;
 import com.mwb.ai.claw.exception.BizException;
-import com.mwb.ai.claw.infrastructure.collaboration.ApprovalDecision;
-import com.mwb.ai.claw.infrastructure.collaboration.ApprovalRegistry;
-import com.mwb.ai.claw.infrastructure.collaboration.DelegateDefinition;
-import com.mwb.ai.claw.infrastructure.collaboration.PendingApproval;
-import com.mwb.ai.claw.infrastructure.collaboration.TodoDefinition;
-import com.mwb.ai.claw.infrastructure.collaboration.TodoStatus;
+import com.mwb.ai.claw.infrastructure.collaboration.approval.ApprovalDecision;
+import com.mwb.ai.claw.infrastructure.collaboration.approval.ApprovalRegistry;
+import com.mwb.ai.claw.infrastructure.collaboration.approval.PendingApproval;
+import com.mwb.ai.claw.infrastructure.collaboration.model.DelegateDefinition;
+import com.mwb.ai.claw.infrastructure.collaboration.model.TodoDefinition;
+import com.mwb.ai.claw.infrastructure.collaboration.model.TodoStatus;
 import com.mwb.ai.claw.infrastructure.util.JsonUtils;
 
 /**

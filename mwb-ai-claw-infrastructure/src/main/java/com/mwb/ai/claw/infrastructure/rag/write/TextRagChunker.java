@@ -1,15 +1,15 @@
-package com.mwb.ai.claw.infrastructure.rag;
+package com.mwb.ai.claw.infrastructure.rag.write;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.mwb.ai.claw.domain.rag.ParsedDocument;
-import com.mwb.ai.claw.domain.rag.RagChunk;
-import com.mwb.ai.claw.domain.rag.RagChunker;
-import com.mwb.ai.claw.domain.rag.RagConfig;
-import com.mwb.ai.claw.domain.rag.RagDocument;
+import com.mwb.ai.claw.domain.rag.config.RagConfig;
+import com.mwb.ai.claw.domain.rag.model.ParsedDocument;
+import com.mwb.ai.claw.domain.rag.model.RagChunk;
+import com.mwb.ai.claw.domain.rag.model.RagDocument;
+import com.mwb.ai.claw.domain.rag.write.RagChunker;
 
 /**
  * 按 Markdown 章节、自然边界和字符上限切分文本。

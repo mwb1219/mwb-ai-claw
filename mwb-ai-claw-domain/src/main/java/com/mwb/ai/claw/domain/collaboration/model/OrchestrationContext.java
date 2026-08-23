@@ -1,5 +1,6 @@
-package com.mwb.ai.claw.domain.collaboration;
+package com.mwb.ai.claw.domain.collaboration.model;
 
+import com.mwb.ai.claw.domain.collaboration.spi.ExecutionUnit;
 import com.mwb.ai.claw.domain.core.AgentGateway;
 import com.mwb.ai.claw.domain.core.ProgressCallback;
 import com.mwb.ai.claw.domain.llm.ContentPart;

@@ -19,10 +19,10 @@ import static org.junit.Assert.assertTrue;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.mwb.ai.claw.domain.collaboration.CollaborationResult;
-import com.mwb.ai.claw.domain.collaboration.ExecutionUnit;
-import com.mwb.ai.claw.domain.collaboration.OrchestrationContext;
-import com.mwb.ai.claw.domain.collaboration.OrchestrationDefinition;
+import com.mwb.ai.claw.domain.collaboration.model.CollaborationResult;
+import com.mwb.ai.claw.domain.collaboration.spi.ExecutionUnit;
+import com.mwb.ai.claw.domain.collaboration.model.OrchestrationContext;
+import com.mwb.ai.claw.domain.collaboration.model.OrchestrationDefinition;
 import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.AgentGateway;
 import com.mwb.ai.claw.domain.core.ModelConfig;
@@ -30,13 +30,13 @@ import com.mwb.ai.claw.domain.core.ProgressCallback;
 import com.mwb.ai.claw.domain.core.ReActResult;
 import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
-import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
-import com.mwb.ai.claw.domain.memory.MemoryPage;
+import com.mwb.ai.claw.domain.memory.gateway.LayeredMemoryGateway;
+import com.mwb.ai.claw.domain.memory.model.MemoryPage;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.exception.BizException;
-import com.mwb.ai.claw.infrastructure.collaboration.ApprovalRegistry;
-import com.mwb.ai.claw.infrastructure.collaboration.PendingApproval;
-import com.mwb.ai.claw.infrastructure.collaboration.TodoStatus;
+import com.mwb.ai.claw.infrastructure.collaboration.approval.ApprovalRegistry;
+import com.mwb.ai.claw.infrastructure.collaboration.approval.PendingApproval;
+import com.mwb.ai.claw.infrastructure.collaboration.model.TodoStatus;
 
 /**
  * 委托编排单元测试：通过 fake AgentGateway / ExecutionUnit 验证

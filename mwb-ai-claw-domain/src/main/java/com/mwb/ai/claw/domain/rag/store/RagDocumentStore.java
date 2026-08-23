@@ -1,6 +1,8 @@
-package com.mwb.ai.claw.domain.rag;
+package com.mwb.ai.claw.domain.rag.store;
 
 import java.util.List;
+
+import com.mwb.ai.claw.domain.rag.model.RagDocument;
 
 /**
  * RAG 原始文档及状态存储 SPI。

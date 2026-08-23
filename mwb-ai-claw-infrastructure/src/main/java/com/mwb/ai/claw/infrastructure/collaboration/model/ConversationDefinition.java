@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.infrastructure.collaboration;
+package com.mwb.ai.claw.infrastructure.collaboration.model;
 
 import lombok.Data;
 

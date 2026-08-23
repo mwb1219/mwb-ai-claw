@@ -1,6 +1,6 @@
-package com.mwb.ai.claw.infrastructure.memory;
+package com.mwb.ai.claw.infrastructure.memory.gateway;
 
-import com.mwb.ai.claw.domain.memory.MemoryGateway;
+import com.mwb.ai.claw.domain.memory.gateway.MemoryGateway;
 import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 

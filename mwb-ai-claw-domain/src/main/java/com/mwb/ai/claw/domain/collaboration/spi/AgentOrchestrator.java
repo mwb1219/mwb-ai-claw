@@ -1,4 +1,8 @@
-package com.mwb.ai.claw.domain.collaboration;
+package com.mwb.ai.claw.domain.collaboration.spi;
+
+import com.mwb.ai.claw.domain.collaboration.model.CollaborationResult;
+import com.mwb.ai.claw.domain.collaboration.model.OrchestrationContext;
+import com.mwb.ai.claw.domain.collaboration.model.OrchestrationDefinition;
 
 /**
  * 编排插件 SPI：编排方式的可插拔实现。

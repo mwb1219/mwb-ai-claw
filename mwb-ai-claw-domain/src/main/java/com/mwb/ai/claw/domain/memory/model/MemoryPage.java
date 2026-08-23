@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.domain.memory;
+package com.mwb.ai.claw.domain.memory.model;
 
 /**
  * 记忆页：分层记忆的最小存储单元。

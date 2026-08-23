@@ -10,7 +10,8 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * CORS 配置：放行独立前端工程（example-web-frontend，Vite dev server / 静态托管）跨域访问
  * {@code /agent/**}、{@code /memory/**} 及接入方 {@code /user/**}、{@code /auth/**} 接口。
  * <p>
- * 允许来源通过环境变量 {@code WEB_CORS_ORIGINS} 配置（逗号分隔），默认 {@code http://localhost:5173}（Vite dev）。
+ * 允许来源由 application.yml 的 {@code example.cors.allowed-origins} 配置（逗号分隔），
+ * 支持环境变量 {@code EXAMPLE_CORS_ALLOWED_ORIGINS} 覆盖，默认 {@code http://localhost:5173,http://localhost:5174}（Vite dev）。
  * 生产环境请显式配置为实际前端域名；API Key 鉴权走 Header，无需 Cookie，故不允许携带凭证。
  *
  * @author Frank Zhang
@@ -19,7 +20,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Profile("web")
 public class CorsConfig implements WebMvcConfigurer {
 
-    @Value("${WEB_CORS_ORIGINS:http://localhost:5173}")
+    @Value("${example.cors.allowed-origins:http://localhost:5173,http://localhost:5174}")
     private String corsOrigins;
 
     @Override

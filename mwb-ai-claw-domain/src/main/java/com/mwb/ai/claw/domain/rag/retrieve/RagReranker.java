@@ -1,6 +1,8 @@
-package com.mwb.ai.claw.domain.rag;
+package com.mwb.ai.claw.domain.rag.retrieve;
 
 import java.util.List;
+
+import com.mwb.ai.claw.domain.rag.model.RagSearchResult;
 
 /**
  * 可选的 RAG 结果重排 SPI。

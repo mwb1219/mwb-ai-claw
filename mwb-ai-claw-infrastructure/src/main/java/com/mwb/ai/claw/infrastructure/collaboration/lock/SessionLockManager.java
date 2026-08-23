@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.infrastructure.collaboration;
+package com.mwb.ai.claw.infrastructure.collaboration.lock;
 
 import java.util.function.Supplier;
 

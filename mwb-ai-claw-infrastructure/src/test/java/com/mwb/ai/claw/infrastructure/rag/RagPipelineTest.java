@@ -19,14 +19,20 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
-import com.mwb.ai.claw.domain.rag.RagConfig;
-import com.mwb.ai.claw.domain.rag.RagDocument;
-import com.mwb.ai.claw.domain.rag.RagEmbeddingGateway;
-import com.mwb.ai.claw.domain.rag.RagIndexEntry;
-import com.mwb.ai.claw.domain.rag.RagIngestionCommand;
-import com.mwb.ai.claw.domain.rag.RagIngestionResult;
-import com.mwb.ai.claw.domain.rag.RagQuery;
-import com.mwb.ai.claw.domain.rag.RagSearchResult;
+import com.mwb.ai.claw.domain.rag.config.RagConfig;
+import com.mwb.ai.claw.domain.rag.embed.RagEmbeddingGateway;
+import com.mwb.ai.claw.domain.rag.model.RagDocument;
+import com.mwb.ai.claw.domain.rag.model.RagIndexEntry;
+import com.mwb.ai.claw.domain.rag.model.RagIngestionCommand;
+import com.mwb.ai.claw.domain.rag.model.RagIngestionResult;
+import com.mwb.ai.claw.domain.rag.model.RagQuery;
+import com.mwb.ai.claw.domain.rag.model.RagSearchResult;
+import com.mwb.ai.claw.infrastructure.rag.retrieve.DefaultRagRetrievalService;
+import com.mwb.ai.claw.infrastructure.rag.store.FileRagDocumentStore;
+import com.mwb.ai.claw.infrastructure.rag.store.LocalRagIndexStore;
+import com.mwb.ai.claw.infrastructure.rag.write.DefaultRagIngestionService;
+import com.mwb.ai.claw.infrastructure.rag.write.TextRagChunker;
+import com.mwb.ai.claw.infrastructure.rag.write.TextRagDocumentParser;
 
 /**
  * 独立 RAG 本地写入与检索链路测试。

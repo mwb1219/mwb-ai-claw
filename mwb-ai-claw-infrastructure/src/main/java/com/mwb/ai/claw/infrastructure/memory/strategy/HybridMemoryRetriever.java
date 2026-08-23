@@ -1,8 +1,8 @@
 package com.mwb.ai.claw.infrastructure.memory.strategy;
 
-import com.mwb.ai.claw.domain.memory.LayeredMemoryConfig;
-import com.mwb.ai.claw.domain.memory.MemoryPage;
-import com.mwb.ai.claw.domain.memory.MemoryRetriever;
+import com.mwb.ai.claw.domain.memory.model.LayeredMemoryConfig;
+import com.mwb.ai.claw.domain.memory.model.MemoryPage;
+import com.mwb.ai.claw.domain.memory.retrieve.MemoryRetriever;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import org.slf4j.Logger;
@@ -22,7 +22,7 @@ import java.util.Map;
  * - retriever=vector：仅向量检索（需 embedding 可用）；
  * - retriever=hybrid（默认）：关键词 + 向量结果按 RRF（Reciprocal Rank Fusion）融合排序。
  * <p>
- * 作为 {@code @Primary} 注入到 {@link com.mwb.ai.claw.domain.memory.LayeredMemoryGateway}，
+ * 作为 {@code @Primary} 注入到 {@link com.mwb.ai.claw.domain.memory.gateway.LayeredMemoryGateway}，
  * 其余实现保留为独立 Bean 便于测试与组合。
  */
 @Component

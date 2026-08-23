@@ -7,11 +7,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 
-import com.mwb.ai.claw.domain.rag.RagChunker;
-import com.mwb.ai.claw.domain.rag.RagContextProvider;
-import com.mwb.ai.claw.domain.rag.RagIngestionService;
-import com.mwb.ai.claw.domain.rag.RagReranker;
-import com.mwb.ai.claw.domain.rag.RagRetrievalService;
+import com.mwb.ai.claw.domain.rag.context.RagContextProvider;
+import com.mwb.ai.claw.domain.rag.retrieve.RagReranker;
+import com.mwb.ai.claw.domain.rag.retrieve.RagRetrievalService;
+import com.mwb.ai.claw.domain.rag.write.RagChunker;
+import com.mwb.ai.claw.domain.rag.write.RagIngestionService;
 import com.mwb.ai.claw.example.web.WebApplication;
 
 /**

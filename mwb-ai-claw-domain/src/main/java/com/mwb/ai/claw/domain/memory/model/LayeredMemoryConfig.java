@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.domain.memory;
+package com.mwb.ai.claw.domain.memory.model;
 
 /**
  * 分层记忆配置（绑定 application.yml 的 agent.memory 前缀）。

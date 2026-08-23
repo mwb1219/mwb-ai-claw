@@ -1,4 +1,6 @@
-package com.mwb.ai.claw.domain.memory;
+package com.mwb.ai.claw.domain.memory.evict;
+
+import com.mwb.ai.claw.domain.memory.model.EvictionContext;
 
 /**
  * 换页策略接口（可插拔）：决定何时把最旧的历史消息块压缩为摘要页。

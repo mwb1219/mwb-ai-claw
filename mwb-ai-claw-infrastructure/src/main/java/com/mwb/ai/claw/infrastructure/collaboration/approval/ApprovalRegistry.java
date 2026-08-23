@@ -1,10 +1,11 @@
-package com.mwb.ai.claw.infrastructure.collaboration;
+package com.mwb.ai.claw.infrastructure.collaboration.approval;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.mwb.ai.claw.domain.scope.AgentScope;
+import com.mwb.ai.claw.infrastructure.collaboration.model.TodoDefinition;
 
 import java.util.ArrayList;
 import java.util.List;

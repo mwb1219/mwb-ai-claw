@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.infrastructure.rag;
+package com.mwb.ai.claw.infrastructure.rag.write;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -6,23 +6,25 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-import com.mwb.ai.claw.domain.rag.ParsedDocument;
-import com.mwb.ai.claw.domain.rag.RagChunk;
-import com.mwb.ai.claw.domain.rag.RagChunker;
-import com.mwb.ai.claw.domain.rag.RagConfig;
-import com.mwb.ai.claw.domain.rag.RagDocument;
-import com.mwb.ai.claw.domain.rag.RagDocumentParser;
-import com.mwb.ai.claw.domain.rag.RagDocumentSource;
-import com.mwb.ai.claw.domain.rag.RagDocumentStore;
-import com.mwb.ai.claw.domain.rag.RagEmbeddingGateway;
-import com.mwb.ai.claw.domain.rag.RagIndexEntry;
-import com.mwb.ai.claw.domain.rag.RagIndexStore;
-import com.mwb.ai.claw.domain.rag.RagIngestionCommand;
-import com.mwb.ai.claw.domain.rag.RagIngestionResult;
-import com.mwb.ai.claw.domain.rag.RagIngestionService;
+import com.mwb.ai.claw.domain.rag.config.RagConfig;
+import com.mwb.ai.claw.domain.rag.embed.RagEmbeddingGateway;
+import com.mwb.ai.claw.domain.rag.model.ParsedDocument;
+import com.mwb.ai.claw.domain.rag.model.RagChunk;
+import com.mwb.ai.claw.domain.rag.model.RagDocument;
+import com.mwb.ai.claw.domain.rag.model.RagDocumentSource;
+import com.mwb.ai.claw.domain.rag.model.RagIndexEntry;
+import com.mwb.ai.claw.domain.rag.model.RagIngestionCommand;
+import com.mwb.ai.claw.domain.rag.model.RagIngestionResult;
+import com.mwb.ai.claw.domain.rag.store.RagDocumentStore;
+import com.mwb.ai.claw.domain.rag.store.RagIndexStore;
+import com.mwb.ai.claw.domain.rag.write.RagChunker;
+import com.mwb.ai.claw.domain.rag.write.RagDocumentParser;
+import com.mwb.ai.claw.domain.rag.write.RagIngestionService;
+import com.mwb.ai.claw.infrastructure.rag.store.RagFileSupport;
 
 /**
  * 默认 RAG 写入服务。
@@ -86,6 +88,7 @@ public class DefaultRagIngestionService implements RagIngestionService {
     }
 
     private RagIngestionResult ingest(RagIngestionCommand command, boolean force) {
+        ensureDocumentId(command);
         validate(command);
         String knowledgeBaseId = command.getKnowledgeBaseId();
         String documentId = command.getDocumentId();
@@ -220,6 +223,13 @@ public class DefaultRagIngestionService implements RagIngestionService {
         processing.setLastError(truncate(error.getMessage()));
         processing.setUpdateTime(System.currentTimeMillis());
         documentStore.save(processing);
+    }
+
+    /** 文档 ID 为空时自动生成（兑现 RagIngestionCommand.documentId「为空时由实现生成」约定）。 */
+    private void ensureDocumentId(RagIngestionCommand command) {
+        if (blank(command.getDocumentId())) {
+            command.setDocumentId(UUID.randomUUID().toString().replace("-", ""));
+        }
     }
 
     private void validate(RagIngestionCommand command) {

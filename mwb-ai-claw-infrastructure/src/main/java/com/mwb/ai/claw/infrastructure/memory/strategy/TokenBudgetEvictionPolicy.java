@@ -1,7 +1,7 @@
 package com.mwb.ai.claw.infrastructure.memory.strategy;
 
-import com.mwb.ai.claw.domain.memory.EvictionContext;
-import com.mwb.ai.claw.domain.memory.PageEvictionPolicy;
+import com.mwb.ai.claw.domain.memory.evict.PageEvictionPolicy;
+import com.mwb.ai.claw.domain.memory.model.EvictionContext;
 
 /**
  * 预算驱动换页策略（默认）：消息总量超预算，或未摘要消息达到块大小的 2 倍时触发换页。

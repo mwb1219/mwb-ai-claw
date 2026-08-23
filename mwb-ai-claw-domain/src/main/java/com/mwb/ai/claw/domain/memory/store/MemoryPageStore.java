@@ -1,5 +1,6 @@
-package com.mwb.ai.claw.domain.memory;
+package com.mwb.ai.claw.domain.memory.store;
 
+import com.mwb.ai.claw.domain.memory.model.MemoryPage;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 
 import java.util.List;

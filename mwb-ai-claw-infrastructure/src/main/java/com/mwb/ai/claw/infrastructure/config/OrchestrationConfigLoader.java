@@ -1,10 +1,10 @@
 package com.mwb.ai.claw.infrastructure.config;
 
 import com.mwb.ai.claw.exception.BizException;
-import com.mwb.ai.claw.domain.collaboration.AgentOrchestrator;
-import com.mwb.ai.claw.domain.collaboration.OrchestrationDefinition;
+import com.mwb.ai.claw.domain.collaboration.model.OrchestrationDefinition;
+import com.mwb.ai.claw.domain.collaboration.spi.AgentOrchestrator;
 import com.mwb.ai.claw.dto.data.AgentErrorCode;
-import com.mwb.ai.claw.infrastructure.collaboration.OrchestratorRegistry;
+import com.mwb.ai.claw.infrastructure.collaboration.registry.OrchestratorRegistry;
 import com.mwb.ai.claw.infrastructure.util.ConfigFileLocator;
 import com.mwb.ai.claw.infrastructure.util.JsonUtils;
 import org.slf4j.Logger;

@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.infrastructure.rag;
+package com.mwb.ai.claw.infrastructure.rag.retrieve;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -10,16 +10,17 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.mwb.ai.claw.domain.rag.RagConfig;
-import com.mwb.ai.claw.domain.rag.RagDocument;
-import com.mwb.ai.claw.domain.rag.RagDocumentStore;
-import com.mwb.ai.claw.domain.rag.RagEmbeddingGateway;
-import com.mwb.ai.claw.domain.rag.RagIndexStore;
-import com.mwb.ai.claw.domain.rag.RagQuery;
-import com.mwb.ai.claw.domain.rag.RagReranker;
-import com.mwb.ai.claw.domain.rag.RagRetrievalService;
-import com.mwb.ai.claw.domain.rag.RagSearchResult;
-import com.mwb.ai.claw.domain.rag.RagVectorQuery;
+import com.mwb.ai.claw.domain.rag.config.RagConfig;
+import com.mwb.ai.claw.domain.rag.embed.RagEmbeddingGateway;
+import com.mwb.ai.claw.domain.rag.model.RagDocument;
+import com.mwb.ai.claw.domain.rag.model.RagQuery;
+import com.mwb.ai.claw.domain.rag.model.RagSearchResult;
+import com.mwb.ai.claw.domain.rag.model.RagVectorQuery;
+import com.mwb.ai.claw.domain.rag.retrieve.RagReranker;
+import com.mwb.ai.claw.domain.rag.retrieve.RagRetrievalService;
+import com.mwb.ai.claw.domain.rag.store.RagDocumentStore;
+import com.mwb.ai.claw.domain.rag.store.RagIndexStore;
+import com.mwb.ai.claw.infrastructure.rag.store.RagFileSupport;
 
 /**
  * 默认 RAG 向量检索服务。

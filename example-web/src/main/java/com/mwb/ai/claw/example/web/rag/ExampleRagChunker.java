@@ -2,10 +2,10 @@ package com.mwb.ai.claw.example.web.rag;
 
 import java.util.List;
 
-import com.mwb.ai.claw.domain.rag.ParsedDocument;
-import com.mwb.ai.claw.domain.rag.RagChunk;
-import com.mwb.ai.claw.domain.rag.RagChunker;
-import com.mwb.ai.claw.domain.rag.RagDocument;
+import com.mwb.ai.claw.domain.rag.model.ParsedDocument;
+import com.mwb.ai.claw.domain.rag.model.RagChunk;
+import com.mwb.ai.claw.domain.rag.model.RagDocument;
+import com.mwb.ai.claw.domain.rag.write.RagChunker;
 
 /**
  * 示例切分器（装饰模式）：委托默认 {@link TextRagChunker} 完成切分，

@@ -5,7 +5,7 @@ import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.ModelConfig;
 import com.mwb.ai.claw.domain.core.AgentGateway;
-import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
+import com.mwb.ai.claw.domain.memory.gateway.LongTermMemoryGateway;
 import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import java.util.ArrayList;
 import java.util.List;

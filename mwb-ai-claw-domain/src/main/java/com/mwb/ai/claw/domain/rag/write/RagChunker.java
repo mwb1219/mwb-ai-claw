@@ -1,6 +1,10 @@
-package com.mwb.ai.claw.domain.rag;
+package com.mwb.ai.claw.domain.rag.write;
 
 import java.util.List;
+
+import com.mwb.ai.claw.domain.rag.model.ParsedDocument;
+import com.mwb.ai.claw.domain.rag.model.RagChunk;
+import com.mwb.ai.claw.domain.rag.model.RagDocument;
 
 /**
  * RAG 文本切分 SPI。

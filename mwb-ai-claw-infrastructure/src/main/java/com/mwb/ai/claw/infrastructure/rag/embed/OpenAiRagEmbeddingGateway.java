@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.infrastructure.rag;
+package com.mwb.ai.claw.infrastructure.rag.embed;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -13,8 +13,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestTemplate;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.mwb.ai.claw.domain.rag.RagConfig;
-import com.mwb.ai.claw.domain.rag.RagEmbeddingGateway;
+import com.mwb.ai.claw.domain.rag.config.RagConfig;
+import com.mwb.ai.claw.domain.rag.embed.RagEmbeddingGateway;
 import com.mwb.ai.claw.infrastructure.util.JsonUtils;
 
 /**
@@ -52,6 +52,22 @@ public class OpenAiRagEmbeddingGateway implements RagEmbeddingGateway {
         if (modelId().isEmpty()) {
             throw new IllegalStateException("agent.rag.embedding.model 未配置");
         }
+        int maxBatch = config.getMaxBatchSize();
+        if (maxBatch <= 0) {
+            throw new IllegalArgumentException("agent.rag.embedding.max-batch-size 必须大于 0");
+        }
+        // 模型对单次请求的批量有上限（如阿里云 MaaS 为 20），按 max-batch-size 内部分批，
+        // 调用方传入的批次（embedding-batch-size）可大于该值而不会触发 400。
+        List<float[]> all = new ArrayList<>(texts.size());
+        for (int start = 0; start < texts.size(); start += maxBatch) {
+            int end = Math.min(texts.size(), start + maxBatch);
+            all.addAll(postBatch(texts.subList(start, end)));
+        }
+        return all;
+    }
+
+    /** 单次 HTTP 调用（不超过 max-batch-size），并校验返回数量与顺序。 */
+    private List<float[]> postBatch(List<String> texts) {
         try {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("model", modelId());

@@ -1,8 +1,9 @@
-package com.mwb.ai.claw.domain.memory;
+package com.mwb.ai.claw.domain.memory.gateway;
 
 import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.Message;
 import com.mwb.ai.claw.domain.core.Session;
+import com.mwb.ai.claw.domain.memory.model.MemoryPage;
 
 import java.util.List;
 

@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.infrastructure.memory;
+package com.mwb.ai.claw.infrastructure.memory.gateway;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -15,20 +15,21 @@ import com.mwb.ai.claw.domain.core.Message;
 import com.mwb.ai.claw.domain.core.MessageRole;
 import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.llm.ToolCall;
-import com.mwb.ai.claw.domain.memory.EvictionContext;
-import com.mwb.ai.claw.domain.memory.LayeredMemoryConfig;
-import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
-import com.mwb.ai.claw.domain.memory.MemoryBudget;
-import com.mwb.ai.claw.domain.memory.MemoryPage;
-import com.mwb.ai.claw.domain.memory.MemoryPageStore;
-import com.mwb.ai.claw.domain.memory.MemoryRetriever;
-import com.mwb.ai.claw.domain.memory.MemorySynthesizer;
-import com.mwb.ai.claw.domain.memory.PageEvictionPolicy;
+import com.mwb.ai.claw.domain.memory.evict.PageEvictionPolicy;
+import com.mwb.ai.claw.domain.memory.gateway.LayeredMemoryGateway;
+import com.mwb.ai.claw.domain.memory.model.EvictionContext;
+import com.mwb.ai.claw.domain.memory.model.LayeredMemoryConfig;
+import com.mwb.ai.claw.domain.memory.model.MemoryBudget;
+import com.mwb.ai.claw.domain.memory.model.MemoryPage;
+import com.mwb.ai.claw.domain.memory.retrieve.MemoryRetriever;
+import com.mwb.ai.claw.domain.memory.store.MemoryPageStore;
+import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesizer;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.memory.strategy.ImportanceEvictionPolicy;
 import com.mwb.ai.claw.infrastructure.memory.strategy.TokenBudgetEvictionPolicy;
+import com.mwb.ai.claw.infrastructure.memory.synthesis.MemorySynthesisExecutor;
 import com.mwb.ai.claw.infrastructure.util.TokenEstimator;
 
 /**

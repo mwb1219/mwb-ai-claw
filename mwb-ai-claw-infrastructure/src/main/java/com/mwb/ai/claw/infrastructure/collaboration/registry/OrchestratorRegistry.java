@@ -1,7 +1,7 @@
-package com.mwb.ai.claw.infrastructure.collaboration;
+package com.mwb.ai.claw.infrastructure.collaboration.registry;
 
-import com.mwb.ai.claw.domain.collaboration.AgentOrchestrator;
-import com.mwb.ai.claw.domain.collaboration.OrchestrationDefinition;
+import com.mwb.ai.claw.domain.collaboration.model.OrchestrationDefinition;
+import com.mwb.ai.claw.domain.collaboration.spi.AgentOrchestrator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;

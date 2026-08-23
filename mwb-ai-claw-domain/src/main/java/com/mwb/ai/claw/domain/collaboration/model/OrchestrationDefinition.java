@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.domain.collaboration;
+package com.mwb.ai.claw.domain.collaboration.model;
 
 import java.util.ArrayList;
 import java.util.HashMap;

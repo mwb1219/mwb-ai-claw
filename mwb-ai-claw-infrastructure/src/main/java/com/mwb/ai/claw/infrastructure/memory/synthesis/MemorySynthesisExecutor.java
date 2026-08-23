@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.infrastructure.memory;
+package com.mwb.ai.claw.infrastructure.memory.synthesis;
 
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import org.slf4j.Logger;

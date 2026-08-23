@@ -1,6 +1,9 @@
 package com.mwb.ai.claw.web;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Locale;
 
 import javax.annotation.Resource;
 
@@ -12,16 +15,18 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
-import com.mwb.ai.claw.domain.rag.RagDocument;
-import com.mwb.ai.claw.domain.rag.RagDocumentStore;
-import com.mwb.ai.claw.domain.rag.RagIngestionCommand;
-import com.mwb.ai.claw.domain.rag.RagIngestionResult;
-import com.mwb.ai.claw.domain.rag.RagIngestionService;
-import com.mwb.ai.claw.domain.rag.RagQuery;
-import com.mwb.ai.claw.domain.rag.RagRetrievalService;
-import com.mwb.ai.claw.domain.rag.RagSearchResult;
+import com.mwb.ai.claw.domain.rag.model.RagDocument;
+import com.mwb.ai.claw.domain.rag.model.RagIngestionCommand;
+import com.mwb.ai.claw.domain.rag.model.RagIngestionResult;
+import com.mwb.ai.claw.domain.rag.model.RagQuery;
+import com.mwb.ai.claw.domain.rag.model.RagSearchResult;
+import com.mwb.ai.claw.domain.rag.retrieve.RagRetrievalService;
+import com.mwb.ai.claw.domain.rag.store.RagDocumentStore;
+import com.mwb.ai.claw.domain.rag.write.RagIngestionService;
 import com.mwb.ai.claw.dto.SingleResponse;
 
 /**
@@ -48,6 +53,40 @@ public class RagController {
             @RequestBody RagIngestionCommand command) {
         command.setKnowledgeBaseId(knowledgeBaseId);
         return SingleResponse.of(ingestionService.ingest(command));
+    }
+
+    /**
+     * 文件上传摄入：读取文本/Markdown 文件内容并走同一写入链路（解析 → 切分 → 向量化 → 索引）。
+     * 文件大小上限由 {@code spring.servlet.multipart.max-file-size} 控制（默认不限制）。
+     */
+    @PostMapping("/knowledge-bases/{knowledgeBaseId}/documents/upload")
+    public SingleResponse<RagIngestionResult> upload(
+            @PathVariable String knowledgeBaseId,
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(required = false) String documentId,
+            @RequestParam(required = false) String name) throws IOException {
+        if (file.isEmpty()) {
+            throw new IllegalArgumentException("上传文件不能为空");
+        }
+        RagIngestionCommand command = new RagIngestionCommand();
+        command.setKnowledgeBaseId(knowledgeBaseId);
+        command.setDocumentId(documentId);
+        command.setName(name != null && !name.trim().isEmpty() ? name.trim() : file.getOriginalFilename());
+        command.setContentType(resolveContentType(file.getOriginalFilename()));
+        command.setContent(new String(file.getBytes(), StandardCharsets.UTF_8));
+        return SingleResponse.of(ingestionService.ingest(command));
+    }
+
+    /** 依据文件扩展名推断内容类型：.md/.markdown → text/markdown，其余按纯文本处理。 */
+    private String resolveContentType(String filename) {
+        if (filename == null) {
+            return "text/plain";
+        }
+        String lower = filename.toLowerCase(Locale.ROOT);
+        if (lower.endsWith(".md") || lower.endsWith(".markdown")) {
+            return "text/markdown";
+        }
+        return "text/plain";
     }
 
     @PostMapping("/knowledge-bases/{knowledgeBaseId}/documents/{documentId}/reindex")

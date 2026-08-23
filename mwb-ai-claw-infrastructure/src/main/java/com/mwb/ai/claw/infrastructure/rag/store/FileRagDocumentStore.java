@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.infrastructure.rag;
+package com.mwb.ai.claw.infrastructure.rag.store;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -15,9 +15,9 @@ import java.util.stream.Stream;
 
 import javax.annotation.PostConstruct;
 
-import com.mwb.ai.claw.domain.rag.RagConfig;
-import com.mwb.ai.claw.domain.rag.RagDocument;
-import com.mwb.ai.claw.domain.rag.RagDocumentStore;
+import com.mwb.ai.claw.domain.rag.config.RagConfig;
+import com.mwb.ai.claw.domain.rag.model.RagDocument;
+import com.mwb.ai.claw.domain.rag.store.RagDocumentStore;
 import com.mwb.ai.claw.infrastructure.util.JsonUtils;
 
 /**

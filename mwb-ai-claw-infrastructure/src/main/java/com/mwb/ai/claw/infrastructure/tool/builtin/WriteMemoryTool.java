@@ -1,6 +1,6 @@
 package com.mwb.ai.claw.infrastructure.tool.builtin;
 
-import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
+import com.mwb.ai.claw.domain.memory.gateway.LayeredMemoryGateway;
 import com.mwb.ai.claw.domain.tool.ToolResult;
 import com.mwb.ai.claw.domain.tool.ToolSpec;
 import com.mwb.ai.claw.domain.tool.ToolExecutor;

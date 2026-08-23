@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.infrastructure.collaboration;
+package com.mwb.ai.claw.infrastructure.collaboration.model;
 
 /**
  * Todo 生命周期状态机（P1 交互与上下文）：

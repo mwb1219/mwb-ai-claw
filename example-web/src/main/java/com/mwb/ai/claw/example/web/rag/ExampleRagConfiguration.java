@@ -5,10 +5,10 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import com.mwb.ai.claw.domain.rag.RagChunker;
-import com.mwb.ai.claw.domain.rag.RagConfig;
-import com.mwb.ai.claw.domain.rag.RagReranker;
-import com.mwb.ai.claw.infrastructure.rag.TextRagChunker;
+import com.mwb.ai.claw.domain.rag.config.RagConfig;
+import com.mwb.ai.claw.domain.rag.retrieve.RagReranker;
+import com.mwb.ai.claw.domain.rag.write.RagChunker;
+import com.mwb.ai.claw.infrastructure.rag.write.TextRagChunker;
 
 /**
  * RAG SPI 扩展演示（仅 {@code agent.rag.enabled=true} 时装配）。

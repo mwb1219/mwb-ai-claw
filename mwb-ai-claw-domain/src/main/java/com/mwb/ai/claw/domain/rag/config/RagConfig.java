@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.domain.rag;
+package com.mwb.ai.claw.domain.rag.config;
 
 import lombok.Data;
 
@@ -65,6 +65,8 @@ public class RagConfig {
         private String apiKey = "";
         /** 向量维度，0 表示首次写入时由模型响应确定。 */
         private int dimensions = 0;
+        /** 单次 HTTP 请求的最大文本条数（模型侧批量上限，如阿里云 MaaS 为 20）；由 Gateway 内部分批保证。 */
+        private int maxBatchSize = 16;
     }
 
     @Data

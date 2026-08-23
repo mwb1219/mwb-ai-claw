@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.domain.rag;
+package com.mwb.ai.claw.domain.rag.model;
 
 import lombok.Data;
 

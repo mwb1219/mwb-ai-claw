@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.infrastructure.collaboration;
+package com.mwb.ai.claw.infrastructure.collaboration.execution;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -12,11 +12,11 @@ import javax.annotation.Resource;
 
 import org.springframework.stereotype.Component;
 
-import com.mwb.ai.claw.domain.collaboration.AgentOrchestrator;
-import com.mwb.ai.claw.domain.collaboration.CollaborationResult;
-import com.mwb.ai.claw.domain.collaboration.ExecutionUnit;
-import com.mwb.ai.claw.domain.collaboration.OrchestrationContext;
-import com.mwb.ai.claw.domain.collaboration.OrchestrationDefinition;
+import com.mwb.ai.claw.domain.collaboration.model.CollaborationResult;
+import com.mwb.ai.claw.domain.collaboration.model.OrchestrationContext;
+import com.mwb.ai.claw.domain.collaboration.model.OrchestrationDefinition;
+import com.mwb.ai.claw.domain.collaboration.spi.AgentOrchestrator;
+import com.mwb.ai.claw.domain.collaboration.spi.ExecutionUnit;
 import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.AgentGateway;
 import com.mwb.ai.claw.domain.core.ProgressCallback;
@@ -24,10 +24,12 @@ import com.mwb.ai.claw.domain.core.ReActLoopService;
 import com.mwb.ai.claw.domain.core.ReActResult;
 import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
-import com.mwb.ai.claw.domain.memory.MemoryGateway;
+import com.mwb.ai.claw.domain.memory.gateway.MemoryGateway;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.dto.data.AgentErrorCode;
 import com.mwb.ai.claw.exception.BizException;
+import com.mwb.ai.claw.infrastructure.collaboration.lock.SessionLockManager;
+import com.mwb.ai.claw.infrastructure.collaboration.registry.OrchestratorRegistry;
 import com.mwb.ai.claw.infrastructure.config.OrchestrationConfigLoader;
 
 /**

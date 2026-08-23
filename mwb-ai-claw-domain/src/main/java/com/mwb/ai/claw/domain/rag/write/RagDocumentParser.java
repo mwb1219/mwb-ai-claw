@@ -1,4 +1,7 @@
-package com.mwb.ai.claw.domain.rag;
+package com.mwb.ai.claw.domain.rag.write;
+
+import com.mwb.ai.claw.domain.rag.model.ParsedDocument;
+import com.mwb.ai.claw.domain.rag.model.RagDocumentSource;
 
 /**
  * RAG 文档解析 SPI。

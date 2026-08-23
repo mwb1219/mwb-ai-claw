@@ -6,8 +6,8 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.mwb.ai.claw.domain.rag.RagReranker;
-import com.mwb.ai.claw.domain.rag.RagSearchResult;
+import com.mwb.ai.claw.domain.rag.model.RagSearchResult;
+import com.mwb.ai.claw.domain.rag.retrieve.RagReranker;
 
 /**
  * 示例重排器：向量检索后在业务侧按分数二次排序截取 topK 并记录日志，

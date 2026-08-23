@@ -1,4 +1,7 @@
-package com.mwb.ai.claw.domain.rag;
+package com.mwb.ai.claw.domain.rag.write;
+
+import com.mwb.ai.claw.domain.rag.model.RagIngestionCommand;
+import com.mwb.ai.claw.domain.rag.model.RagIngestionResult;
 
 /**
  * RAG 知识写入能力。

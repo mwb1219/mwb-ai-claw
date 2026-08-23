@@ -9,6 +9,7 @@
       "maxSteps": 10,
       "maxTokens": 16384,
       "model": "${CODER_MODEL:${DEFAULT_MODEL:deepseek-chat}}",
+      "baseUrl": "${CODER_BASE_URL:${DEFAULT_BASE_URL:https://api.deepseek.com}}",
       "apiKey": "${CODER_API_KEY:${DEFAULT_API_KEY:}}"
     },
     {
@@ -19,6 +20,7 @@
       "systemPrompt": "你是信息检索专家，擅长高效检索网络信息并归纳整理。",
       "maxSteps": 5,
       "model": "${RESEARCHER_MODEL:${DEFAULT_MODEL:deepseek-chat}}",
+      "baseUrl": "${RESEARCHER_BASE_URL:${DEFAULT_BASE_URL:https://api.deepseek.com}}",
       "apiKey": "${RESEARCHER_API_KEY:${DEFAULT_API_KEY:}}"
     },
     {
@@ -29,6 +31,7 @@
       "systemPrompt": "你是资深系统架构师，擅长需求拆解、技术选型与架构设计。",
       "maxSteps": 5,
       "model": "${ARCHITECT_MODEL:${DEFAULT_MODEL:deepseek-chat}}",
+      "baseUrl": "${ARCHITECT_BASE_URL:${DEFAULT_BASE_URL:https://api.deepseek.com}}",
       "apiKey": "${ARCHITECT_API_KEY:${DEFAULT_API_KEY:}}"
     },
     {
@@ -39,6 +42,7 @@
       "systemPrompt": "你是严谨的代码审查专家，关注正确性、安全与可维护性。",
       "maxSteps": 5,
       "model": "${REVIEWER_MODEL:${DEFAULT_MODEL:deepseek-chat}}",
+      "baseUrl": "${REVIEWER_BASE_URL:${DEFAULT_BASE_URL:https://api.deepseek.com}}",
       "apiKey": "${REVIEWER_API_KEY:${DEFAULT_API_KEY:}}"
     },
     {
@@ -50,6 +54,7 @@
       "tools": ["read_memory", "write_memory"],
       "maxSteps": 5,
       "model": "${MODERATOR_MODEL:${DEFAULT_MODEL:deepseek-chat}}",
+      "baseUrl": "${MODERATOR_BASE_URL:${DEFAULT_BASE_URL:https://api.deepseek.com}}",
       "apiKey": "${MODERATOR_API_KEY:${DEFAULT_API_KEY:}}"
     }
   ]

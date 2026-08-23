@@ -1,8 +1,9 @@
-package com.mwb.ai.claw.domain.memory;
+package com.mwb.ai.claw.domain.memory.synthesize;
 
 import java.util.List;
 
 import com.mwb.ai.claw.domain.core.Message;
+import com.mwb.ai.claw.domain.memory.model.MemoryPage;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 
 /**

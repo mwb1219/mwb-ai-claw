@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.infrastructure.rag;
+package com.mwb.ai.claw.infrastructure.rag.store;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -20,11 +20,11 @@ import java.util.stream.Stream;
 
 import javax.annotation.PostConstruct;
 
-import com.mwb.ai.claw.domain.rag.RagConfig;
-import com.mwb.ai.claw.domain.rag.RagIndexEntry;
-import com.mwb.ai.claw.domain.rag.RagIndexStore;
-import com.mwb.ai.claw.domain.rag.RagSearchResult;
-import com.mwb.ai.claw.domain.rag.RagVectorQuery;
+import com.mwb.ai.claw.domain.rag.config.RagConfig;
+import com.mwb.ai.claw.domain.rag.model.RagIndexEntry;
+import com.mwb.ai.claw.domain.rag.model.RagSearchResult;
+import com.mwb.ai.claw.domain.rag.model.RagVectorQuery;
+import com.mwb.ai.claw.domain.rag.store.RagIndexStore;
 import com.mwb.ai.claw.infrastructure.util.JsonUtils;
 
 /**

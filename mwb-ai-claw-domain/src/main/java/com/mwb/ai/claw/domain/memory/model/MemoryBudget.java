@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.domain.memory;
+package com.mwb.ai.claw.domain.memory.model;
 
 /**
  * 记忆预算：基于配置计算 LLM 上下文窗口内的 token 分配。

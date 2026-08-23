@@ -7,11 +7,13 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import org.junit.Test;
 
-import com.mwb.ai.claw.domain.rag.ParsedDocument;
-import com.mwb.ai.claw.domain.rag.RagChunk;
-import com.mwb.ai.claw.domain.rag.RagConfig;
-import com.mwb.ai.claw.domain.rag.RagDocument;
-import com.mwb.ai.claw.domain.rag.RagDocumentSource;
+import com.mwb.ai.claw.domain.rag.config.RagConfig;
+import com.mwb.ai.claw.domain.rag.model.ParsedDocument;
+import com.mwb.ai.claw.domain.rag.model.RagChunk;
+import com.mwb.ai.claw.domain.rag.model.RagDocument;
+import com.mwb.ai.claw.domain.rag.model.RagDocumentSource;
+import com.mwb.ai.claw.infrastructure.rag.write.TextRagChunker;
+import com.mwb.ai.claw.infrastructure.rag.write.TextRagDocumentParser;
 
 /**
  * 默认文本解析与切分策略测试。

@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.infrastructure.collaboration;
+package com.mwb.ai.claw.infrastructure.collaboration.approval;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -9,6 +9,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import com.mwb.ai.claw.domain.scope.AgentScope;
+import com.mwb.ai.claw.infrastructure.collaboration.model.TodoDefinition;
 
 /**
  * 待审批节点（P1 交互与上下文）：命中审批门禁的层在规划完成后注册，等待人工 approve / reject。

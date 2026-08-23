@@ -1,6 +1,10 @@
-package com.mwb.ai.claw.domain.rag;
+package com.mwb.ai.claw.domain.rag.store;
 
 import java.util.List;
+
+import com.mwb.ai.claw.domain.rag.model.RagIndexEntry;
+import com.mwb.ai.claw.domain.rag.model.RagSearchResult;
+import com.mwb.ai.claw.domain.rag.model.RagVectorQuery;
 
 /**
  * RAG 索引存储 SPI。

@@ -18,6 +18,12 @@ spring:
       # embedded=仅嵌入式库执行（默认 H2）；never=关闭
       mode: ${SQL_INIT_MODE:embedded}
       schema-locations: classpath:schema.sql
+  # ================= 文件上传（RAG 知识库文档） =================
+  # 默认不限制文件大小（-1 = 无限制）；有需要可收紧为固定值，如 10MB
+  servlet:
+    multipart:
+      max-file-size: -1
+      max-request-size: -1
 
 project:
   name: example-web
@@ -26,6 +32,9 @@ project:
 example:
   # example-web 固定单租户 id（用户维度的隔离空间标识，写入 AgentScope.tenantId）
   tenant-id: ${EXAMPLE_TENANT_ID:default}
+  # 跨域允许来源（逗号分隔，对应 CorsConfig；生产请显式配置为实际前端域名）
+  cors:
+    allowed-origins: ${EXAMPLE_CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:5174}
   # 用户数据持久化到 claw_user 表（JDBC），需数据源可达（spring.datasource）并先执行 schema.sql 建表
 
 # ================= Agent 配置（OpenAI 兼容） =================
@@ -117,6 +126,8 @@ agent:
       model: ${RAG_EMBEDDING_MODEL:}
       base-url: ${RAG_EMBEDDING_BASE_URL:}
       api-key: ${RAG_EMBEDDING_API_KEY:}
+      # 单次 HTTP 请求最大文本条数（模型侧批量上限，如阿里云 MaaS 为 20）；Gateway 内部分批保证不超限
+      max-batch-size: 16
     context:
       max-chars: 8000              # 单次注入 system prompt 的知识内容字符上限
   # Agent 注册表（agents.json）与编排注册表（orchestrations.json）已独立到 example-web/src/main/resources 下

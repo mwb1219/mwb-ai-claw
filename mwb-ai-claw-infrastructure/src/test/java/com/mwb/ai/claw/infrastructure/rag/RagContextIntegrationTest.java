@@ -17,16 +17,17 @@ import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.ModelConfig;
 import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.llm.LlmRequest;
-import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
-import com.mwb.ai.claw.domain.rag.RagConfig;
-import com.mwb.ai.claw.domain.rag.RagContextProvider;
-import com.mwb.ai.claw.domain.rag.RagRequestContext;
-import com.mwb.ai.claw.domain.rag.RagRetrievalService;
-import com.mwb.ai.claw.domain.rag.RagSearchResult;
+import com.mwb.ai.claw.domain.memory.gateway.LongTermMemoryGateway;
+import com.mwb.ai.claw.domain.rag.config.RagConfig;
+import com.mwb.ai.claw.domain.rag.context.RagContextProvider;
+import com.mwb.ai.claw.domain.rag.context.RagRequestContext;
+import com.mwb.ai.claw.domain.rag.model.RagSearchResult;
+import com.mwb.ai.claw.domain.rag.retrieve.RagRetrievalService;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.domain.tool.ToolGateway;
 import com.mwb.ai.claw.domain.tool.ToolResult;
 import com.mwb.ai.claw.domain.tool.ToolSpec;
+import com.mwb.ai.claw.infrastructure.rag.context.DefaultRagContextProvider;
 
 /**
  * RAG 结果注入 Agent 上下文的适配测试。

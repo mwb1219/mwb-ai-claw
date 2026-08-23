@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.infrastructure.rag;
+package com.mwb.ai.claw.infrastructure.rag.store;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -12,21 +12,52 @@ import java.util.regex.Pattern;
 /**
  * 本地 RAG 存储共享的路径校验与原子写入工具。
  */
-final class RagFileSupport {
+public final class RagFileSupport {
 
-    private static final Pattern SAFE_ID = Pattern.compile("[A-Za-z0-9._-]{1,128}");
+    /** 路径分隔符 / 文件系统保留字符：任何场景都禁止出现在 ID 中（防路径穿越 + 跨平台文件名安全）。 */
+    private static final Pattern FORBIDDEN_CHARS = Pattern.compile("[/\\\\:*?\"<>|]");
+
+    /** ID 最大长度（字符）。 */
+    private static final int MAX_ID_LENGTH = 128;
 
     private RagFileSupport() {
     }
 
-    static String requireId(String name, String value) {
-        if (value == null || !SAFE_ID.matcher(value).matches() || value.contains("..")) {
-            throw new IllegalArgumentException(name + " 仅允许 1-128 位字母、数字、点、下划线和连字符");
+    /**
+     * 校验知识库 / 文档 ID。ID 会作为本地存储目录或文件名，因此：
+     * <ul>
+     *   <li>允许任意 Unicode（含中文），便于中文场景直接使用业务名；</li>
+     *   <li>拒绝路径分隔符与文件系统保留字符（{@code / \ : * ? " < > |}）、控制字符；</li>
+     *   <li>拒绝包含连续点号 {@code ..}（纵深防御路径穿越）；</li>
+     *   <li>长度 1-128 字符。</li>
+     * </ul>
+     */
+    public static String requireId(String name, String value) {
+        if (value == null || value.isEmpty()) {
+            throw new IllegalArgumentException(name + " 不能为空");
+        }
+        if (value.length() > MAX_ID_LENGTH) {
+            throw new IllegalArgumentException(name + " 长度不能超过 " + MAX_ID_LENGTH + " 个字符");
+        }
+        if (FORBIDDEN_CHARS.matcher(value).find() || containsControl(value) || value.contains("..")) {
+            throw new IllegalArgumentException(
+                    name + " 不能包含路径分隔符/保留字符（/ \\ : * ? \" < > |）、控制字符或连续点号（..）");
         }
         return value;
     }
 
-    static void atomicWrite(Path target, String content) {
+    /** 是否包含控制字符（0x00-0x1F、0x7F）。 */
+    private static boolean containsControl(String value) {
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c < 0x20 || c == 0x7F) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static void atomicWrite(Path target, String content) {
         Path temp = target.resolveSibling(target.getFileName() + ".tmp-" + UUID.randomUUID());
         try {
             Files.createDirectories(target.getParent());

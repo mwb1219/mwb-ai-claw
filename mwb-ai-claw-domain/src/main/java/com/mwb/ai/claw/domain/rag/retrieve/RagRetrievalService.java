@@ -1,6 +1,9 @@
-package com.mwb.ai.claw.domain.rag;
+package com.mwb.ai.claw.domain.rag.retrieve;
 
 import java.util.List;
+
+import com.mwb.ai.claw.domain.rag.model.RagQuery;
+import com.mwb.ai.claw.domain.rag.model.RagSearchResult;
 
 /**
  * 独立 RAG 检索能力。
