@@ -86,7 +86,7 @@ Published on Maven Central (`io.github.mwb1219`, requires JDK 8+). Embed `ClawRu
 <dependency>
     <groupId>io.github.mwb1219</groupId>
     <artifactId>mwb-ai-claw-app</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
 </dependency>
 ```
 
@@ -96,7 +96,7 @@ Or use the Spring Boot Starter to get the full server-side stack (REST / WebSock
 <dependency>
     <groupId>io.github.mwb1219</groupId>
     <artifactId>mwb-ai-claw-spring-boot-starter</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
 </dependency>
 ```
 
