@@ -6,7 +6,7 @@ export default defineConfig({
   lang: 'zh-CN',
   title: 'mwb-ai-claw',
   description:
-    'Local-first AI Agent framework in Java (DDD + Spring Boot). ReAct loop, MCP, layered memory, multi-agent orchestration.',
+    'AI Agent framework in Java (DDD + Spring Boot). ReAct loop, MCP, layered memory, multi-agent orchestration.',
 
   // 多语言：中文（root）与英文（/en/）各维护一套独立导航。
   // 不设置顶部 nav，导航统一收敛到左侧树形侧边栏；右上角保留语言切换按钮。
@@ -15,7 +15,7 @@ export default defineConfig({
       label: '简体中文',
       lang: 'zh-CN',
       title: 'mwb-ai-claw',
-      description: '基于 Java（DDD + Spring Boot）的本地优先 AI Agent 框架。',
+      description: '基于 Java（DDD + Spring Boot）的 AI Agent 框架。',
       themeConfig: {
         sidebar: [
           {
@@ -71,7 +71,7 @@ export default defineConfig({
       lang: 'en-US',
       link: '/en/',
       title: 'mwb-ai-claw',
-      description: 'Local-first AI Agent framework in Java (DDD + Spring Boot).',
+      description: 'AI Agent framework in Java (DDD + Spring Boot).',
       themeConfig: {
         sidebar: [
           {

@@ -11,7 +11,7 @@ nav_order: 8
 
 ## 1. Design Intent (Why)
 
-The project is a "local-first AI Agent framework" where extensibility is a first-class concern, not a later patch. The design intent can be summarized in five points:
+The project is an "extensible AI Agent framework" where extensibility is a first-class concern, not a later patch. The design intent can be summarized in five points:
 
 1. **Small stable kernel, capabilities plugged in**: the main pipeline (ReAct loop, session management, memory distillation) stays stable; model, tool, memory, retrieval and orchestration are all abstracted behind Gateway / SPI interfaces. Business capabilities are plugged in as "plugins / configs" instead of modifying the kernel.
 2. **Usable by default, enhanced on demand**: every extension point ships with a ready-to-use default implementation (OpenAI-compatible LLM, file-backed memory, local-file RAG index, etc., with no hard third-party dependencies). Replace or enhance only when you need more advanced capability.
