@@ -1,14 +1,14 @@
 package com.mwb.ai.claw.infrastructure.collaboration.strategy;
 
-import com.mwb.ai.claw.domain.collaboration.AgentOrchestrator;
-import com.mwb.ai.claw.domain.collaboration.CollaborationResult;
-import com.mwb.ai.claw.domain.collaboration.OrchestrationContext;
+import com.mwb.ai.claw.domain.collaboration.model.CollaborationResult;
+import com.mwb.ai.claw.domain.collaboration.model.OrchestrationContext;
+import com.mwb.ai.claw.domain.collaboration.spi.AgentOrchestrator;
 import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.AgentGateway;
 import com.mwb.ai.claw.domain.core.AgentRouter;
 import com.mwb.ai.claw.domain.core.ReActResult;
 import com.mwb.ai.claw.domain.core.Session;
-import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
+import com.mwb.ai.claw.domain.memory.gateway.LayeredMemoryGateway;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;

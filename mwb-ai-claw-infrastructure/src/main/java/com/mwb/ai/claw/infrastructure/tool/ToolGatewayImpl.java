@@ -1,6 +1,7 @@
 package com.mwb.ai.claw.infrastructure.tool;
 
 import com.mwb.ai.claw.domain.core.ProgressCallback;
+import com.mwb.ai.claw.domain.rag.context.RagRequestContext;
 import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.domain.tool.DynamicToolRegistry;
 import com.mwb.ai.claw.domain.tool.ToolExecutor;
@@ -14,7 +15,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -103,7 +103,8 @@ public class ToolGatewayImpl implements ToolGateway, DynamicToolRegistry {
         Future<ToolResult> future = null;
         try {
             // 统一执行超时兜底：包装到线程池执行，超时 → 取消执行线程
-            future = toolPool.submit(() -> executor.execute(argumentsJson, callback));
+            future = toolPool.submit(RagRequestContext.wrapCallable(
+                    () -> executor.execute(argumentsJson, callback)));
             ToolResult result = future.get(timeoutSeconds, TimeUnit.SECONDS);
             recordTool(toolName, result.isSuccess() ? "success" : "error", start);
             return result;

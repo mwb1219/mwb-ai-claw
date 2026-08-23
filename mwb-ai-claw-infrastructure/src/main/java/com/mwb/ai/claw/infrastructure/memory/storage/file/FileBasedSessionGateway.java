@@ -18,7 +18,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.mwb.ai.claw.domain.core.Session;
-import com.mwb.ai.claw.domain.memory.MemoryGateway;
+import com.mwb.ai.claw.domain.memory.gateway.MemoryGateway;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.util.JsonUtils;
@@ -29,7 +29,7 @@ import com.mwb.ai.claw.infrastructure.util.JsonUtils;
  * 内存缓存 + 文件持久化，实现跨重启的会话隔离与持久化。
  * 目录按租户/用户维度隔离：scope 化后会话文件位于 &lt;namespace&gt;/&lt;sessionId&gt;.json，
  * 未启用多租户（legacy 模式）时仍位于 sessions/&lt;sessionId&gt;.json，保持向后兼容。
- * 替代原先纯内存的 {@link com.mwb.ai.claw.infrastructure.memory.MemoryGatewayImpl}。
+ * 替代原先纯内存的 {@link com.mwb.ai.claw.infrastructure.memory.gateway.MemoryGatewayImpl}。
  */
 public class FileBasedSessionGateway implements MemoryGateway {
 

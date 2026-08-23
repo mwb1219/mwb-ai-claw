@@ -1,8 +1,8 @@
 package com.mwb.ai.claw.infrastructure.memory.strategy;
 
-import com.mwb.ai.claw.domain.memory.MemoryPage;
-import com.mwb.ai.claw.domain.memory.MemoryPageStore;
-import com.mwb.ai.claw.domain.memory.MemoryRetriever;
+import com.mwb.ai.claw.domain.memory.model.MemoryPage;
+import com.mwb.ai.claw.domain.memory.retrieve.MemoryRetriever;
+import com.mwb.ai.claw.domain.memory.store.MemoryPageStore;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

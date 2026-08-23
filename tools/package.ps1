@@ -52,7 +52,7 @@ if ($Help) { Show-Help; exit 0 }
 
 # ---------------- 版本号 ----------------
 $pomContent = Get-Content (Join-Path $ProjectRoot "pom.xml") -Raw
-$versionMatch = [regex]::Match($pomContent, '<version>([^<]+)</version>')
+$versionMatch = [regex]::Match($pomContent, '<revision>([^<]+)</revision>')
 if (-not $versionMatch.Success) {
     Write-Err "无法从 pom.xml 解析版本号"
     exit 1

@@ -10,6 +10,7 @@ export default defineConfig({
     proxy: {
       '/agent': { target: 'http://localhost:8080', changeOrigin: true },
       '/memory': { target: 'http://localhost:8080', changeOrigin: true },
+      '/rag': { target: 'http://localhost:8080', changeOrigin: true },
       '/user': { target: 'http://localhost:8080', changeOrigin: true },
       '/auth': { target: 'http://localhost:8080', changeOrigin: true },
     },

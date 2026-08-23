@@ -6,6 +6,11 @@ import type {
   MemoryOverview,
   MemoryPage,
   PendingApprovalDTO,
+  RagDocument,
+  RagIngestionCommand,
+  RagIngestionResult,
+  RagQuery,
+  RagSearchResult,
   SessionDTO,
   SingleResponse,
   UserDTO,
@@ -42,12 +47,8 @@ function authHeaders(extra?: HeadersInit): HeadersInit {
   return headers;
 }
 
-/** 统一 REST 请求：解包 SingleResponse，success=false 抛 ApiError */
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const resp = await fetch(resolveBaseUrl() + path, {
-    ...init,
-    headers: authHeaders(init?.headers),
-  });
+/** 解包 SingleResponse：success=false 抛 ApiError */
+async function unwrap<T>(resp: Response): Promise<T> {
   let body: SingleResponse<T>;
   try {
     body = (await resp.json()) as SingleResponse<T>;
@@ -61,6 +62,28 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(body.errMessage || `请求失败（HTTP ${resp.status}）`, errCode);
   }
   return body.data as T;
+}
+
+/** 统一 REST 请求（JSON）：解包 SingleResponse */
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const resp = await fetch(resolveBaseUrl() + path, {
+    ...init,
+    headers: authHeaders(init?.headers),
+  });
+  return unwrap<T>(resp);
+}
+
+/** multipart 上传请求：不手动设置 Content-Type（浏览器自动带 boundary），仅附加鉴权头 */
+async function requestFormData<T>(path: string, form: FormData): Promise<T> {
+  const { apiKey } = useSettings.getState();
+  const headers: Record<string, string> = {};
+  if (apiKey) headers['X-API-Key'] = apiKey;
+  const resp = await fetch(resolveBaseUrl() + path, {
+    method: 'POST',
+    headers,
+    body: form,
+  });
+  return unwrap<T>(resp);
 }
 
 // ==================== 会话管理 ====================
@@ -163,5 +186,60 @@ export const memoryApi = {
     return request<MemoryPage[]>(
       `/memory/search?q=${encodeURIComponent(q)}&topK=${topK}`,
     );
+  },
+};
+
+// ==================== 独立 RAG 知识库 ====================
+
+export const ragApi = {
+  /** 列出指定知识库下的全部文档 */
+  list(knowledgeBaseId: string): Promise<RagDocument[]> {
+    return request<RagDocument[]>(
+      `/rag/knowledge-bases/${encodeURIComponent(knowledgeBaseId)}/documents`,
+    );
+  },
+  /** 摄入文档（JSON 内容）：解析 → 切分 → 向量化 → 写入索引 */
+  ingest(knowledgeBaseId: string, command: RagIngestionCommand): Promise<RagIngestionResult> {
+    return request<RagIngestionResult>(
+      `/rag/knowledge-bases/${encodeURIComponent(knowledgeBaseId)}/documents`,
+      { method: 'POST', body: JSON.stringify(command) },
+    );
+  },
+  /** 上传文件摄入文档：multipart，无字符/大小限制（后端 multipart 配置不限） */
+  upload(
+    knowledgeBaseId: string,
+    file: File,
+    documentId?: string,
+    name?: string,
+  ): Promise<RagIngestionResult> {
+    const form = new FormData();
+    form.append('file', file);
+    if (documentId && documentId.trim()) form.append('documentId', documentId.trim());
+    if (name && name.trim()) form.append('name', name.trim());
+    return requestFormData<RagIngestionResult>(
+      `/rag/knowledge-bases/${encodeURIComponent(knowledgeBaseId)}/documents/upload`,
+      form,
+    );
+  },
+  /** 重建指定文档索引 */
+  reindex(knowledgeBaseId: string, documentId: string): Promise<RagIngestionResult> {
+    return request<RagIngestionResult>(
+      `/rag/knowledge-bases/${encodeURIComponent(knowledgeBaseId)}/documents/${encodeURIComponent(documentId)}/reindex`,
+      { method: 'POST' },
+    );
+  },
+  /** 删除文档及其索引 */
+  remove(knowledgeBaseId: string, documentId: string): Promise<void> {
+    return request<void>(
+      `/rag/knowledge-bases/${encodeURIComponent(knowledgeBaseId)}/documents/${encodeURIComponent(documentId)}`,
+      { method: 'DELETE' },
+    );
+  },
+  /** 独立 RAG 检索 */
+  search(query: RagQuery): Promise<RagSearchResult[]> {
+    return request<RagSearchResult[]>('/rag/search', {
+      method: 'POST',
+      body: JSON.stringify(query),
+    });
   },
 };

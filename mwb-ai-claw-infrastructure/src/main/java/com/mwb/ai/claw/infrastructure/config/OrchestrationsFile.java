@@ -1,6 +1,6 @@
 package com.mwb.ai.claw.infrastructure.config;
 
-import com.mwb.ai.claw.domain.collaboration.OrchestrationDefinition;
+import com.mwb.ai.claw.domain.collaboration.model.OrchestrationDefinition;
 import lombok.Data;
 
 import java.util.List;

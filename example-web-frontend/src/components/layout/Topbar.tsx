@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Bot, Database, LogOut, MessageSquare, ShieldCheck, User } from 'lucide-react';
+import { Bot, BookOpen, Database, LogOut, MessageSquare, ShieldCheck, User } from 'lucide-react';
 
 import { ThemeSwitch } from '../common/ThemeSwitch';
 import { userApi } from '../../api/client';
@@ -49,6 +49,9 @@ export function Topbar() {
         </NavLink>
         <NavLink to="/memory" className="nav-link">
           <Database size={16} /> 记忆
+        </NavLink>
+        <NavLink to="/rag" className="nav-link">
+          <BookOpen size={16} /> 知识库
         </NavLink>
         <NavLink to="/approval" className="nav-link">
           <ShieldCheck size={16} /> 审批

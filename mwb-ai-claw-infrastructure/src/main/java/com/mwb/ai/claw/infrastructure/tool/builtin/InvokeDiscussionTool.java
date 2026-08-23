@@ -3,7 +3,7 @@ package com.mwb.ai.claw.infrastructure.tool.builtin;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
-import com.mwb.ai.claw.domain.collaboration.ExecutionUnit;
+import com.mwb.ai.claw.domain.collaboration.spi.ExecutionUnit;
 
 /**
  * 协作工具：多方专家讨论（invoke_discussion）。

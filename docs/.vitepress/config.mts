@@ -6,7 +6,7 @@ export default defineConfig({
   lang: 'zh-CN',
   title: 'mwb-ai-claw',
   description:
-    'Local-first AI Agent framework in Java (DDD + Spring Boot). ReAct loop, MCP, layered memory, multi-agent orchestration.',
+    'AI Agent framework in Java (DDD + Spring Boot). ReAct loop, MCP, layered memory, multi-agent orchestration.',
 
   // 多语言：中文（root）与英文（/en/）各维护一套独立导航。
   // 不设置顶部 nav，导航统一收敛到左侧树形侧边栏；右上角保留语言切换按钮。
@@ -15,7 +15,7 @@ export default defineConfig({
       label: '简体中文',
       lang: 'zh-CN',
       title: 'mwb-ai-claw',
-      description: '基于 Java（DDD + Spring Boot）的本地优先 AI Agent 框架。',
+      description: '基于 Java（DDD + Spring Boot）的 AI Agent 框架。',
       themeConfig: {
         sidebar: [
           {
@@ -44,9 +44,11 @@ export default defineConfig({
               { text: 'ReAct 推理循环', link: '/design/core-loop.html' },
               { text: '多 Agent 编排', link: '/design/collaboration.html' },
               { text: '分层记忆模型', link: '/design/memory-model.html' },
+              { text: 'RAG 检索增强', link: '/design/rag.html' },
               { text: '存储与多租户', link: '/design/storage-multitenancy.html' },
               { text: '安全模型', link: '/design/security.html' },
               { text: '可观测性与韧性', link: '/design/observability.html' },
+              { text: '扩展能力设计', link: '/design/extensibility.html' },
             ],
           },
           {
@@ -69,7 +71,7 @@ export default defineConfig({
       lang: 'en-US',
       link: '/en/',
       title: 'mwb-ai-claw',
-      description: 'Local-first AI Agent framework in Java (DDD + Spring Boot).',
+      description: 'AI Agent framework in Java (DDD + Spring Boot).',
       themeConfig: {
         sidebar: [
           {
@@ -101,6 +103,7 @@ export default defineConfig({
               { text: 'Storage & Multi-Tenancy', link: '/en/design/storage-multitenancy.html' },
               { text: 'Security Model', link: '/en/design/security.html' },
               { text: 'Observability & Resilience', link: '/en/design/observability.html' },
+              { text: 'Extensibility Design', link: '/en/design/extensibility.html' },
             ],
           },
           {

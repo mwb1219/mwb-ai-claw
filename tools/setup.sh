@@ -76,7 +76,7 @@ info "步骤 1/3: 打包分发包"
 bash "$SCRIPT_DIR/package.sh" ${PKG_ARGS[@]+"${PKG_ARGS[@]}"}
 
 # ---------------- 解析产物路径 ----------------
-VERSION="$(grep -m1 '<version>[0-9]' "$PROJECT_ROOT/pom.xml" | sed 's/.*<version>\([^<]*\)<\/version>.*/\1/' || true)"
+VERSION="$(grep -m1 '<revision>' "$PROJECT_ROOT/pom.xml" | sed 's/.*<revision>\([^<]*\)<\/revision>.*/\1/' || true)"
 if [[ -z "${VERSION:-}" ]]; then
     err "无法从 pom.xml 解析版本号"
     exit 1

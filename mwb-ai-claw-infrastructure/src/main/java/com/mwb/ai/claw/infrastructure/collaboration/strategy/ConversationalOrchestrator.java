@@ -2,15 +2,16 @@ package com.mwb.ai.claw.infrastructure.collaboration.strategy;
 
 import com.mwb.ai.claw.exception.BizException;
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.mwb.ai.claw.domain.collaboration.AgentOrchestrator;
-import com.mwb.ai.claw.domain.collaboration.CollaborationResult;
-import com.mwb.ai.claw.domain.collaboration.OrchestrationContext;
-import com.mwb.ai.claw.domain.collaboration.OrchestrationDefinition;
+import com.mwb.ai.claw.domain.collaboration.model.CollaborationResult;
+import com.mwb.ai.claw.domain.collaboration.model.OrchestrationContext;
+import com.mwb.ai.claw.domain.collaboration.model.OrchestrationDefinition;
+import com.mwb.ai.claw.domain.collaboration.spi.AgentOrchestrator;
 import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.AgentGateway;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
+import com.mwb.ai.claw.domain.rag.context.RagRequestContext;
 import com.mwb.ai.claw.dto.data.AgentErrorCode;
-import com.mwb.ai.claw.infrastructure.collaboration.ConversationDefinition;
+import com.mwb.ai.claw.infrastructure.collaboration.model.ConversationDefinition;
 import com.mwb.ai.claw.infrastructure.util.JsonUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -179,14 +180,14 @@ public class ConversationalOrchestrator implements AgentOrchestrator {
         Map<String, String> replies = Collections.synchronizedMap(new LinkedHashMap<>());
         List<CompletableFuture<Void>> futures = new ArrayList<>();
         for (String participantId : participants) {
-            futures.add(CompletableFuture.runAsync(() -> {
+            futures.add(CompletableFuture.runAsync(RagRequestContext.wrap(() -> {
                 String prompt = "任务：" + ctx.getMessage()
                         + "\n请给出你的专业观点与理由（置信度 0-1）。\n不要调用任何工具，直接输出。";
                 String reply = runParticipant(ctx, conv, participantId, prompt, "Round:1", trace, null);
                 if (reply != null && !reply.trim().isEmpty()) {
                     replies.put(participantId, reply);
                 }
-            }, DISCUSSION_POOL));
+            }), DISCUSSION_POOL));
         }
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
 

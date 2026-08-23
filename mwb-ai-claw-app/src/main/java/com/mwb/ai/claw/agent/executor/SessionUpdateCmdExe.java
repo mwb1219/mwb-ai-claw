@@ -3,7 +3,7 @@ package com.mwb.ai.claw.agent.executor;
 import com.mwb.ai.claw.dto.SingleResponse;
 import com.mwb.ai.claw.exception.BizException;
 import com.mwb.ai.claw.agent.assembler.SessionAssembler;
-import com.mwb.ai.claw.domain.memory.MemoryGateway;
+import com.mwb.ai.claw.domain.memory.gateway.MemoryGateway;
 import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.dto.UpdateSessionCmd;

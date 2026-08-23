@@ -1,7 +1,7 @@
 package com.mwb.ai.claw.infrastructure.memory.storage.file;
 
-import com.mwb.ai.claw.domain.memory.MemoryPage;
-import com.mwb.ai.claw.domain.memory.MemoryPageStore;
+import com.mwb.ai.claw.domain.memory.model.MemoryPage;
+import com.mwb.ai.claw.domain.memory.store.MemoryPageStore;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.util.JsonUtils;

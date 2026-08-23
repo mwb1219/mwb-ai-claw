@@ -134,7 +134,8 @@ public class AgentController {
     @GetMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter chatStream(@RequestParam String message,
                                  @RequestParam(required = false) String sessionId,
-                                 @RequestParam(required = false) String agentId) {
+                                 @RequestParam(required = false) String agentId,
+                                 @RequestParam(required = false) List<String> knowledgeBaseIds) {
         SseEmitter emitter = new SseEmitter(120_000L);
         // 请求链路 MDC：SSE 在异步线程执行，MDC 需在任务线程内设置
         String traceId = UUID.randomUUID().toString().replace("-", "");
@@ -184,6 +185,7 @@ public class AgentController {
                 cmd.setMessage(message);
                 cmd.setSessionId(effectiveSessionId);
                 cmd.setAgentId(agentId);
+                cmd.setKnowledgeBaseIds(knowledgeBaseIds);
 
                 // 进度回调：推送推理轨迹
                 ProgressCallback callback = step -> {

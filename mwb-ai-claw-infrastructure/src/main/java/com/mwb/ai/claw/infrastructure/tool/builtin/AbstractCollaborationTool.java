@@ -1,8 +1,8 @@
 package com.mwb.ai.claw.infrastructure.tool.builtin;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.mwb.ai.claw.domain.collaboration.CollaborationResult;
-import com.mwb.ai.claw.domain.collaboration.ExecutionUnit;
+import com.mwb.ai.claw.domain.collaboration.model.CollaborationResult;
+import com.mwb.ai.claw.domain.collaboration.spi.ExecutionUnit;
 import com.mwb.ai.claw.domain.core.ProgressCallback;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.domain.scope.AgentScopeContext;

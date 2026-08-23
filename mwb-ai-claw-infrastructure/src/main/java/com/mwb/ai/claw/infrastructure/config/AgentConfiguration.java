@@ -17,8 +17,9 @@ import com.mwb.ai.claw.domain.core.strategy.CompositeAgentRouter;
 import com.mwb.ai.claw.domain.core.strategy.LlmBasedAgentRouter;
 import com.mwb.ai.claw.domain.core.strategy.RuleBasedAgentRouter;
 import com.mwb.ai.claw.domain.llm.LlmGateway;
-import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
-import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
+import com.mwb.ai.claw.domain.memory.gateway.LayeredMemoryGateway;
+import com.mwb.ai.claw.domain.memory.gateway.LongTermMemoryGateway;
+import com.mwb.ai.claw.domain.rag.context.RagContextProvider;
 import com.mwb.ai.claw.domain.skill.SkillGateway;
 import com.mwb.ai.claw.domain.tool.ToolGateway;
 
@@ -46,10 +47,12 @@ public class AgentConfiguration {
                                              LongTermMemoryGateway memoryGateway,
                                              LayeredMemoryGateway layeredMemoryGateway,
                                              ObjectProvider<SkillGateway> skillGatewayProvider,
+                                             ObjectProvider<RagContextProvider> ragContextProvider,
                                              AgentProperties properties) {
         // 技能开关关闭时无 SkillGateway Bean，ObjectProvider 兜底为 null（不注入技能清单）
         return new DefaultContextAssembler(toolGateway, memoryGateway, layeredMemoryGateway,
-                skillGatewayProvider.getIfAvailable(), properties.getSecurity().isPromptInjectionGuard());
+                skillGatewayProvider.getIfAvailable(), properties.getSecurity().isPromptInjectionGuard(),
+                ragContextProvider.getIfAvailable());
     }
 
     @Bean

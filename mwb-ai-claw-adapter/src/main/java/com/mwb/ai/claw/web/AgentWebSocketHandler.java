@@ -205,6 +205,7 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
             cmd.setMessage(message);
             cmd.setSessionId(effectiveSessionId);
             cmd.setAgentId(agentId);
+            cmd.setKnowledgeBaseIds(req.getKnowledgeBaseIds());
 
             // 进度回调：推送推理轨迹
             ProgressCallback callback = step -> {

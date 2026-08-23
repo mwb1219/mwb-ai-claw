@@ -13,18 +13,28 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import com.mwb.ai.claw.domain.core.AgentGateway;
 import com.mwb.ai.claw.domain.llm.EmbeddingGateway;
 import com.mwb.ai.claw.domain.llm.LlmGateway;
-import com.mwb.ai.claw.domain.memory.LayeredMemoryGateway;
-import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
-import com.mwb.ai.claw.domain.memory.MemoryGateway;
-import com.mwb.ai.claw.domain.memory.MemoryPageStore;
-import com.mwb.ai.claw.domain.memory.MemoryRetriever;
-import com.mwb.ai.claw.domain.memory.MemorySynthesizer;
+import com.mwb.ai.claw.domain.memory.gateway.LayeredMemoryGateway;
+import com.mwb.ai.claw.domain.memory.gateway.LongTermMemoryGateway;
+import com.mwb.ai.claw.domain.memory.gateway.MemoryGateway;
+import com.mwb.ai.claw.domain.memory.store.MemoryPageStore;
+import com.mwb.ai.claw.domain.memory.retrieve.MemoryRetriever;
+import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesizer;
+import com.mwb.ai.claw.domain.rag.config.RagConfig;
+import com.mwb.ai.claw.domain.rag.context.RagContextProvider;
+import com.mwb.ai.claw.domain.rag.embed.RagEmbeddingGateway;
+import com.mwb.ai.claw.domain.rag.retrieve.RagReranker;
+import com.mwb.ai.claw.domain.rag.retrieve.RagRetrievalService;
+import com.mwb.ai.claw.domain.rag.store.RagDocumentStore;
+import com.mwb.ai.claw.domain.rag.store.RagIndexStore;
+import com.mwb.ai.claw.domain.rag.write.RagChunker;
+import com.mwb.ai.claw.domain.rag.write.RagDocumentParser;
+import com.mwb.ai.claw.domain.rag.write.RagIngestionService;
 import com.mwb.ai.claw.domain.skill.SkillGateway;
 import com.mwb.ai.claw.domain.tool.ToolExecutor;
 import com.mwb.ai.claw.domain.tool.ToolGateway;
 import com.mwb.ai.claw.domain.tool.ToolPermissionChecker;
 import com.mwb.ai.claw.infrastructure.auth.ConfigToolPermissionChecker;
-import com.mwb.ai.claw.infrastructure.collaboration.LocalSessionLockManager;
+import com.mwb.ai.claw.infrastructure.collaboration.lock.LocalSessionLockManager;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.config.AgentRegistryLoader;
 import com.mwb.ai.claw.infrastructure.config.AuthProperties;
@@ -35,9 +45,9 @@ import com.mwb.ai.claw.infrastructure.llm.ResilientLlmGateway;
 import com.mwb.ai.claw.infrastructure.llm.provider.AnthropicLlmGateway;
 import com.mwb.ai.claw.infrastructure.llm.provider.GeminiLlmGateway;
 import com.mwb.ai.claw.infrastructure.llm.provider.ProviderRoutingGateway;
-import com.mwb.ai.claw.infrastructure.memory.LayeredMemoryGatewayImpl;
-import com.mwb.ai.claw.infrastructure.memory.MemorySynthesisExecutor;
-import com.mwb.ai.claw.infrastructure.memory.SynthesisCache;
+import com.mwb.ai.claw.infrastructure.memory.gateway.LayeredMemoryGatewayImpl;
+import com.mwb.ai.claw.infrastructure.memory.synthesis.MemorySynthesisExecutor;
+import com.mwb.ai.claw.infrastructure.memory.synthesis.SynthesisCache;
 import com.mwb.ai.claw.infrastructure.memory.storage.file.FileBasedMemoryGateway;
 import com.mwb.ai.claw.infrastructure.memory.storage.file.FileBasedSessionGateway;
 import com.mwb.ai.claw.infrastructure.memory.storage.file.FileMemoryPageStore;
@@ -46,6 +56,14 @@ import com.mwb.ai.claw.infrastructure.memory.storage.jdbc.JdbcMemoryPageStore;
 import com.mwb.ai.claw.infrastructure.memory.storage.jdbc.JdbcSessionGateway;
 import com.mwb.ai.claw.infrastructure.memory.strategy.LlmMemorySynthesizer;
 import com.mwb.ai.claw.infrastructure.observability.MetricsRecorder;
+import com.mwb.ai.claw.infrastructure.rag.context.DefaultRagContextProvider;
+import com.mwb.ai.claw.infrastructure.rag.embed.OpenAiRagEmbeddingGateway;
+import com.mwb.ai.claw.infrastructure.rag.retrieve.DefaultRagRetrievalService;
+import com.mwb.ai.claw.infrastructure.rag.store.FileRagDocumentStore;
+import com.mwb.ai.claw.infrastructure.rag.store.LocalRagIndexStore;
+import com.mwb.ai.claw.infrastructure.rag.write.DefaultRagIngestionService;
+import com.mwb.ai.claw.infrastructure.rag.write.TextRagChunker;
+import com.mwb.ai.claw.infrastructure.rag.write.TextRagDocumentParser;
 import com.mwb.ai.claw.infrastructure.skill.SkillLoader;
 import com.mwb.ai.claw.infrastructure.skill.SkillRegistryImpl;
 import com.mwb.ai.claw.infrastructure.tool.ToolGatewayImpl;
@@ -134,6 +152,84 @@ public class ClawCoreAutoConfiguration {
         return new LayeredMemoryGatewayImpl(properties, pageStore, synthesizer, retriever, synthesisExecutor);
     }
 
+    // ==================== 独立 RAG ====================
+
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnProperty(name = "agent.rag.enabled", havingValue = "true")
+    public static class RagConfiguration {
+
+        @Bean
+        @ConditionalOnMissingBean(RagConfig.class)
+        public RagConfig ragConfig(AgentProperties properties) {
+            return properties.getRag();
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(RagDocumentParser.class)
+        public TextRagDocumentParser ragDocumentParser() {
+            return new TextRagDocumentParser();
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(RagChunker.class)
+        public TextRagChunker ragChunker(RagConfig config) {
+            return new TextRagChunker(config);
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(RagEmbeddingGateway.class)
+        public OpenAiRagEmbeddingGateway ragEmbeddingGateway(
+                RagConfig config, org.springframework.web.client.RestTemplate restTemplate) {
+            return new OpenAiRagEmbeddingGateway(config, restTemplate);
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(RagDocumentStore.class)
+        @ConditionalOnProperty(name = "agent.rag.provider", havingValue = "local", matchIfMissing = true)
+        public FileRagDocumentStore ragDocumentStore(RagConfig config) {
+            return new FileRagDocumentStore(config);
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(RagIndexStore.class)
+        @ConditionalOnProperty(name = "agent.rag.provider", havingValue = "local", matchIfMissing = true)
+        public LocalRagIndexStore ragIndexStore(RagConfig config) {
+            return new LocalRagIndexStore(config);
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(RagIngestionService.class)
+        public DefaultRagIngestionService ragIngestionService(
+                RagDocumentParser parser,
+                RagChunker chunker,
+                RagEmbeddingGateway embeddingGateway,
+                RagIndexStore indexStore,
+                RagDocumentStore documentStore,
+                RagConfig config) {
+            return new DefaultRagIngestionService(
+                    parser, chunker, embeddingGateway, indexStore, documentStore, config);
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(RagRetrievalService.class)
+        public DefaultRagRetrievalService ragRetrievalService(
+                RagEmbeddingGateway embeddingGateway,
+                RagIndexStore indexStore,
+                RagDocumentStore documentStore,
+                ObjectProvider<RagReranker> rerankerProvider,
+                RagConfig config) {
+            return new DefaultRagRetrievalService(
+                    embeddingGateway, indexStore, documentStore, rerankerProvider.getIfAvailable(), config);
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(RagContextProvider.class)
+        public DefaultRagContextProvider ragContextProvider(
+                RagRetrievalService retrievalService, RagConfig config) {
+            return new DefaultRagContextProvider(retrievalService, config);
+        }
+    }
+
     // ==================== 技能 ====================
 
     @Bean
@@ -217,7 +313,7 @@ public class ClawCoreAutoConfiguration {
     public static class LocalLockConfiguration {
 
         @Bean
-        @ConditionalOnMissingBean(com.mwb.ai.claw.infrastructure.collaboration.SessionLockManager.class)
+        @ConditionalOnMissingBean(com.mwb.ai.claw.infrastructure.collaboration.lock.SessionLockManager.class)
         public LocalSessionLockManager localSessionLockManager() {
             return new LocalSessionLockManager();
         }

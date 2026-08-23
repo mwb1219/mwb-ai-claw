@@ -8,21 +8,22 @@ import org.springframework.stereotype.Component;
 
 import com.mwb.ai.claw.agent.observability.RunUsageRecorder;
 import com.mwb.ai.claw.domain.context.LlmRequestOptions;
-import com.mwb.ai.claw.domain.collaboration.AgentOrchestrator;
-import com.mwb.ai.claw.domain.collaboration.CollaborationResult;
-import com.mwb.ai.claw.domain.collaboration.ExecutionUnit;
-import com.mwb.ai.claw.domain.collaboration.OrchestrationContext;
-import com.mwb.ai.claw.domain.collaboration.OrchestrationDefinition;
+import com.mwb.ai.claw.domain.collaboration.model.CollaborationResult;
+import com.mwb.ai.claw.domain.collaboration.model.OrchestrationContext;
+import com.mwb.ai.claw.domain.collaboration.model.OrchestrationDefinition;
+import com.mwb.ai.claw.domain.collaboration.spi.AgentOrchestrator;
+import com.mwb.ai.claw.domain.collaboration.spi.ExecutionUnit;
 import com.mwb.ai.claw.domain.core.AgentGateway;
 import com.mwb.ai.claw.domain.core.ProgressCallback;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
+import com.mwb.ai.claw.domain.rag.context.RagRequestContext;
 import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.dto.ChatCmd;
 import com.mwb.ai.claw.dto.SingleResponse;
 import com.mwb.ai.claw.dto.data.AgentErrorCode;
 import com.mwb.ai.claw.dto.data.ChatResponseDTO;
 import com.mwb.ai.claw.exception.BizException;
-import com.mwb.ai.claw.infrastructure.collaboration.OrchestratorRegistry;
+import com.mwb.ai.claw.infrastructure.collaboration.registry.OrchestratorRegistry;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.config.OrchestrationConfigLoader;
 import com.mwb.ai.claw.infrastructure.llm.RunTokenBudget;
@@ -81,6 +82,7 @@ public class ChatCmdExe {
         if (boundOptions) {
             LlmRequestOptions.bind(cmd.getResponseFormat(), cmd.getJsonSchema());
         }
+        RagRequestContext.bind(cmd.getKnowledgeBaseIds());
         // 单次运行 token 预算：>0 时在当前线程绑定，LLM 韧性装饰器按次累计，超限中止
         long budgetTokens = agentProperties.getLlm().getRunBudgetTokens();
         RunTokenBudget budget = budgetTokens > 0 ? RunTokenBudget.bind(budgetTokens) : null;
@@ -140,6 +142,7 @@ public class ChatCmdExe {
             if (boundOptions) {
                 LlmRequestOptions.unbind();
             }
+            RagRequestContext.unbind();
             if (budget != null) {
                 RunTokenBudget.unbind();
             }
