@@ -40,6 +40,7 @@ title: 文档中心
 | [core-loop.md](design/core-loop.md) | ReAct 推理循环：思考 → 行动 → 观察的迭代执行 |
 | [collaboration.md](design/collaboration.md) | 多 Agent 编排：routing / conversational / delegate 三种模式 |
 | [memory-model.md](design/memory-model.md) | 分层记忆：五层模型、动态换页、检索召回 |
+| [rag.md](design/rag.md) | RAG 检索增强：独立知识写入 / 索引 / 检索 / 上下文注入 |
 | [storage-multitenancy.md](design/storage-multitenancy.md) | 存储与多租户：file/db 后端、AgentScope 数据隔离 |
 | [security.md](design/security.md) | 安全模型：工具沙箱、审批、鉴权、防注入 |
 | [observability.md](design/observability.md) | 可观测性与韧性：指标、运行记录、重试/降级 |

@@ -16,12 +16,13 @@ nav_order: 3
 | `DEFAULT_API_KEY` | （空） | 默认模型密钥，必填 |
 | `DEFAULT_MODEL` | `deepseek-chat` | 默认模型 |
 | `DEFAULT_BASE_URL` | `https://api.deepseek.com` | 默认 Base URL |
-| `CODER_MODEL` / `CODER_API_KEY` | 继承默认 | coder 专家独立模型 |
-| `RESEARCHER_MODEL` / `RESEARCHER_API_KEY` | 继承默认 | researcher 专家独立模型 |
-| `ARCHITECT_MODEL` / `ARCHITECT_API_KEY` | 继承默认 | architect 专家独立模型 |
-| `REVIEWER_MODEL` / `REVIEWER_API_KEY` | 继承默认 | reviewer 专家独立模型 |
-| `MODERATOR_MODEL` / `MODERATOR_API_KEY` | 继承默认 | moderator 专家独立模型 |
+| `CODER_MODEL` / `CODER_BASE_URL` / `CODER_API_KEY` | 继承默认 | coder 专家独立模型 |
+| `RESEARCHER_MODEL` / `RESEARCHER_BASE_URL` / `RESEARCHER_API_KEY` | 继承默认 | researcher 专家独立模型 |
+| `ARCHITECT_MODEL` / `ARCHITECT_BASE_URL` / `ARCHITECT_API_KEY` | 继承默认 | architect 专家独立模型 |
+| `REVIEWER_MODEL` / `REVIEWER_BASE_URL` / `REVIEWER_API_KEY` | 继承默认 | reviewer 专家独立模型 |
+| `MODERATOR_MODEL` / `MODERATOR_BASE_URL` / `MODERATOR_API_KEY` | 继承默认 | moderator 专家独立模型 |
 | `EMBEDDING_MODEL` / `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` | 继承默认 | 向量检索 embedding（DeepSeek 主模型不支持 embeddings，需单独配置） |
+| `RAG_EMBEDDING_MODEL` / `RAG_EMBEDDING_BASE_URL` / `RAG_EMBEDDING_API_KEY` | （空） | **独立 RAG 知识库** Embedding（`agent.rag.embedding.*`；与记忆 Embedding 相互独立，可复用同一模型服务，未配置时 RAG 写入/检索报错） |
 | `SYNTHESIS_MODEL` / `SYNTHESIS_BASE_URL` / `SYNTHESIS_API_KEY` | 继承默认 | 小模型提炼（成本优化） |
 | `STORAGE_TYPE` | `file` | 存储后端：`file` / `db` |
 | `DB_URL` | `jdbc:h2:mem:clawdb;MODE=MySQL;...` | JDBC 连接（db 模式） |
@@ -36,6 +37,7 @@ nav_order: 3
 | --- | --- | --- |
 | `spring.profiles.active` | `web` | `web`（REST/SSE/WS）/ `shell`（终端 REPL） |
 | `spring.datasource.*` | H2 内存 | db 模式数据源（经 DB_* 变量覆盖） |
+| `spring.servlet.multipart.max-file-size` / `max-request-size` | `-1` | 文件上传大小上限（-1=不限制；RAG 知识库文档上传默认不限制，可按需收紧为如 `10MB`） |
 
 ## 3. Agent 核心（agent.*）
 
@@ -81,7 +83,24 @@ nav_order: 3
 | `synthesizer-model` / `-base-url` / `-api-key` | 继承默认 | 提炼专用小模型 |
 | `synthesis-cache-size` | `50` | 提炼缓存容量（≤0 关闭） |
 
-## 5. 工具安全（agent.security.*）
+## 5. RAG 检索增强（agent.rag.*）
+
+| 配置 | 默认值 | 说明 |
+| --- | --- | --- |
+| `enabled` | `false` | RAG 总开关（关闭后 RAG Bean 与 `/rag` 接口不装配，行为与未接入前一致） |
+| `provider` | `local` | 索引实现：`local`（本地文件向量索引，零依赖） |
+| `local.dir` | `${user.dir}/.agent/rag` | 索引存储目录（与 `.agent/memory` 完全隔离） |
+| `ingestion.chunk-size` | `500` | 单块文本长度上限（字符） |
+| `ingestion.chunk-overlap` | `50` | 相邻分块重叠（字符） |
+| `ingestion.embedding-batch-size` | `32` | 批量向量化单批条数（吞吐分组；单次 HTTP 上限见 embedding.max-batch-size） |
+| `retrieval.top-k` | `5` | 默认召回条数 |
+| `retrieval.min-score` | `0.2` | 默认最低相似度阈值 |
+| `retrieval.require-knowledge-base-id` | `false` | 是否强制要求请求显式指定知识库 |
+| `embedding.model` / `-base-url` / `-api-key` | env 引用 | RAG 专用 Embedding（OpenAI 兼容 `/embeddings`，经 `RAG_EMBEDDING_*` 注入） |
+| `embedding.max-batch-size` | `16` | 单次 HTTP 请求最大文本条数（模型侧批量上限，如阿里云 MaaS 为 20；Gateway 内部分批保证不超限） |
+| `context.max-chars` | `8000` | 单次注入 system prompt 的知识内容字符上限 |
+
+## 6. 工具安全（agent.security.*）
 
 | 配置 | 默认值 | 说明 |
 | --- | --- | --- |
@@ -96,7 +115,7 @@ nav_order: 3
 | `http-allowed-hosts` | （空=全部允许） | HTTP 请求 host 白名单（防 SSRF） |
 | `prompt-injection-guard` | `true` | 提示词注入防护 |
 
-## 6. 鉴权（agent.auth.*）
+## 7. 鉴权（agent.auth.*）
 
 | 配置 | 默认值 | 说明 |
 | --- | --- | --- |
@@ -127,15 +146,29 @@ nav_order: 3
 | `run-usage-dir` | `{memory-dir}/runs` | 运行记录目录 |
 | `metrics-exporter` | `none` | `none` / `actuator` / `prometheus`（实际暴露依赖引入的依赖） |
 
-## 9. 外部 JSON 配置
+## 10. 外部 JSON 配置
 
 | 文件 | 说明 |
 | --- | --- |
-| `agents.json` | Agent 注册表（agentId/name/description/keywords/systemPrompt/tools/maxSteps/model/apiKey…） |
+| `agents.json` | Agent 注册表（agentId/name/description/keywords/systemPrompt/tools/maxSteps/maxTokens/model/baseUrl/apiKey/temperature/provider…） |
 | `orchestrations.json` | 编排注册表（id/type/description/keywords/agents/config） |
 | `mcp-server.json` | MCP Server 配置（stdio：command+args；streamable_http：type+url） |
 
 均支持运行目录覆盖 + `${VAR:default}` 占位符，详见 [配置详解](../guide/configuration.md) 与 [Agent 与编排配置](../guide/agents-config.md)。
+
+## 11. example-web 示例工程（example.*）
+
+以下为 `example-web`（含前端 `example-web-frontend`）特有的接入方配置，框架本体不依赖：
+
+| 配置 | 默认值 | 说明 |
+| --- | --- | --- |
+| `example.tenant-id` | `default` | example-web 固定单租户 id（用户维度隔离空间标识，写入 `AgentScope.tenantId`） |
+| `example.cors.allowed-origins` | `http://localhost:5173,http://localhost:5174` | 跨域允许来源（逗号分隔；生产请显式配置为实际前端域名，经 `EXAMPLE_CORS_ALLOWED_ORIGINS` 覆盖） |
+| `AUTH_ENABLED` | `true` | example-web 是否开启鉴权（示例默认开启） |
+| `BOOTSTRAP_API_KEY` | `sk-admin-bootstrap` | 引导管理员 Key（`agent.auth.api-keys.admin.admin`） |
+
+> `.env` 加载：示例工程支持在**模块目录**（如 `example-web/.env`）放置 `.env`，
+> 从仓库根启动时也会命中模块内 `.env`（查找顺序：模块目录 → 运行目录 → 安装目录 → classpath）。
 
 ---
 

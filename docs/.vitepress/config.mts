@@ -44,9 +44,11 @@ export default defineConfig({
               { text: 'ReAct 推理循环', link: '/design/core-loop.html' },
               { text: '多 Agent 编排', link: '/design/collaboration.html' },
               { text: '分层记忆模型', link: '/design/memory-model.html' },
+              { text: 'RAG 检索增强', link: '/design/rag.html' },
               { text: '存储与多租户', link: '/design/storage-multitenancy.html' },
               { text: '安全模型', link: '/design/security.html' },
               { text: '可观测性与韧性', link: '/design/observability.html' },
+              { text: '扩展能力设计', link: '/design/extensibility.html' },
             ],
           },
           {
@@ -101,6 +103,7 @@ export default defineConfig({
               { text: 'Storage & Multi-Tenancy', link: '/en/design/storage-multitenancy.html' },
               { text: 'Security Model', link: '/en/design/security.html' },
               { text: 'Observability & Resilience', link: '/en/design/observability.html' },
+              { text: 'Extensibility Design', link: '/en/design/extensibility.html' },
             ],
           },
           {

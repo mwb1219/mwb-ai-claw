@@ -14,7 +14,7 @@ nav_order: 1
 | [安装与运行](install.md) | 源码 / 二进制包 / 安装脚本 / 双模式启动 |
 | [配置详解](configuration.md) | `.env` / `application.yml` / 加载优先级 |
 | [Shell 模式使用](shell-usage.md) | 斜杠命令 / 多模态 / headless |
-| [Web 模式使用](web-usage.md) | 启动 / REST / WebSocket / SSE / 鉴权 |
+| [Web 模式使用](web-usage.md) | 启动 / REST / WebSocket / SSE / 鉴权 / RAG 知识库 |
 | [嵌入式集成](embedding.md) | `ClawRuntime` 流式 chat |
 | [Agent 注册表与编排配置](agents-config.md) | `agents.json` / `orchestrations.json` |
 | [技能系统](skills.md) | `SKILL.md` 规范 / 三级加载 |

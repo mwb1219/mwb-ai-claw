@@ -79,7 +79,32 @@ event: done       → 结束
 | `GET` | `/memory/archive?sessionId=` | 跨会话档案块（空=全部会话） |
 | `GET` | `/memory/search?q=&topK=` | 检索召回调试（按当前检索器） |
 
-## 4. 鉴权（可选）
+## 4. RAG 检索增强（/rag）
+
+> `agent.rag.enabled=true` 时装配（默认关闭）。知识库为**全局资源**，不读取 `AgentScope`；
+> 依赖 OpenAI 兼容 `/embeddings`（`.env` 配置 `RAG_EMBEDDING_*`）。
+
+| 方法 | 路径 | 说明 | 关键参数 |
+| --- | --- | --- | --- |
+| `GET` | `/rag/knowledge-bases/{kb}/documents` | 列出知识库下全部文档 | - |
+| `POST` | `/rag/knowledge-bases/{kb}/documents` | 摄入文档（JSON：解析→切分→向量化→索引） | body: `RagIngestionCommand`（documentId? / name / contentType / content / metadata；documentId 留空自动生成） |
+| `POST` | `/rag/knowledge-bases/{kb}/documents/upload` | **文件上传摄入**（multipart，默认不限制大小） | form: `file`（必填）、`documentId?`、`name?`；`.md/.markdown` → `text/markdown`，其余按纯文本 |
+| `POST` | `/rag/knowledge-bases/{kb}/documents/{id}/reindex` | 重建指定文档索引 | - |
+| `DELETE` | `/rag/knowledge-bases/{kb}/documents/{id}` | 删除文档及其索引 | - |
+| `POST` | `/rag/search` | 独立 RAG 检索 | body: `RagQuery`（knowledgeBaseIds / text / topK / minScore / filters） |
+
+> 说明：`documentId` / `knowledgeBaseId` 支持中文等任意字符（仅排除路径分隔符与 `..`），
+> 上传时 documentId 留空由服务端自动生成 UUID。
+
+### 4.1 上传示例
+
+```bash
+curl -X POST http://localhost:8080/rag/knowledge-bases/product/docs/upload \
+  -H "X-API-Key: <key>" \
+  -F "file=@./产品手册.md"
+```
+
+## 5. 鉴权（可选）
 
 `agent.auth.enabled=true` 时所有 `/agent/**` 接口（含 SSE 流式）需要 API Key，三种携带方式：
 

@@ -20,7 +20,7 @@ nav_order: 3
 - [ ] Copy the template: `cp .env.example .env`
 - [ ] Common variables: `DEFAULT_API_KEY` / `DEFAULT_MODEL` / `DEFAULT_BASE_URL`
 - [ ] Storage variables: `STORAGE_TYPE`, `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` / `DB_DRIVER` / `SQL_INIT_MODE`
-- [ ] Agent-level variables: `CODER_MODEL` / `CODER_API_KEY`, etc. (referenced by `agents.json`)
+- [ ] Agent-level variables: `CODER_MODEL` / `CODER_BASE_URL` / `CODER_API_KEY`, etc. (referenced by `agents.json`)
 
 ## 3. `application.yml` Core Sections
 

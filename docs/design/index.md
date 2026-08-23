@@ -14,6 +14,8 @@ nav_order: 2
 | [ReAct 推理循环](core-loop.md) | 思考 → 行动 → 观察 |
 | [多 Agent 编排](collaboration.md) | routing / conversational / delegate |
 | [分层记忆模型](memory-model.md) | 五层模型 / 动态换页 |
+| [RAG 检索增强](rag.md) | 独立知识写入 / 索引 / 检索 / 上下文注入 |
 | [存储与多租户](storage-multitenancy.md) | file / db 后端 / AgentScope |
 | [安全模型](security.md) | 工具沙箱 / 审批 / 防注入 |
 | [可观测性与韧性](observability.md) | 指标 / 运行记录 / 重试降级 |
+| [扩展能力设计](extensibility.md) | 设计初衷 / 用户视角扩展 / SPI 扩展点 |

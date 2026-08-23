@@ -16,11 +16,11 @@ nav_order: 3
 | `DEFAULT_API_KEY` | (empty) | Default model key, required |
 | `DEFAULT_MODEL` | `deepseek-chat` | Default model |
 | `DEFAULT_BASE_URL` | `https://api.deepseek.com` | Default Base URL |
-| `CODER_MODEL` / `CODER_API_KEY` | Inherits default | Independent model for the coder expert |
-| `RESEARCHER_MODEL` / `RESEARCHER_API_KEY` | Inherits default | Independent model for the researcher expert |
-| `ARCHITECT_MODEL` / `ARCHITECT_API_KEY` | Inherits default | Independent model for the architect expert |
-| `REVIEWER_MODEL` / `REVIEWER_API_KEY` | Inherits default | Independent model for the reviewer expert |
-| `MODERATOR_MODEL` / `MODERATOR_API_KEY` | Inherits default | Independent model for the moderator expert |
+| `CODER_MODEL` / `CODER_BASE_URL` / `CODER_API_KEY` | Inherits default | Independent model for the coder expert |
+| `RESEARCHER_MODEL` / `RESEARCHER_BASE_URL` / `RESEARCHER_API_KEY` | Inherits default | Independent model for the researcher expert |
+| `ARCHITECT_MODEL` / `ARCHITECT_BASE_URL` / `ARCHITECT_API_KEY` | Inherits default | Independent model for the architect expert |
+| `REVIEWER_MODEL` / `REVIEWER_BASE_URL` / `REVIEWER_API_KEY` | Inherits default | Independent model for the reviewer expert |
+| `MODERATOR_MODEL` / `MODERATOR_BASE_URL` / `MODERATOR_API_KEY` | Inherits default | Independent model for the moderator expert |
 | `EMBEDDING_MODEL` / `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` | Inherits default | Embedding for vector retrieval (DeepSeek main model does not support embeddings, must be configured separately) |
 | `SYNTHESIS_MODEL` / `SYNTHESIS_BASE_URL` / `SYNTHESIS_API_KEY` | Inherits default | Small-model synthesis (cost optimization) |
 | `STORAGE_TYPE` | `file` | Storage backend: `file` / `db` |
@@ -131,7 +131,7 @@ nav_order: 3
 
 | File | Description |
 | --- | --- |
-| `agents.json` | Agent registry (agentId/name/description/keywords/systemPrompt/tools/maxSteps/model/apiKey…) |
+| `agents.json` | Agent registry (agentId/name/description/keywords/systemPrompt/tools/maxSteps/maxTokens/model/baseUrl/apiKey/temperature/provider…) |
 | `orchestrations.json` | Orchestration registry (id/type/description/keywords/agents/config) |
 | `mcp-server.json` | MCP Server configuration (stdio: command+args; streamable_http: type+url) |
 
