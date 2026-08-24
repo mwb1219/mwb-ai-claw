@@ -2,6 +2,7 @@ package com.mwb.ai.claw.infrastructure.tool;
 
 import com.mwb.ai.claw.domain.core.ProgressCallback;
 import com.mwb.ai.claw.domain.rag.context.RagRequestContext;
+import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.domain.tool.DynamicToolRegistry;
 import com.mwb.ai.claw.domain.tool.ToolExecutor;
@@ -101,10 +102,19 @@ public class ToolGatewayImpl implements ToolGateway, DynamicToolRegistry {
             return ToolResult.error("工具不存在: " + toolName);
         }
         Future<ToolResult> future = null;
+        // 捕获请求线程的 AgentScope：ThreadLocal 不跨线程传播，需显式带入工具执行线程
+        // （业务工具基于 AgentScopeContext 读 tenantId/userId 实现租户隔离）
+        AgentScope scope = AgentScopeContext.get();
         try {
             // 统一执行超时兜底：包装到线程池执行，超时 → 取消执行线程
-            future = toolPool.submit(RagRequestContext.wrapCallable(
-                    () -> executor.execute(argumentsJson, callback)));
+            future = toolPool.submit(RagRequestContext.wrapCallable(() -> {
+                AgentScopeContext.set(scope);
+                try {
+                    return executor.execute(argumentsJson, callback);
+                } finally {
+                    AgentScopeContext.clear();
+                }
+            }));
             ToolResult result = future.get(timeoutSeconds, TimeUnit.SECONDS);
             recordTool(toolName, result.isSuccess() ? "success" : "error", start);
             return result;
