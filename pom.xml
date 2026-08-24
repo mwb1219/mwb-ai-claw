@@ -13,7 +13,7 @@
 
     <properties>
         <!-- 统一版本号：全模块共享，升级时仅修改此处的 revision -->
-        <revision>1.0.1</revision>
+        <revision>1.0.2-SNAPSHOT</revision>
 
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>${maven.compiler.source}</maven.compiler.target>
@@ -35,6 +35,7 @@
         <module>mwb-ai-claw-spring-boot-starter</module>
         <module>example-embed</module>
         <module>example-web</module>
+        <module>example-commerce</module>
         <module>start</module>
     </modules>
 
@@ -194,6 +195,7 @@
                         <excludeArtifact>start</excludeArtifact>
                         <excludeArtifact>example-embed</excludeArtifact>
                         <excludeArtifact>example-web</excludeArtifact>
+                        <excludeArtifact>example-commerce</excludeArtifact>
                     </excludeArtifacts>
                 </configuration>
             </plugin>

@@ -1,0 +1,3 @@
+# 电商/营销运营助手示例的环境变量加载器
+org.springframework.boot.env.EnvironmentPostProcessor=\
+com.mwb.ai.claw.example.commerce.config.DotenvEnvironmentPostProcessor

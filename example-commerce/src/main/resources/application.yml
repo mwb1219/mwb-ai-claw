@@ -1,0 +1,101 @@
+# ================= Spring 默认 Profile =================
+# 默认激活 web 交互模式（REST/SSE/WebSocket，内嵌 Tomcat，端口默认 8080）
+spring:
+  profiles:
+    active: web
+  # ================= 数据源（agent.storage.type=db 时生效） =================
+  datasource:
+    url: ${DB_URL:jdbc:h2:mem:clawdb;MODE=MySQL;DB_CLOSE_DELAY=-1}
+    username: ${DB_USERNAME:sa}
+    password: ${DB_PASSWORD:}
+    driver-class-name: ${DB_DRIVER:org.h2.Driver}
+  # ================= 文件上传（RAG 知识库文档，默认不限制大小） =================
+  servlet:
+    multipart:
+      max-file-size: -1
+      max-request-size: -1
+
+project:
+  name: example-commerce
+
+# ================= Agent 配置（前缀 agent，对应 AgentProperties） =================
+agent:
+  storage:
+    type: ${STORAGE_TYPE:file}
+  agent-id: default
+  name: 电商营销运营助手
+  system-prompt: 你是电商营销运营助手，可调用业务工具查询店铺商品/订单/活动数据并制定促销方案。
+  # 默认编排：routing（通用）；营销方案生成可显式指定 orchestrationId=marketing
+  orchestration: routing
+  model: ${DEFAULT_MODEL:deepseek-chat}
+  base-url: ${DEFAULT_BASE_URL:https://api.deepseek.com}
+  api-key: ${DEFAULT_API_KEY:}
+  temperature: 0.7
+  max-tokens: 8192
+  max-steps: 8
+  max-steps-extension: 2.0
+  memory-dir: ""
+
+  # 分层记忆
+  memory:
+    enabled: true
+    context-window-tokens: 200000
+    context-budget-ratio: 0.6
+    prompt-budget-ratio: 0.25
+    tool-budget-ratio: 0.25
+    hot-window-size: 20
+    summary-block-size: 10
+    importance-threshold: 0.6
+    top-k: 5
+    eviction-policy: importance
+    synthesis-async: true
+    retriever: hybrid
+    vector-enabled: true
+    embedding-model: ${EMBEDDING_MODEL:}
+    embedding-base-url: ${EMBEDDING_BASE_URL:}
+    embedding-api-key: ${EMBEDDING_API_KEY:}
+    archive-enabled: true
+    shared-retrieve: true
+    synthesizer-model: ${SYNTHESIS_MODEL:}
+    synthesizer-base-url: ${SYNTHESIS_BASE_URL:}
+    synthesizer-api-key: ${SYNTHESIS_API_KEY:}
+    synthesis-cache-size: 50
+
+  # ===== 独立 RAG 知识库（agent.rag.*）：默认开启示意，需 .env 配置 RAG_EMBEDDING_* =====
+  rag:
+    enabled: true
+    provider: local
+    ingestion:
+      chunk-size: 500
+      chunk-overlap: 50
+      embedding-batch-size: 32
+    retrieval:
+      top-k: 5
+      min-score: 0.2
+      require-knowledge-base-id: false
+    embedding:
+      model: ${RAG_EMBEDDING_MODEL:}
+      base-url: ${RAG_EMBEDDING_BASE_URL:}
+      api-key: ${RAG_EMBEDDING_API_KEY:}
+      max-batch-size: 16
+    context:
+      max-chars: 8000
+
+  # ===== 安全（本示例仅用自定义业务工具，不依赖 shell；保留安全开关） =====
+  security:
+    enabled: true
+    workspace-dir: ""
+    shell-approval-mode: read-only
+    tool-timeout-seconds: 30
+    max-output-length: 10000
+
+  # ===== 鉴权（agent.auth.*）：开启多租户（店铺）隔离 =====
+  auth:
+    enabled: ${AUTH_ENABLED:true}
+    header: X-API-Key
+    # 静态引导管理员 Key：作为 CommerceTenantGateway 之外的兜底/引导（demo 默认）
+    api-keys:
+      store-a:
+        admin: ${BOOTSTRAP_API_KEY:sk-admin-bootstrap}
+    # 工具级权限：缺省 = 全部允许；生产可限制 store-a 下的用户仅用查询类工具
+    tool-permissions: {}
