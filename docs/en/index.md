@@ -6,6 +6,8 @@ title: Documentation (English)
 
 > English documentation hub. Organized as **User Guide → Design Overview → Quick Reference**.
 > New to the project? Start with the [Quick Start](guide/quick-start.md).
+>
+> mwb-ai-claw is a **Java Agent Harness**: it provides the execution loop, tool-safety sandbox, layered memory, sessions & multi-tenancy, observability, and config-driven agent/orchestration definitions — an assembled agent runtime rather than a model library you assemble yourself.
 
 > 中文文档：[Chinese](../index.md) — 文档以中文为第一语言，英文版为翻译镜像。
 

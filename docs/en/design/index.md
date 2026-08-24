@@ -8,6 +8,8 @@ parent: Documentation (English)
 # Design Overview
 
 > For readers who want to understand the principles. Each doc explains the model and key decisions of one subsystem.
+>
+> One-line positioning: mwb-ai-claw is a **Java Agent Harness** — every subsystem below (loop / orchestration / memory / RAG / storage / security / observability) together forms the runtime scaffolding around the model; LangChain4j / Spring AI supply the parts, this is the assembled machine.
 
 | Doc | Content |
 | --- | --- |

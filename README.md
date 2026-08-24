@@ -1,10 +1,24 @@
 # mwb-ai-claw
 
-> An AI Agent framework in Java, built on COLA architecture (DDD). Inspired by OpenClaw — an out-of-the-box personal AI assistant that can actually get things done.
+> A **Java Agent Harness** framework, built on COLA architecture (DDD). Inspired by OpenClaw — an out-of-the-box personal AI assistant that can actually get things done.
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.mwb1219/mwb-ai-claw-app?color=blue)](https://search.maven.org/artifact/io.github.mwb1219/mwb-ai-claw-app)
 [![Docs](https://img.shields.io/badge/docs-online-blue)](https://mwb1219.github.io/mwb-ai-claw/)
+
+## What is an Agent Harness?
+
+mwb-ai-claw is **not** a model-integration library (in the vein of LangChain4j / Spring AI, which hand you `ChatClient`-level building blocks that you must assemble yourself). It is an **Agent Harness** — the ready-to-run runtime that takes an LLM and turns it into an agent that can actually get work done. It supplies everything around the model:
+
+- **Execution loop** — a ReAct (Thought → Action → Observation) loop with an adaptive step budget and token guard
+- **Tool execution & safety** — sandboxed shell commands (command whitelist/blacklist, path restrictions, timeout, output truncation + secret masking), approval gates, HTTP allowlist
+- **Layered memory** — a five-layer memory model with dynamic paging, retrieval and distillation
+- **Session & state** — session-first CRUD with multi-tenant `AgentScope` isolation
+- **Config-driven agents** — agents and orchestrations are declared in `agents.json` / `orchestrations.json` rather than hardcoded; the kernel stays stable while capabilities grow at the edges
+- **Observability & resilience** — metrics, JSONL run logs, retry / degradation, step & token budgets
+- **Multiple entry points** — Shell, Web console, REST API, WebSocket (SSE streaming), and the embeddable `ClawRuntime`
+
+If LangChain4j / Spring AI are the **parts** for building a harness, mwb-ai-claw is the **already-assembled harness** — a self-contained, deployable agent runtime.
 
 ## Features
 
@@ -104,6 +118,7 @@ See [Embedding Integration](docs/guide/embedding.md) and [Server Integration](do
 
 ## Documentation
 
+- 中文版 README：[简体中文](README.zh-CN.md)
 - 中文文档站：https://mwb1219.github.io/mwb-ai-claw/
 - English site: https://mwb1219.github.io/mwb-ai-claw/en/
 

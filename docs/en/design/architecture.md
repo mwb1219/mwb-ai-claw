@@ -9,6 +9,12 @@ nav_order: 1
 > For readers who want to understand the principles: how this project is layered, how modules are organized, and how the runtime is assembled.
 > For functional details involving code, see the individual design docs (core-loop / collaboration / memory-model, etc.).
 
+## 0. Position: This Is a Java Agent Harness
+
+> mwb-ai-claw is a **Java Agent Harness** — it assembles the model + execution loop + tool safety + memory + sessions + config-driven agent definitions + observability into an out-of-the-box, deployable agent.
+> If LangChain4j / Spring AI supply the **parts** for building a harness (`ChatClient`-level building blocks), this framework is the **already-assembled harness**.
+> That role is reflected across the subsystems: the ReAct loop ([core-loop](core-loop.md)), tool sandbox & approval gates ([security](security.md)), layered memory ([memory-model](memory-model.md)), config-driven agents/orchestration ([agents config](../guide/agents-config.md)), and multi-tenant / multi-instance storage ([storage-multitenancy](storage-multitenancy.md) / [horizontal-scaling](horizontal-scaling.md)) together form the runtime scaffolding around the model.
+
 ## 1. Layered Model (COLA / DDD)
 
 ```

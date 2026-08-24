@@ -9,6 +9,12 @@ nav_order: 1
 > 面向想理解原理的读者：本项目如何分层、模块如何组织、运行时如何装配。
 > 涉及代码实现的功能细节见各设计文档（core-loop / collaboration / memory-model 等）。
 
+## 0. 定位：这是一个 Java Agent Harness
+
+> mwb-ai-claw 是一个 **Java Agent Harness**——它把「模型 + 执行循环 + 工具安全 + 记忆 + 会话 + 配置化 Agent 定义 + 可观测性」装配成开箱即用、可部署的 Agent 整机。
+> 若 LangChain4j / Spring AI 提供的是「造 harness 的零件（`ChatClient` 级积木）」，那么本框架本身就是「装好的 harness」。
+> 这一角色体现在各子系统：ReAct 执行循环（[core-loop](core-loop.md)）、工具沙箱与审批门禁（[security](security.md)）、分层记忆（[memory-model](memory-model.md)）、配置化 Agent/编排（[agents 配置](../guide/agents-config.md)）、多租户与多实例存储（[storage-multitenancy](storage-multitenancy.md) / [horizontal-scaling](horizontal-scaling.md)）共同构成模型之外的运行时脚手架。
+
 ## 1. 分层模型（COLA / DDD）
 
 ```
