@@ -216,3 +216,43 @@ export interface RagSearchResult {
   score: number;
   metadata?: Record<string, string>;
 }
+
+// ==================== 可观测性（运行记录 + 全链路 trace） ====================
+// 后端来源：mwb-ai-claw-domain（observability/*）、mwb-ai-claw-adapter（RunUsageController /runs、TraceController /trace）
+
+/** 一次 Agent 运行的用量摘要（运行记录列表项） */
+export interface RunUsage {
+  ts?: string;
+  traceId?: string;
+  sessionId?: string;
+  agentId?: string;
+  orchestration?: string;
+  model?: string;
+  durationMs?: number;
+  success?: boolean;
+  steps?: number;
+  errorCode?: string;
+}
+
+/** 步骤级 trace 单元 */
+export interface TraceStep {
+  index: number;
+  type: string; // thought | action | observation | info | step
+  content: string;
+}
+
+/** 一次 Agent 运行的全链路 trace（可还原逐步 Thought / Action / Observation） */
+export interface TraceRun {
+  traceId: string;
+  tenantId?: string;
+  userId?: string;
+  sessionId?: string;
+  agentId?: string;
+  orchestration?: string;
+  model?: string;
+  startTime?: number;
+  durationMs?: number;
+  success?: boolean;
+  errorCode?: string;
+  steps: TraceStep[];
+}

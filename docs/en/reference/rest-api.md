@@ -79,6 +79,20 @@ event: done       → end
 | `GET` | `/memory/archive?sessionId=` | Cross-session archive blocks (empty = all sessions) |
 | `GET` | `/memory/search?q=&topK=` | Retrieval recall debugging (using the current retriever) |
 
+## 3.1 Full-chain Trace (/trace)
+
+> Assembled when `agent.observability.trace.enabled=true` (default); `/trace/**` is authenticated and filtered by
+> the current tenant/user — returns failure on unauthorized access or when disabled.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/trace/{traceId}` | Reconstruct the step-by-step chain of one execution (thought / action / observation / info) plus run-level metadata |
+
+```bash
+# Query the full chain of one execution (returns a TraceRun: traceId/sessionId/model/durationMs + steps[])
+curl http://localhost:8080/trace/<traceId> -H "X-API-Key: <key>"
+```
+
 ## 4. Authentication (Optional)
 
 When `agent.auth.enabled=true`, all `/agent/**` endpoints (including SSE streaming) require an API Key, which can be carried in three ways:

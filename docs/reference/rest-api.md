@@ -79,6 +79,20 @@ event: done       → 结束
 | `GET` | `/memory/archive?sessionId=` | 跨会话档案块（空=全部会话） |
 | `GET` | `/memory/search?q=&topK=` | 检索召回调试（按当前检索器） |
 
+## 3.1 全链路 trace（/trace）
+
+> `agent.observability.trace.enabled=true`（默认）时装配 `TraceStore`（local JSON 或 db 落库）；
+> `/trace/**` 走鉴权，按当前租户/用户隔离过滤，越权或未启用时返回失败。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/trace/{traceId}` | 按 traceId 还原一次执行的逐步明细（thought / action / observation / info）与 run 级元数据 |
+
+```bash
+# 示例：查询某次执行的完整链路（返回 TraceRun：traceId/sessionId/model/durationMs + steps[]）
+curl http://localhost:8080/trace/<traceId> -H "X-API-Key: <key>"
+```
+
 ## 4. RAG 检索增强（/rag）
 
 > `agent.rag.enabled=true` 时装配（默认关闭）。知识库为**全局资源**，不读取 `AgentScope`；

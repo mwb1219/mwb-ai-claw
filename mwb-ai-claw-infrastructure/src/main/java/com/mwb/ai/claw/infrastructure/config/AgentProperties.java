@@ -267,8 +267,26 @@ public class AgentProperties {
         /** 用量记录目录（默认 {memory-dir}/runs） */
         private String runUsageDir = "";
 
+        /** 运行用量存储后端：local（默认，JSONL 文件）| db（JDBC 落 claw_run_usage 表，多实例共享，生产推荐） */
+        private String runUsageStore = "local";
+
         /** 指标暴露方式：none | actuator | prometheus（提示性配置，实际暴露依赖 classpath 引入的依赖） */
         private String metricsExporter = "none";
+
+        /** 步骤级 trace 存储配置（agent.observability.trace.*） */
+        private TraceConfig trace = new TraceConfig();
+    }
+
+    @Data
+    public static class TraceConfig {
+        /** 步骤级 trace 记录与查询开关（默认 true；false 时不装配 TraceStore） */
+        private boolean enabled = true;
+
+        /** trace 存储后端：local（本地 JSON 文件，默认）| db（JDBC，复用数据源落库，生产推荐） */
+        private String store = "local";
+
+        /** 本地 trace 目录（默认 {memory-dir}/traces） */
+        private String dir = "";
     }
 
     @Data

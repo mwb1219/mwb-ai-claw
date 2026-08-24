@@ -130,6 +130,19 @@ consolidation). This is the most intuitive "dialog box" interaction: send a ques
 
 ![Chat example](screenshots/05-chat-reply.jpg)
 
+**⑥ Observability (`#/observability`)**: every agent execution persists a run-usage summary (into the
+`claw_run_usage` table, controlled by `agent.observability.run-usage-store=db`). The top aggregates today's
+run count / success / failure / average duration, while the list below shows each run's traceId, session, agent,
+orchestration, model, step count and duration.
+
+![Observability - run records](screenshots/06-observability-runs.jpg)
+
+Click "查看 trace" on a run record (or type a traceId directly) to call `GET /trace/{traceId}` and reconstruct the
+step-by-step details (Thought / Action / Observation) of that execution, stored in the `claw_trace` table (controlled
+by `agent.observability.trace.store=db`), shared across instances and isolated per tenant/user.
+
+![Observability - full chain trace](screenshots/07-observability-trace.jpg)
+
 ## 6. REST Verification (optional)
 
 ```bash
@@ -140,6 +153,12 @@ curl -X POST http://localhost:8080/rag/search -H "X-API-Key: sk-admin-bootstrap"
 
 # List documents
 curl http://localhost:8080/rag/knowledge-bases/admin-product-docs/documents -H "X-API-Key: sk-admin-bootstrap"
+
+# List today's run records (run usage stored in claw_run_usage)
+curl http://localhost:8080/runs -H "X-API-Key: sk-admin-bootstrap"
+
+# Reconstruct a full-chain trace by traceId (stored in claw_trace)
+curl http://localhost:8080/trace/<traceId> -H "X-API-Key: sk-admin-bootstrap"
 ```
 
 ## 7. Notes

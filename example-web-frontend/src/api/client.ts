@@ -11,8 +11,10 @@ import type {
   RagIngestionResult,
   RagQuery,
   RagSearchResult,
+  RunUsage,
   SessionDTO,
   SingleResponse,
+  TraceRun,
   UserDTO,
   UserInfoDTO,
 } from './types';
@@ -241,5 +243,19 @@ export const ragApi = {
       method: 'POST',
       body: JSON.stringify(query),
     });
+  },
+};
+
+// ==================== 可观测性（运行记录 + 全链路 trace） ====================
+
+export const observabilityApi = {
+  /** 查询运行记录摘要列表（date=yyyy-MM-dd，缺省今天；时间升序） */
+  listRuns(date?: string): Promise<RunUsage[]> {
+    const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+    return request<RunUsage[]>(`/runs${qs}`);
+  },
+  /** 按 traceId 还原一次执行的逐步明细（Thought / Action / Observation） */
+  getTrace(traceId: string): Promise<TraceRun> {
+    return request<TraceRun>(`/trace/${encodeURIComponent(traceId)}`);
   },
 };

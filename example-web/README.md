@@ -126,6 +126,18 @@ npm run build      # 生产构建 → dist/
 
 ![对话案例](screenshots/05-chat-reply.jpg)
 
+**⑥ 可观测性（`#/observability`）**：每次 Agent 执行结束都会沉淀一条运行用量摘要（落 `claw_run_usage` 表，
+由 `agent.observability.run-usage-store=db` 控制），页面顶部聚合今日运行数 / 成功数 / 失败数 / 平均耗时，
+下方列出每条运行记录的 traceId、会话、Agent、编排、模型、步骤数与耗时。
+
+![可观测性-运行记录](screenshots/06-observability-runs.jpg)
+
+点击运行记录中的「查看 trace」或直接输入 traceId，可调用 `GET /trace/{traceId}` 还原该次执行的逐步明细
+（Thought / Action / Observation），数据落 `claw_trace` 表（由 `agent.observability.trace.store=db` 控制），
+多实例共享、按租户/用户隔离。
+
+![可观测性-全链路 trace](screenshots/07-observability-trace.jpg)
+
 ## 6. REST 验证（可选）
 
 ```bash
@@ -136,6 +148,12 @@ curl -X POST http://localhost:8080/rag/search -H "X-API-Key: sk-admin-bootstrap"
 
 # 查看文档列表
 curl http://localhost:8080/rag/knowledge-bases/admin-product-docs/documents -H "X-API-Key: sk-admin-bootstrap"
+
+# 查询今日运行记录（运行用量落 claw_run_usage 表）
+curl http://localhost:8080/runs -H "X-API-Key: sk-admin-bootstrap"
+
+# 按 traceId 还原一次执行的全链路逐步明细（落 claw_trace 表）
+curl http://localhost:8080/trace/<traceId> -H "X-API-Key: sk-admin-bootstrap"
 ```
 
 ## 7. 说明

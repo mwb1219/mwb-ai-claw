@@ -79,3 +79,43 @@ CREATE TABLE IF NOT EXISTS claw_long_term (
     update_time BIGINT       DEFAULT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uk_long_term ON claw_long_term(tenant_id, user_id, name);
+
+-- 全链路 trace 表（agent.observability.trace.store=db 时使用，PostgreSQL 版）
+-- 每次运行写入一行 __run__ 标识行 + 每步一行明细，按 trace_id + step_index 还原链路
+CREATE TABLE IF NOT EXISTS claw_trace (
+    id            BIGSERIAL    PRIMARY KEY,
+    tenant_id     VARCHAR(64)  NOT NULL DEFAULT '',
+    user_id       VARCHAR(64)  NOT NULL DEFAULT '',
+    trace_id      VARCHAR(64)  NOT NULL,
+    session_id    VARCHAR(64)  DEFAULT NULL,
+    agent_id      VARCHAR(64)  DEFAULT NULL,
+    orchestration VARCHAR(32)  DEFAULT NULL,
+    model         VARCHAR(64)  DEFAULT NULL,
+    start_time    BIGINT       DEFAULT NULL,
+    duration_ms   BIGINT       DEFAULT NULL,
+    success       BOOLEAN      DEFAULT TRUE,
+    error_code    VARCHAR(32)  DEFAULT NULL,
+    step_index    INT          DEFAULT NULL,
+    step_type     VARCHAR(16)  DEFAULT NULL,
+    step_content  TEXT         DEFAULT NULL,
+    create_time   BIGINT       DEFAULT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_trace ON claw_trace(trace_id, tenant_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_trace_session ON claw_trace(session_id, create_time);
+
+-- 运行用量摘要表（agent.observability.run-usage-store=db 时使用，PostgreSQL 版）
+-- 每次运行一条摘要，供 shell /runs 统计
+CREATE TABLE IF NOT EXISTS claw_run_usage (
+    id            BIGSERIAL    PRIMARY KEY,
+    trace_id      VARCHAR(64)  DEFAULT NULL,
+    session_id    VARCHAR(64)  DEFAULT NULL,
+    agent_id      VARCHAR(64)  DEFAULT NULL,
+    orchestration VARCHAR(32)  DEFAULT NULL,
+    model         VARCHAR(64)  DEFAULT NULL,
+    duration_ms   BIGINT       DEFAULT NULL,
+    success       BOOLEAN      DEFAULT TRUE,
+    steps         INT          DEFAULT 0,
+    error_code    VARCHAR(32)  DEFAULT NULL,
+    create_time   BIGINT       DEFAULT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_run_create ON claw_run_usage(create_time);

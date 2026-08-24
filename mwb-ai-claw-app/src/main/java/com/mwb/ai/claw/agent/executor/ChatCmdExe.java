@@ -1,9 +1,16 @@
 package com.mwb.ai.claw.agent.executor;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
+
 import javax.annotation.Resource;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 import com.mwb.ai.claw.agent.observability.RunUsageRecorder;
@@ -16,6 +23,10 @@ import com.mwb.ai.claw.domain.collaboration.spi.ExecutionUnit;
 import com.mwb.ai.claw.domain.core.AgentGateway;
 import com.mwb.ai.claw.domain.core.ProgressCallback;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
+import com.mwb.ai.claw.domain.observability.RunUsage;
+import com.mwb.ai.claw.domain.observability.TraceRun;
+import com.mwb.ai.claw.domain.observability.TraceStep;
+import com.mwb.ai.claw.domain.observability.TraceStore;
 import com.mwb.ai.claw.domain.rag.context.RagRequestContext;
 import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.dto.ChatCmd;
@@ -58,6 +69,10 @@ public class ChatCmdExe {
 
     @Resource
     private RunUsageRecorder usageRecorder;
+
+    /** 步骤级 trace 存储（agent.observability.trace.*，默认本地 JSON；trace.enabled=false 时为空） */
+    @Resource
+    private ObjectProvider<TraceStore> traceStoreProvider;
 
     public SingleResponse<ChatResponseDTO> execute(ChatCmd cmd) {
         return execute(cmd, null);
@@ -121,6 +136,7 @@ public class ChatCmdExe {
             if (!result.isSuccess()) {
                 String code = mapErrorCode(result.getErrorCategory(), result.getErrorMessage());
                 recordUsage(cmd, orchestrationId, result, false, code, start);
+                recordTrace(cmd, orchestrationId, result, false, code, start);
                 return SingleResponse.buildFailure(code, result.getErrorMessage());
             }
             ChatResponseDTO dto = new ChatResponseDTO();
@@ -131,12 +147,15 @@ public class ChatCmdExe {
             dto.setTraceSteps(result.getTraceSteps());
 
             recordUsage(cmd, orchestrationId, result, true, null, start);
+            recordTrace(cmd, orchestrationId, result, true, null, start);
             return SingleResponse.of(dto);
         } catch (BizException e) {
             recordUsage(cmd, orchestrationId, null, false, e.getErrCode(), start);
+            recordTrace(cmd, orchestrationId, null, false, e.getErrCode(), start);
             throw e;
         } catch (Exception e) {
             recordUsage(cmd, orchestrationId, null, false, "SYSTEM_ERROR", start);
+            recordTrace(cmd, orchestrationId, null, false, "SYSTEM_ERROR", start);
             throw e;
         } finally {
             if (boundOptions) {
@@ -155,7 +174,8 @@ public class ChatCmdExe {
     private void recordUsage(ChatCmd cmd, String orchestrationId, CollaborationResult result,
                              boolean success, String errorCode, long start) {
         try {
-            RunUsageRecorder.RunUsage usage = new RunUsageRecorder.RunUsage();
+            RunUsage usage = new RunUsage();
+            usage.setTraceId(resolveTraceId());
             usage.setSessionId(result != null ? result.getSessionId() : cmd.getSessionId());
             usage.setAgentId(result != null ? result.getAgentId() : cmd.getAgentId());
             usage.setOrchestration(orchestrationId);
@@ -164,10 +184,94 @@ public class ChatCmdExe {
             usage.setSuccess(success);
             usage.setSteps(result != null ? result.getTraceSteps().size() : 0);
             usage.setErrorCode(errorCode);
+            usage.setCreateTime(System.currentTimeMillis());
             usageRecorder.record(usage);
         } catch (Exception e) {
             log.warn("记录运行用量失败: {}", e.getMessage());
         }
+    }
+
+    /**
+     * 记录一次全链路步骤 trace（成功/失败均记录；trace.enabled=false 或未装配 TraceStore 时静默跳过）。
+     * traceId 复用请求链路 MDC，缺失时自动生成，保证任意入口（REST / SSE / WS / Shell）都可关联查询。
+     */
+    private void recordTrace(ChatCmd cmd, String orchestrationId, CollaborationResult result,
+                             boolean success, String errorCode, long start) {
+        try {
+            TraceStore store = traceStoreProvider.getIfAvailable();
+            if (store == null) {
+                return;
+            }
+            TraceRun run = new TraceRun();
+            run.setTraceId(resolveTraceId());
+            run.setTenantId(scopeField(0));
+            run.setUserId(scopeField(1));
+            run.setSessionId(result != null ? result.getSessionId() : cmd.getSessionId());
+            run.setAgentId(result != null ? result.getAgentId() : cmd.getAgentId());
+            run.setOrchestration(orchestrationId);
+            run.setModel(agentProperties.getModel());
+            run.setStartTime(start);
+            run.setDurationMs(System.currentTimeMillis() - start);
+            run.setSuccess(success);
+            run.setErrorCode(errorCode);
+            run.setSteps(buildSteps(result));
+            store.saveTrace(run);
+        } catch (Exception e) {
+            log.warn("记录 trace 失败: {}", e.getMessage());
+        }
+    }
+
+    private java.util.List<TraceStep> buildSteps(CollaborationResult result) {
+        java.util.List<TraceStep> steps = new ArrayList<>();
+        if (result == null || result.getTraceSteps() == null) {
+            return steps;
+        }
+        int idx = 1;
+        for (String s : result.getTraceSteps()) {
+            TraceStep step = new TraceStep();
+            step.setIndex(idx++);
+            step.setContent(s);
+            step.setType(classifyStep(s));
+            steps.add(step);
+        }
+        return steps;
+    }
+
+    private String classifyStep(String content) {
+        if (content != null) {
+            String u = content.toUpperCase(Locale.ROOT);
+            if (u.startsWith("[THOUGHT]")) {
+                return "thought";
+            }
+            if (u.startsWith("[ACTION]")) {
+                return "action";
+            }
+            if (u.startsWith("[OBSERVATION]")) {
+                return "observation";
+            }
+            if (u.startsWith("[INFO]")) {
+                return "info";
+            }
+        }
+        return "step";
+    }
+
+    private String resolveTraceId() {
+        String traceId = MDC.get("traceId");
+        if (traceId == null || traceId.trim().isEmpty()) {
+            return UUID.randomUUID().toString().replace("-", "");
+        }
+        return traceId;
+    }
+
+    /** 0=tenantId，1=userId；取当前请求 scope，cope 为空时返回空串 */
+    private String scopeField(int kind) {
+        com.mwb.ai.claw.domain.scope.AgentScope scope = com.mwb.ai.claw.domain.scope.AgentScopeContext.get();
+        if (scope == null) {
+            return "";
+        }
+        String v = kind == 0 ? scope.getTenantId() : scope.getUserId();
+        return v == null ? "" : v;
     }
 
     /**

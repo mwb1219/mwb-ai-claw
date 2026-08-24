@@ -22,18 +22,41 @@ nav_order: 7
 
 `/metrics` in Shell provides a real-time snapshot; once actuator is added, metrics can also be exposed via `/actuator/metrics` and Prometheus.
 
-## 2. Run Logs (JSONL)
+## 2. Run Logs (JSONL / DB)
 
-After each agent execution, a run summary is appended to `{memory-dir}/runs/{yyyy-MM-dd}.jsonl`:
+After each agent execution, a run-usage summary is recorded (as JSONL or DB):
 
 ```json
 {"ts":"2026-08-21T10:00:00","sessionId":"...","agentId":"default","orchestration":"routing",
  "model":"deepseek-chat","durationMs":5210,"success":true,"steps":3,"errorCode":null}
 ```
 
-- Shell `/runs [date]` queries the summary and details; set `agent.observability.run-usage-log=false` to disable
+- Storage is switched by `agent.observability.run-usage-store`: `local` (default, append to
+  `{memory-dir}/runs/{date}.jsonl`) or `db` (`claw_run_usage` table, same database as session/memory/RAG,
+  shared across instances, **recommended for production**);
+- Shell `/runs [date]` queries the summary and details (reading/writing the same backend);
+  set `agent.observability.run-usage-log=false` to disable
 
-## 3. LLM Resilience (agent.llm.*)
+## 3. Step-level Trace (full chain)
+
+Summaries only record "how many steps / duration / result", which is not deep enough for troubleshooting. The
+framework provides step-level traces: each execution saves Thought / Action / Observation item-by-item details,
+linkable by `traceId` to reconstruct the whole chain.
+
+- **Model**: `TraceStore` SPI (`domain.observability`) — `saveTrace` / `findTrace(scope, traceId)`;
+  recorded by `ChatCmdExe` after every execution (including failures); `traceId` reuses the request MDC
+  (auto-generated if absent);
+- **Two default implementations** (replaceable via `@ConditionalOnMissingBean`, e.g. OTLP export):
+  | store | Implementation | Description |
+  | --- | --- | --- |
+  | `local` (default) | `LocalTraceStore` | one JSON file per traceId under `{memory-dir}/traces/`, zero dependency |
+  | `db` | `JdbcTraceStore` | `claw_trace` table (MySQL / PostgreSQL), shared across instances, **recommended for production** |
+- **Switch**: `agent.observability.trace.enabled` (default true); no `TraceStore` is assembled when `false`;
+- **Query**: `GET /trace/{traceId}` (authenticated, tenant/user isolated), steps rebuilt by `step_index`;
+- **Schema**: MySQL `start/src/main/resources/schema.sql`; PostgreSQL
+  `example-web/docker/initdb/01-pgvector.sql` (same database as session/memory/RAG).
+
+## 4. LLM Resilience (agent.llm.*)
 
 | Mechanism | Configuration | Description |
 | --- | --- | --- |

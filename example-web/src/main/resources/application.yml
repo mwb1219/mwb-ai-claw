@@ -45,6 +45,15 @@ agent:
   # 配置 db 时需保证数据源可达（见顶部 spring.datasource 或 .env 中 DB_* 变量），否则启动即连库报错
   storage:
     type: ${STORAGE_TYPE:file}
+  # ===== 可观测性 =====
+  # run-usage-store=local（默认，JSONL 文件）| db（落 claw_run_usage 表，与会话/记忆/RAG 同库，多实例共享，生产推荐）
+  # trace store=local（默认，本地 JSON，零依赖）| db（落 claw_trace 表，生产推荐）
+  observability:
+    run-usage-store: ${RUN_USAGE_STORE:db}
+    trace:
+      enabled: ${TRACE_ENABLED:true}
+      store: ${TRACE_STORE:db}
+      dir: ${TRACE_DIR:}
   # ===== 会话并发锁（T3 横向扩展能力） =====
   # local（默认，JVM 内 ReentrantLock，单实例）| redis（SET NX PX 分布式锁，多实例部署共享）。
   # 默认 redis：依赖 docker compose 中的 Redis；无 Redis 环境可切 local（--agent.collaboration.lock.type=local）

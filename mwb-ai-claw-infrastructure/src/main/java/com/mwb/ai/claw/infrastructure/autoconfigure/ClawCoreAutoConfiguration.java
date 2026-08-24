@@ -25,6 +25,8 @@ import com.mwb.ai.claw.domain.memory.gateway.MemoryGateway;
 import com.mwb.ai.claw.domain.memory.retrieve.MemoryRetriever;
 import com.mwb.ai.claw.domain.memory.store.MemoryPageStore;
 import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesizer;
+import com.mwb.ai.claw.domain.observability.RunUsageStore;
+import com.mwb.ai.claw.domain.observability.TraceStore;
 import com.mwb.ai.claw.domain.rag.access.RagAccessPolicy;
 import com.mwb.ai.claw.domain.rag.config.RagConfig;
 import com.mwb.ai.claw.domain.rag.context.RagContextProvider;
@@ -63,6 +65,10 @@ import com.mwb.ai.claw.infrastructure.memory.storage.jdbc.JdbcSessionGateway;
 import com.mwb.ai.claw.infrastructure.memory.strategy.LlmMemorySynthesizer;
 import com.mwb.ai.claw.infrastructure.memory.synthesis.MemorySynthesisExecutor;
 import com.mwb.ai.claw.infrastructure.memory.synthesis.SynthesisCache;
+import com.mwb.ai.claw.infrastructure.observability.JdbcRunUsageStore;
+import com.mwb.ai.claw.infrastructure.observability.JdbcTraceStore;
+import com.mwb.ai.claw.infrastructure.observability.LocalRunUsageStore;
+import com.mwb.ai.claw.infrastructure.observability.LocalTraceStore;
 import com.mwb.ai.claw.infrastructure.observability.MetricsRecorder;
 import com.mwb.ai.claw.infrastructure.rag.access.AllowAllRagAccessPolicy;
 import com.mwb.ai.claw.infrastructure.rag.context.DefaultRagContextProvider;
@@ -112,6 +118,52 @@ public class ClawCoreAutoConfiguration {
         // 有 actuator 时使用 Spring 容器注册表，否则 SimpleMeterRegistry 内存计数
         MeterRegistry registry = registryProvider.getIfAvailable(() -> new SimpleMeterRegistry());
         return new MetricsRecorder(registry);
+    }
+
+    // ==================== 步骤级 trace 存储（local | db 二选一） ====================
+    // 开关：agent.observability.trace.enabled=false 时整块不装配（无 TraceStore Bean，ChatCmdExe 经
+    // ObjectProvider 空安全降级）；store=db 且 classpath 含 JdbcTemplate 时落库，否则本地 JSON 文件（默认）。
+
+    @Configuration
+    @ConditionalOnProperty(prefix = "agent.observability.trace", name = "enabled",
+            havingValue = "true", matchIfMissing = true)
+    public static class TraceStorageConfiguration {
+
+        @Bean
+        @ConditionalOnMissingBean(TraceStore.class)
+        @ConditionalOnProperty(prefix = "agent.observability.trace", name = "store", havingValue = "db")
+        @ConditionalOnClass(JdbcTemplate.class)
+        public JdbcTraceStore jdbcTraceStore(JdbcTemplate jdbc) {
+            return new JdbcTraceStore(jdbc);
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(TraceStore.class)
+        public LocalTraceStore localTraceStore(AgentProperties properties) {
+            return new LocalTraceStore(properties);
+        }
+    }
+
+    // ==================== 运行用量摘要存储（local | db 二选一） ====================
+    // agent.observability.run-usage-log=false 时由 RunUsageRecorder 空安全跳过；
+    // run-usage-store=db 且 classpath 含 JdbcTemplate 时落 claw_run_usage 表，否则本地 JSONL（默认）。
+
+    @Configuration
+    public static class RunUsageStorageConfiguration {
+
+        @Bean
+        @ConditionalOnMissingBean(RunUsageStore.class)
+        @ConditionalOnProperty(prefix = "agent.observability", name = "run-usage-store", havingValue = "db")
+        @ConditionalOnClass(JdbcTemplate.class)
+        public JdbcRunUsageStore jdbcRunUsageStore(JdbcTemplate jdbc) {
+            return new JdbcRunUsageStore(jdbc);
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(RunUsageStore.class)
+        public LocalRunUsageStore localRunUsageStore(AgentProperties properties) {
+            return new LocalRunUsageStore(properties);
+        }
     }
 
     // ==================== 权限 ====================

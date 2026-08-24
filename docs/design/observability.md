@@ -22,18 +22,38 @@ nav_order: 7
 
 Shell 内 `/metrics` 实时查看快照；引入 actuator 后可经 `/actuator/metrics`、Prometheus 暴露。
 
-## 2. 运行记录（JSONL）
+## 2. 运行记录（JSONL / DB）
 
-每次 Agent 执行结束追加一条运行摘要到 `{memory-dir}/runs/{yyyy-MM-dd}.jsonl`：
+每次 Agent 执行结束记录一条运行用量摘要（可存 JSONL 或 DB）：
 
 ```json
 {"ts":"2026-08-21T10:00:00","sessionId":"...","agentId":"default","orchestration":"routing",
  "model":"deepseek-chat","durationMs":5210,"success":true,"steps":3,"errorCode":null}
 ```
 
-- Shell `/runs [日期]` 查询汇总与明细；`agent.observability.run-usage-log=false` 关闭
+- 存储由 `agent.observability.run-usage-store` 切换：`local`（默认，`{memory-dir}/runs/{date}.jsonl` 逐行追加）
+  或 `db`（落 `claw_run_usage` 表，与会话/记忆/RAG 同库，多实例共享，**生产推荐**）；
+- Shell `/runs [日期]` 查询汇总与明细（读写同一存储后端）；`agent.observability.run-usage-log=false` 关闭
 
-## 3. LLM 韧性（agent.llm.*）
+## 3. 步骤级 trace（全链路）
+
+摘要只记录"几步/耗时/结果"，排障深度不够。框架提供步骤级 trace：每次执行保存
+Thought / Action / Observation 逐条明细，可关联 `traceId` 还原整条链路。
+
+- **模型**：`TraceStore` SPI（`domain.observability`）——`saveTrace` / `findTrace(scope, traceId)`，
+  由 [ChatCmdExe](../../mwb-ai-claw-app/src/main/java/com/mwb/ai/claw/agent/executor/ChatCmdExe.java)
+  在每次执行（含失败）后记录，`traceId` 复用请求链路 MDC（缺失自动生成）；
+- **两套默认实现**（`@ConditionalOnMissingBean` 可替换为自定义 / OTLP 导出等）：
+  | store | 实现 | 说明 |
+  | --- | --- | --- |
+  | `local`（默认） | `LocalTraceStore` | 每个 traceId 一个 JSON 文件，`{memory-dir}/traces/`，零依赖 |
+  | `db` | `JdbcTraceStore` | 落 `claw_trace` 表（MySQL / PostgreSQL），多实例共享，**生产推荐** |
+- **开关**：`agent.observability.trace.enabled`（默认 true）；`false` 时不装配 TraceStore；
+- **查询**：`GET /trace/{traceId}`（需鉴权，按租户/用户隔离），按 `step_index` 还原步骤明细；
+- **表结构**：MySQL 见 `start/src/main/resources/schema.sql`；PostgreSQL 见
+  `example-web/docker/initdb/01-pgvector.sql`（会话/记忆/RAG 同库）。
+
+## 4. LLM 韧性（agent.llm.*）
 
 | 机制 | 配置 | 说明 |
 | --- | --- | --- |

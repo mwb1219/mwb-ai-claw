@@ -209,8 +209,31 @@ mwb-ai-claw --agent.collaboration.lock.type=redis \
 
 - 会话 / 记忆数据落在**运行目录** `.agent/` 下（按项目隔离）；
 - RAG 知识库索引与文档落 `.agent/rag/`（`agent.rag.local.dir` 可改，与记忆完全隔离）；
-- 运行用量记录写入 `.agent/runs/YYYY-MM-DD.jsonl`；
+- 运行用量记录写入 `.agent/runs/YYYY-MM-DD.jsonl`（`agent.observability.run-usage-store` 切 `db` 时落 `claw_run_usage` 表）
+- **步骤级 trace** 写入 `.agent/traces/`（`agent.observability.trace.dir` 可改）；切到 `store=db` 时落 PostgreSQL
+  （`claw_trace` 表，与会话/记忆/RAG 共用数据源）；`agent.observability.trace.enabled=false` 关闭；
 - 退出清理：删除运行目录 `.agent/` 即可重置全部会话记忆。
+
+## 9.1 步骤级 trace 存储（agent.observability.trace.*）
+
+| 配置项 | 默认 | 说明 |
+| --- | --- | --- |
+| `agent.observability.trace.enabled` | `true` | 步骤级 trace 记录与查询开关；`false` 时不装配 TraceStore（`/trace` 接口返回失败） |
+| `agent.observability.trace.store` | `local` | trace 后端：`local`（本地 JSON 文件，零依赖）\| `db`（JDBC 落 `claw_trace` 表，多实例共享，**生产推荐**） |
+| `agent.observability.trace.dir` | `{memory-dir}/traces` | 本地 trace 目录（仅 `store=local` 生效） |
+
+## 9.2 运行用量存储（agent.observability.run-usage-store）
+
+| 配置项 | 默认 | 说明 |
+| --- | --- | --- |
+| `agent.observability.run-usage-log` | `true` | 运行用量记录开关 |
+| `agent.observability.run-usage-store` | `local` | 运行用量后端：`local`（JSONL 逐行追加）\| `db`（JDBC 落 `claw_run_usage` 表，多实例共享，**生产推荐**） |
+| `agent.observability.run-usage-dir` | `{memory-dir}/runs` | 本地运行记录目录（仅 `store=local` 生效） |
+
+```bash
+# 生产多实例：运行用量落库（需先建表，见 start/.../schema.sql 或 example-web initdb 01-pgvector.sql）
+mwb-ai-claw --agent.observability.run-usage-store=db --spring.datasource.url=jdbc:postgresql://.../...
+```
 
 ## 10. 技能（skills/）
 

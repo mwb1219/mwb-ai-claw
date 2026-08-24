@@ -15,6 +15,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.mwb.ai.claw.domain.observability.RunUsage;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 
 /**
@@ -47,8 +48,8 @@ public class RunUsageRecorderReadTest {
         }
     }
 
-    private RunUsageRecorder.RunUsage usage(String sessionId, boolean success) {
-        RunUsageRecorder.RunUsage u = new RunUsageRecorder.RunUsage();
+    private RunUsage usage(String sessionId, boolean success) {
+        RunUsage u = new RunUsage();
         u.setSessionId(sessionId);
         u.setAgentId("default");
         u.setModel("test-model");
