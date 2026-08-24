@@ -1646,3 +1646,97 @@
   line-height: 1.6;
 }
 
+/* ==================== 可观测性（运行记录 + 全链路 trace） ==================== */
+.stat-ok {
+  color: var(--success) !important;
+}
+
+.stat-err {
+  color: var(--danger) !important;
+}
+
+.runs-filter,
+.trace-query {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.runs-filter input[type='date'] {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-input, var(--bg-surface));
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.trace-query input {
+  width: 320px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-input, var(--bg-surface));
+  color: var(--text);
+  font-size: 12.5px;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+}
+
+.run-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.run-row {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--bg-muted);
+}
+
+.run-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.run-orchestration {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.run-trace-id {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.run-meta {
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.run-actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 6px;
+}
+
+.trace-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.trace-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+}
+

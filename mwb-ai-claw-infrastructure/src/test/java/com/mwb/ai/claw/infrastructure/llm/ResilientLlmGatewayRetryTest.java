@@ -108,6 +108,45 @@ public class ResilientLlmGatewayRetryTest {
     }
 
     @Test
+    public void testRateLimit_faultInjection_retriesThenSucceeds() {
+        delegate.failFirst = 1;
+        delegate.failureMsg = "HTTP 429: rate limited";
+        LlmResponse result = newGateway().chat(request(), model("primary"));
+        assertTrue(result.getContent().startsWith("ok"));
+        assertEquals("限流瞬时错误应重试后成功", 2, delegate.callCount("primary"));
+    }
+
+    @Test
+    public void testHttp5xx_faultInjection_retriesThenSucceeds() {
+        delegate.failFirst = 2;
+        delegate.failureMsg = "HTTP 502: upstream error";
+        LlmResponse result = newGateway().chat(request(), model("primary"));
+        assertTrue(result.getContent().startsWith("ok"));
+        assertEquals("5xx 应重试至成功", 3, delegate.callCount("primary"));
+    }
+
+    @Test
+    public void testTimeout_faultInjection_fallsBackAfterRetryExhausted() {
+        config.setFallbackModel("fallback-model");
+        delegate.failAlways = true;
+        delegate.failureMsg = "connect timed out";
+        LlmResponse result = newGateway().chat(request(), model("primary"));
+        assertTrue("主模型超时耗尽后应降级到备用模型", result.getContent().startsWith("ok"));
+        assertEquals("primary 重试耗尽 (1 初次 + 2 重试)", 3, delegate.callCount("primary"));
+        assertEquals("fallback 调用 1 次", 1, delegate.callCount("fallback-model"));
+    }
+
+    @Test
+    public void testTimeout_faultInjection_noFallback_returnsTransientError() {
+        delegate.failAlways = true;
+        delegate.failureMsg = "read timed out";
+        LlmResponse result = newGateway().chat(request(), model("primary"));
+        assertEquals("error", result.getFinishReason());
+        assertEquals(ErrorCategory.TRANSIENT, result.getErrorCategory());
+        assertEquals("超时无备用模型应重试耗尽后报瞬时错误", 3, delegate.callCount("primary"));
+    }
+
+    @Test
     public void testNonRetryableException_propagatedWithoutRetry() {
         delegate.boom = new IllegalStateException("业务层错误");
         try {
@@ -160,6 +199,7 @@ public class ResilientLlmGatewayRetryTest {
         boolean failFallback;
         RuntimeException boom;
         LlmResponse next;
+        String failureMsg = "HTTP 429: rate limited";
 
         int callCount(String model) {
             return calls.getOrDefault(model, 0);
@@ -173,7 +213,7 @@ public class ResilientLlmGatewayRetryTest {
             boolean isPrimary = model.equals("primary");
             boolean isFallback = model.equals("fallback-model");
             if ((isPrimary && (failAlways || failFirst-- > 0)) || (isFallback && failFallback)) {
-                throw new RetryableLlmException("HTTP 429: rate limited");
+                throw new RetryableLlmException(failureMsg);
             }
             if (next != null) {
                 return next;

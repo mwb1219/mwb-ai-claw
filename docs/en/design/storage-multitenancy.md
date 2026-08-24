@@ -38,7 +38,7 @@ AgentScope.defaultScope();             // same as the line above
 - `namespace()`: `tenantId + "/" + userId` — used as the storage subdirectory in file mode, and as the table prefix / key dimension in db mode
 - `AgentScopeContext` (ThreadLocal): temporarily holds the current scope during the request chain; set at the entry point and cleared in `finally`
 - Asynchronous tasks (SSE / WebSocket execution threads): ThreadLocal does not cross threads, so the scope must be explicitly captured and set via `AgentScopeContext.set(scope)`
-- Session concurrency locks are fixed to `LocalSessionLockManager` (in-JVM ReentrantLock, isolated by the `scope.keyPrefix()` dimension)
+- Session concurrency locks default to `LocalSessionLockManager` (in-JVM ReentrantLock, isolated by the `scope.keyPrefix()` dimension); for multi-instance deployments, switch to the Redis distributed lock via `agent.collaboration.lock.type=redis` (see [horizontal scaling](horizontal-scaling.md))
 
 ## 3. How Each Entry Point Determines the Scope
 
@@ -54,6 +54,10 @@ AgentScope.defaultScope();             // same as the line above
 - **Compatibility first**: an empty scope means the default space, fully consistent with earlier versions
 - **No global implicit state**: the scope is passed explicitly as a parameter / context to avoid cross-tenant data leakage
 - **Auth is optional**: when `agent.auth.enabled` is off, everyone shares the default space; when on, data is isolated by key (see [design/security.md](security.md))
+
+## 5. Multi-Tenancy Example: example-commerce (store isolation)
+
+T2 has landed a runnable reference implementation: [example-commerce](https://github.com/mwb1219/mwb-ai-claw/tree/master/example-commerce) resolves API keys (`sk-store-a` / `sk-store-b`) into (tenantId, userId) via `CommerceTenantGateway`, so the products / orders / campaigns of the two stores are fully isolated; the frontend picks a store at the entry, and tools read through the scope propagated via `AgentScopeContext`. To integrate your own tenant table / SSO, implement `TenantGateway` and override the default bean with `@Bean` (see that module and "How Each Entry Point Determines the Scope" above).
 
 ---
 

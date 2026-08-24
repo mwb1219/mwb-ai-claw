@@ -4,19 +4,20 @@
 spring:
   profiles:
     active: web
-  # ================= 数据源（agent.storage.type=db 时生效） =================
-  # 默认：嵌入式 H2（MySQL 兼容模式，可直接执行 MySQL 语法 schema.sql，数据重启清空，仅联调用）
-  # 生产 MySQL：设置环境变量 DB_URL / DB_USERNAME / DB_PASSWORD / DB_DRIVER，
-  #   并先执行 example-web/src/main/resources/schema.sql 建表
+  # ================= 数据源（RAG provider=pgvector 向量库 / agent.storage.type=db 时生效） =================
+  # 默认：PostgreSQL + pgvector（docker compose up -d 启动，见 example-web/docker-compose.yml）
+  #   - RAG 向量库：agent.rag.provider=pgvector 时按此数据源建表（需 CREATE EXTENSION IF NOT EXISTS vector;）
+  #   - 记忆存储：默认 STORAGE_TYPE=file（零依赖本地文件），切换 =db 时同样使用此数据源
+  # 无 Docker 环境的最小演示：DB_URL=jdbc:h2:mem:clawdb;MODE=MySQL;DB_CLOSE_DELAY=-1 SQL_INIT_MODE=embedded
   datasource:
-    url: ${DB_URL:jdbc:h2:mem:clawdb;MODE=MySQL;DB_CLOSE_DELAY=-1}
-    username: ${DB_USERNAME:sa}
-    password: ${DB_PASSWORD:}
-    driver-class-name: ${DB_DRIVER:org.h2.Driver}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/clawdb}
+    username: ${DB_USERNAME:claw}
+    password: ${DB_PASSWORD:claw}
+    driver-class-name: ${DB_DRIVER:org.postgresql.Driver}
   sql:
     init:
-      # embedded=仅嵌入式库执行（默认 H2）；never=关闭
-      mode: ${SQL_INIT_MODE:embedded}
+      # embedded=仅嵌入式库执行（默认 H2）；never=关闭（PostgreSQL 建表由 pgvector 自动完成）
+      mode: ${SQL_INIT_MODE:never}
       schema-locations: classpath:schema.sql
   # ================= 文件上传（RAG 知识库文档） =================
   # 默认不限制文件大小（-1 = 无限制）；有需要可收紧为固定值，如 10MB
@@ -42,10 +43,25 @@ example:
 agent:
   # 存储后端：file（本地文件，默认，零依赖）| db（JDBC 持久化：会话/长期记忆/记忆页落库）
   # 配置 db 时需保证数据源可达（见顶部 spring.datasource 或 .env 中 DB_* 变量），否则启动即连库报错
-  # 会话并发锁固定本地 JVM 实现（LocalSessionLockManager），无需额外配置（Redis 已移除）
-  # 可通过环境变量 STORAGE_TYPE 覆盖（如 .env 中 STORAGE_TYPE=db；命令行 --agent.storage.type=db 优先级更高）
   storage:
     type: ${STORAGE_TYPE:file}
+  # ===== 可观测性 =====
+  # run-usage-store=local（默认，JSONL 文件）| db（落 claw_run_usage 表，与会话/记忆/RAG 同库，多实例共享，生产推荐）
+  # trace store=local（默认，本地 JSON，零依赖）| db（落 claw_trace 表，生产推荐）
+  observability:
+    run-usage-store: ${RUN_USAGE_STORE:db}
+    trace:
+      enabled: ${TRACE_ENABLED:true}
+      store: ${TRACE_STORE:db}
+      dir: ${TRACE_DIR:}
+  # ===== 会话并发锁（T3 横向扩展能力） =====
+  # local（默认，JVM 内 ReentrantLock，单实例）| redis（SET NX PX 分布式锁，多实例部署共享）。
+  # 默认 redis：依赖 docker compose 中的 Redis；无 Redis 环境可切 local（--agent.collaboration.lock.type=local）
+  collaboration:
+    lock:
+      type: ${LOCK_TYPE:redis}
+      redis-uri: ${REDIS_URI:redis://localhost:6379}
+      key-prefix: ${LOCK_KEY_PREFIX:claw:lock:}
   agent-id: default
   name: mwb-ai-claw
   system-prompt: 你是 mwb-ai-claw 智能助手。当需要时可以调用工具来完成任务，完成后给出简洁回复。
@@ -106,13 +122,25 @@ agent:
     synthesizer-api-key: ${SYNTHESIS_API_KEY:}      # 小模型提炼：API Key（留空继承 agent.api-key）
     synthesis-cache-size: 50        # 提炼缓存容量（按输入内容哈希去重，避免重复调 LLM；<=0 关闭）
   # ===== 独立 RAG 知识库（agent.rag.*，默认关闭；本例开启演示「写入 + 检索 + 上下文注入」）=====
-  # 与记忆系统完全隔离：独立领域模型 / 存储（${user.dir}/.agent/rag）/ Embedding 配置 / 检索链路
+  # 与记忆系统完全隔离：独立领域模型 / 存储 / Embedding 配置 / 检索链路
   # RAG 依赖 Embedding 接口可用，请配置下面的 RAG_EMBEDDING_* 环境变量（OpenAI 兼容 /embeddings）
   rag:
     enabled: true                  # 总开关（关闭后 RAG Bean 与 /rag 接口不装配，行为与未接入前一致）
-    provider: local                # 索引实现：local（本地文件向量索引，零依赖）
-    # local:
-    #   dir: ""                    # 索引存储目录（默认 ${user.dir}/.agent/rag）
+    provider: ${RAG_PROVIDER:pgvector}  # 索引实现：local（本地文件向量索引，零依赖）| pgvector（PostgreSQL 向量库，需 docker compose 启动 pgvector）
+    # ===== PGVector 向量库（provider=pgvector 时生效，T4 生产化能力） =====
+    pgvector:
+      table: rag_index_entries     # 索引表名（仅字母/数字/下划线/点，防注入）
+      schema: public               # 表所在 schema
+      index-type: ivfflat          # 向量索引：ivfflat（创建快）| hnsw（召回更准，写入更重）
+      similarity: vector_cosine_ops # 相似度算子：vector_cosine_ops | vector_l2_ops | vector_ip_ops
+    # ===== 知识库 API 层访问控制（T4 生产化能力；本例演示 ExampleRagAccessPolicy 租户前缀策略） =====
+    access:
+      enabled: true                # 开启后 /rag 接口按注入的 RagAccessPolicy 鉴权；关闭则全部放行（保持全局共享检索语义）
+    # ===== 容量与配额（T4 生产化能力；0=不限制） =====
+    capacity:
+      max-documents-per-knowledge-base: 100   # 单个知识库最大文档数
+      max-chunks-per-document: 1000           # 单个文档最大分块数
+      max-document-chars: 1000000             # 单个文档解析后文本最大字符数
     ingestion:
       chunk-size: 500              # 单块文本长度上限（字符）
       chunk-overlap: 50            # 相邻分块重叠（字符）

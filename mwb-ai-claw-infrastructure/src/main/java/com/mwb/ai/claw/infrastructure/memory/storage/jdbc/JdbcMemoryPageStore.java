@@ -83,13 +83,13 @@ public class JdbcMemoryPageStore implements MemoryPageStore {
     @Override
     public List<MemoryPage> loadFacts(AgentScope scope) {
         ScopeClause where = scopeWhere(scope);
-        String sql = "SELECT fact_key AS `key`, content, importance, session_id, version, token_count, create_time "
+        String sql = "SELECT fact_key AS factKey, content, importance, session_id, version, token_count, create_time "
                 + "FROM claw_fact WHERE " + where.sql + " ORDER BY importance DESC";
         return jdbc.query(sql, (rs, i) -> {
             MemoryPage page = new MemoryPage();
-            page.setPageId("fact-" + rs.getString("key"));
+            page.setPageId("fact-" + rs.getString("factKey"));
             page.setType(MemoryPage.PageType.FACT);
-            page.setKey(rs.getString("key"));
+            page.setKey(rs.getString("factKey"));
             page.setContent(rs.getString("content"));
             page.setImportance(rs.getDouble("importance"));
             page.setSessionId(rs.getString("session_id"));

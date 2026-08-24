@@ -8,6 +8,8 @@ parent: Documentation (English)
 # User Guide
 
 > For users who want to get things done. Organized along the real usage path: install → configure → use.
+>
+> 📦 Want to try runnable example projects (example-web / example-embed / **example-commerce**) directly? See [Doc Hub · Example Projects](../index.md#examples).
 
 | Doc | Content |
 | --- | --- |

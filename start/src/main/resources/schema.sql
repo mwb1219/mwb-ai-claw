@@ -81,3 +81,48 @@ CREATE TABLE IF NOT EXISTS claw_long_term (
     PRIMARY KEY (id),
     UNIQUE KEY uk_long_term (tenant_id, user_id, name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='长期记忆表：AGENT.md / MEMORY.md';
+
+-- ==================== 全链路 trace 表 ====================
+-- 步骤级 trace（agent.observability.trace.store=db 时使用）：每次运行写入一行
+-- run 标识行（step_type='__run__'）+ 每步一行明细，按 trace_id + step_index 还原链路；
+-- 与会话/记忆表同库，多实例共享一份 trace 数据。
+CREATE TABLE IF NOT EXISTS claw_trace (
+    id            BIGINT       NOT NULL AUTO_INCREMENT COMMENT '自增主键（聚簇索引，非业务字段）',
+    tenant_id     VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '租户 id（空串=默认空间）',
+    user_id       VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '用户 id（空串=默认空间）',
+    trace_id      VARCHAR(64)  NOT NULL COMMENT '链路 trace id（贯穿请求日志/落库）',
+    session_id    VARCHAR(64)  DEFAULT NULL COMMENT '会话 id',
+    agent_id      VARCHAR(64)  DEFAULT NULL COMMENT '主导 Agent id',
+    orchestration VARCHAR(32)  DEFAULT NULL COMMENT '实际使用的编排 id',
+    model         VARCHAR(64)  DEFAULT NULL COMMENT '使用的模型',
+    start_time    BIGINT       DEFAULT NULL COMMENT '执行开始时间戳（epoch 毫秒）',
+    duration_ms   BIGINT       DEFAULT NULL COMMENT '执行耗时（毫秒）',
+    success       TINYINT(1)   DEFAULT 1 COMMENT '执行是否成功',
+    error_code    VARCHAR(32)  DEFAULT NULL COMMENT '失败错误码（成功为空）',
+    step_index    INT          DEFAULT NULL COMMENT '步骤序号（0=run 标识行，1..n=明细步骤）',
+    step_type     VARCHAR(16)  DEFAULT NULL COMMENT '步骤类型：__run__ / thought / action / observation / info',
+    step_content  LONGTEXT     DEFAULT NULL COMMENT '步骤内容（轨迹文本）',
+    create_time   BIGINT       DEFAULT NULL COMMENT '写入时间戳（epoch 毫秒）',
+    PRIMARY KEY (id),
+    KEY idx_trace (trace_id, tenant_id, user_id),
+    KEY idx_trace_session (session_id, create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='全链路 trace 表：步骤级执行轨迹';
+
+-- ==================== 运行用量摘要表 ====================
+-- 每次运行一条运行用量摘要（agent.observability.run-usage-store=db 时使用），
+-- 与会话/记忆/trace 同库，多实例共享供 shell /runs 统计。
+CREATE TABLE IF NOT EXISTS claw_run_usage (
+    id            BIGINT       NOT NULL AUTO_INCREMENT COMMENT '自增主键（聚簇索引，非业务字段）',
+    trace_id      VARCHAR(64)  DEFAULT NULL COMMENT '关联的全链路 trace id（GET /trace/{traceId} 可还原步骤明细）',
+    session_id    VARCHAR(64)  DEFAULT NULL COMMENT '会话 id',
+    agent_id      VARCHAR(64)  DEFAULT NULL COMMENT '主导 Agent id',
+    orchestration VARCHAR(32)  DEFAULT NULL COMMENT '实际使用的编排 id',
+    model         VARCHAR(64)  DEFAULT NULL COMMENT '使用的模型',
+    duration_ms   BIGINT       DEFAULT NULL COMMENT '执行耗时（毫秒）',
+    success       TINYINT(1)   DEFAULT 1 COMMENT '执行是否成功',
+    steps         INT          DEFAULT 0 COMMENT '步骤条数',
+    error_code    VARCHAR(32)  DEFAULT NULL COMMENT '失败错误码（成功为空）',
+    create_time   BIGINT       DEFAULT NULL COMMENT '写入时间戳（epoch 毫秒）',
+    PRIMARY KEY (id),
+    KEY idx_run_create (create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='运行用量摘要表：每次运行一条';

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Copy, MessageSquarePlus, Pencil, RefreshCw, Trash2 } from 'lucide-react';
 
 import { useSessionStore } from '../../store/session';
@@ -30,6 +30,12 @@ export function Sidebar() {
       alert(`加载会话失败：${(err as Error).message}`);
     }
   };
+
+  // 挂载即加载会话列表：任意 tab 进入都能在侧边栏看到会话（不再依赖对话页触发）
+  useEffect(() => {
+    void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const create = () => {
     // 本地新建：不调后端创建接口，回到空白会话；首次发送消息时由后端自动创建会话

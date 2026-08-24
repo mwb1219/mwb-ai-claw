@@ -88,8 +88,16 @@ nav_order: 3
 | 配置 | 默认值 | 说明 |
 | --- | --- | --- |
 | `enabled` | `false` | RAG 总开关（关闭后 RAG Bean 与 `/rag` 接口不装配，行为与未接入前一致） |
-| `provider` | `local` | 索引实现：`local`（本地文件向量索引，零依赖） |
+| `provider` | `local` | 索引实现：`local`（本地文件向量索引，零依赖）\| `pgvector`（PostgreSQL + pgvector） |
 | `local.dir` | `${user.dir}/.agent/rag` | 索引存储目录（与 `.agent/memory` 完全隔离） |
+| `pgvector.table` | `rag_index_entries` | PGVector 索引表名（仅字母 / 数字 / 下划线 / 点，防注入） |
+| `pgvector.schema` | `public` | 表所在 schema |
+| `pgvector.index-type` | `ivfflat` | 向量索引类型：`ivfflat`（默认，创建快）\| `hnsw`（召回更准，写入更重） |
+| `pgvector.similarity` | `vector_cosine_ops` | 相似度算子：`vector_cosine_ops` \| `vector_l2_ops` \| `vector_ip_ops` |
+| `access.enabled` | `false` | 是否启用知识库 API 层访问控制（关闭时全部放行，保持全局共享检索语义） |
+| `capacity.max-documents-per-knowledge-base` | `0` | 单个知识库最大文档数（0=不限制） |
+| `capacity.max-chunks-per-document` | `0` | 单个文档最大分块数（0=不限制） |
+| `capacity.max-document-chars` | `0` | 单个文档解析后文本最大字符数（0=不限制） |
 | `ingestion.chunk-size` | `500` | 单块文本长度上限（字符） |
 | `ingestion.chunk-overlap` | `50` | 相邻分块重叠（字符） |
 | `ingestion.embedding-batch-size` | `32` | 批量向量化单批条数（吞吐分组；单次 HTTP 上限见 embedding.max-batch-size） |

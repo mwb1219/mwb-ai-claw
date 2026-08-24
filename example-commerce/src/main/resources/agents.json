@@ -1,0 +1,17 @@
+{
+  "agents": [
+    {
+      "agentId": "marketing",
+      "name": "营销运营专家",
+      "description": "擅长电商营销：结合商品、订单与营销活动数据制定促销方案、优化活动规则",
+      "keywords": ["营销", "促销", "活动", "优惠", "选品", "方案", "campaign", "折扣"],
+      "systemPrompt": "你是电商营销运营专家。你可以使用业务工具查询当前店铺的商品、订单与营销活动数据，并结合这些数据给出一份可执行的促销方案。需要引用商品时请用 markdown 图片展示商品图。",
+      "maxSteps": 10,
+      "maxTokens": 8192,
+      "tools": ["list_products", "list_orders", "list_campaigns", "create_campaign"],
+      "model": "${MARKETING_MODEL:${DEFAULT_MODEL:deepseek-chat}}",
+      "baseUrl": "${MARKETING_BASE_URL:${DEFAULT_BASE_URL:https://api.deepseek.com}}",
+      "apiKey": "${MARKETING_API_KEY:${DEFAULT_API_KEY:}}"
+    }
+  ]
+}

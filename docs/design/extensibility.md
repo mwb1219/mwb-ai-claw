@@ -131,6 +131,10 @@ public class MilvusRagConfig {
 
 可直接参考 `example-web` 的 `ExampleRagConfiguration` / `ExampleRagChunker` / `ExampleRagReranker`（见 [RAG 检索增强](rag.md)）作为 SPI 替换与增强的最小示例。
 
+**旗舰示例：example-commerce（联合多个扩展点）**
+
+T1/T2 已落地一个可运行的完整业务示例。想直观感受「多扩展点、可插拔」如何在一个真实业务里协同工作，直接运行 [example-commerce](https://github.com/mwb1219/mwb-ai-claw/tree/master/example-commerce)（电商/营销运营助手）：一个「查商品 → 看活动 → 生成促销方案」的业务流联合使用了自定义业务工具（`list_products` / `list_orders` / `list_campaigns`，`@Component` 自动收集）、自定义编排（`marketing` 营销方案编排，注册进 `OrchestratorRegistry`）、多租户（`CommerceTenantGateway` 反解 API Key → 店铺隔离）等扩展点。模块 README 给出每个扩展点「默认实现 / SPI / 如何注册覆盖 / 如何包装增强」的对照表，是接入真实业务时的参考蓝本。
+
 ---
 
 相关：[总体架构](architecture.md) ｜ [多 Agent 编排](collaboration.md) ｜ [RAG 检索增强](rag.md) ｜ [分层记忆模型](memory-model.md) ｜ [配置详解](../guide/configuration.md)

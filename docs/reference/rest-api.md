@@ -79,16 +79,31 @@ event: done       → 结束
 | `GET` | `/memory/archive?sessionId=` | 跨会话档案块（空=全部会话） |
 | `GET` | `/memory/search?q=&topK=` | 检索召回调试（按当前检索器） |
 
+## 3.1 全链路 trace（/trace）
+
+> `agent.observability.trace.enabled=true`（默认）时装配 `TraceStore`（local JSON 或 db 落库）；
+> `/trace/**` 走鉴权，按当前租户/用户隔离过滤，越权或未启用时返回失败。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/trace/{traceId}` | 按 traceId 还原一次执行的逐步明细（thought / action / observation / info）与 run 级元数据 |
+
+```bash
+# 示例：查询某次执行的完整链路（返回 TraceRun：traceId/sessionId/model/durationMs + steps[]）
+curl http://localhost:8080/trace/<traceId> -H "X-API-Key: <key>"
+```
+
 ## 4. RAG 检索增强（/rag）
 
 > `agent.rag.enabled=true` 时装配（默认关闭）。知识库为**全局资源**，不读取 `AgentScope`；
 > 依赖 OpenAI 兼容 `/embeddings`（`.env` 配置 `RAG_EMBEDDING_*`）。
+> `agent.rag.access.enabled=true` 时，各接口按注入的 `RagAccessPolicy` 做租户 / 角色授权（默认放行）。
 
 | 方法 | 路径 | 说明 | 关键参数 |
 | --- | --- | --- | --- |
 | `GET` | `/rag/knowledge-bases/{kb}/documents` | 列出知识库下全部文档 | - |
-| `POST` | `/rag/knowledge-bases/{kb}/documents` | 摄入文档（JSON：解析→切分→向量化→索引） | body: `RagIngestionCommand`（documentId? / name / contentType / content / metadata；documentId 留空自动生成） |
-| `POST` | `/rag/knowledge-bases/{kb}/documents/upload` | **文件上传摄入**（multipart，默认不限制大小） | form: `file`（必填）、`documentId?`、`name?`；`.md/.markdown` → `text/markdown`，其余按纯文本 |
+| `POST` | `/rag/knowledge-bases/{kb}/documents` | 摄入文档（JSON：解析→切分→向量化→索引） | body: `RagIngestionCommand`（documentId? / name / contentType / content / contentBytes? / metadata；documentId 留空自动生成） |
+| `POST` | `/rag/knowledge-bases/{kb}/documents/upload` | **文件上传摄入**（multipart，默认不限制大小） | form: `file`（必填）、`documentId?`、`name?`；`.md/.markdown` → `text/markdown`、`.pdf` → PDF（需 PDFBox）、`.docx` → Word（需 POI），其余按纯文本 |
 | `POST` | `/rag/knowledge-bases/{kb}/documents/{id}/reindex` | 重建指定文档索引 | - |
 | `DELETE` | `/rag/knowledge-bases/{kb}/documents/{id}` | 删除文档及其索引 | - |
 | `POST` | `/rag/search` | 独立 RAG 检索 | body: `RagQuery`（knowledgeBaseIds / text / topK / minScore / filters） |

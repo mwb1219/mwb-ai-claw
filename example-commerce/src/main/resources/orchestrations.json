@@ -1,0 +1,45 @@
+{
+  "orchestrations": [
+    {
+      "id": "routing",
+      "type": "routing",
+      "description": "单专家独立处理：按意图路由到最合适的 Agent。作为默认兜底编排",
+      "agents": ["marketing"]
+    },
+    {
+      "id": "marketing",
+      "type": "marketing",
+      "description": "营销方案生成/对比：电商运营助手结合当前店铺的商品、订单与营销活动数据，生成一份可执行的促销方案（可选人工审批门禁）",
+      "keywords": ["营销方案", "生成方案", "促销", "活动方案", "选品", "优惠怎么定", "campaign"],
+      "agents": ["marketing"],
+      "config": {
+        "approvalEnabled": false,
+        "approvalTimeoutMs": 0
+      }
+    },
+    {
+      "id": "todo-delegate",
+      "type": "delegate",
+      "description": "主 Agent 规划拆解为 Todo 列表并委派子 Agent 执行。此处用于演示「营销投放」等高权限任务的规划 + 人工审批门禁",
+      "keywords": ["规划并投放", "复杂任务", "拆解", "分步骤", "整体规划"],
+      "agents": ["marketing"],
+      "config": {
+        "delegate": {
+          "plannerAgentId": "marketing",
+          "maxTodos": 5,
+          "maxDepth": 2,
+          "parallel": true,
+          "concurrency": 2,
+          "onFailure": "abort",
+          "retries": 1,
+          "thinking": false,
+          "resultPass": "text",
+          "approvalGate": "all",
+          "approvalTimeoutMs": 0,
+          "topK": 3,
+          "replanRounds": 0
+        }
+      }
+    }
+  ]
+}

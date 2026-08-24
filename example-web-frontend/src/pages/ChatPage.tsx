@@ -47,7 +47,6 @@ export function ChatPage() {
   const setMessages = useSessionStore((s) => s.setMessages);
   const selectSession = useSessionStore((s) => s.selectSession);
   const upsertSession = useSessionStore((s) => s.upsertSession);
-  const setSessions = useSessionStore((s) => s.setSessions);
 
   const busy = useChatStore((s) => s.busy);
   const setBusy = useChatStore((s) => s.setBusy);
@@ -109,15 +108,6 @@ export function ChatPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentSessionId]);
-
-  // 启动时加载会话列表
-  useEffect(() => {
-    sessionApi
-      .list()
-      .then(setSessions)
-      .catch((err) => setStatus(`加载会话列表失败：${(err as Error).message}`, 'err'));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const finishStream = () => {
     const finalContent = useChatStore.getState().streamingContent;

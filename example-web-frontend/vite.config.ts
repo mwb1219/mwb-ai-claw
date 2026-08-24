@@ -13,6 +13,9 @@ export default defineConfig({
       '/rag': { target: 'http://localhost:8080', changeOrigin: true },
       '/user': { target: 'http://localhost:8080', changeOrigin: true },
       '/auth': { target: 'http://localhost:8080', changeOrigin: true },
+      // 可观测性（运行记录 + 全链路 trace）
+      '/runs': { target: 'http://localhost:8080', changeOrigin: true },
+      '/trace': { target: 'http://localhost:8080', changeOrigin: true },
     },
   },
   build: {

@@ -62,7 +62,7 @@
 > **存储后端 `agent.storage.type`**：`file`（本地文件，默认，零依赖）| `db`（JDBC 持久化：会话 / 长期记忆 / 记忆页落库）。
 > 设置位置：`application.yml` 的 `agent.storage.type`，环境变量 `STORAGE_TYPE`（写入 `.env`），或命令行覆盖 `mwb-ai-claw --agent.storage.type=db`（优先级递增）。
 > 注意：`db` 时数据源为启动即连（见上表 DB_* 变量），需先确保数据库可达。
-> 会话并发锁固定本地 JVM 实现（`LocalSessionLockManager`，单实例部署），**无需任何额外配置**（Redis 分布式锁已移除）。
+> 会话并发锁默认使用本地 JVM 实现（`LocalSessionLockManager`，单实例部署，零依赖）；多实例部署时可切换为 Redis 分布式锁（见 8.1 会话锁）。
 
 ## 4. 专家 Agent（config/agents.json）
 
@@ -100,21 +100,34 @@
 
 ## 6. RAG 知识库（agent.rag.*）
 
-RAG 提供与 Agent 记忆**完全独立**的知识库能力：后台上传文档 → 解析 / 切分 / 向量化 → 建索引 → 按需检索并注入上下文。默认关闭，开启后零依赖可用（`provider=local` 本地文件向量索引）。
+RAG 提供与 Agent 记忆**完全独立**的知识库能力：后台上传文档 → 解析 / 切分 / 向量化 → 建索引 → 按需检索并注入上下文。默认关闭，开启后零依赖可用（`provider=local` 本地文件向量索引）；需 PDF / Word 解析时引入 optional 依赖即自动启用，需向量库时切 `provider=pgvector`。
 
 ### 6.1 启用与开关
 
 | 配置 | 默认 | 说明 |
 | --- | --- | --- |
 | `agent.rag.enabled` | `false` | 总开关；开启后装配 RAG Bean 与 `/rag` 接口，关闭后行为与未接入前一致 |
-| `agent.rag.provider` | `local` | 索引实现：`local`（本地文件向量索引，零依赖） |
+| `agent.rag.provider` | `local` | 索引实现：`local`（本地文件向量索引，零依赖）\| `pgvector`（PostgreSQL + pgvector 扩展） |
 | `agent.rag.local.dir` | `${user.dir}/.agent/rag` | 索引存储目录（与 `.agent/memory` 完全隔离） |
+| `agent.rag.pgvector.table` | `rag_index_entries` | PGVector 索引表名（仅字母 / 数字 / 下划线 / 点，防注入） |
+| `agent.rag.pgvector.schema` | `public` | 表所在 schema |
+| `agent.rag.pgvector.index-type` | `ivfflat` | 向量索引类型：`ivfflat`（创建快）\| `hnsw`（召回更准） |
+| `agent.rag.pgvector.similarity` | `vector_cosine_ops` | 相似度算子：`vector_cosine_ops` \| `vector_l2_ops` \| `vector_ip_ops` |
+| `agent.rag.access.enabled` | `false` | 是否启用知识库 API 层访问控制（关闭时全部放行、保持全局共享检索语义） |
+| `agent.rag.capacity.max-documents-per-knowledge-base` | `0` | 单个知识库最大文档数（0=不限制） |
+| `agent.rag.capacity.max-chunks-per-document` | `0` | 单个文档最大分块数（0=不限制） |
+| `agent.rag.capacity.max-document-chars` | `0` | 单个文档解析后文本最大字符数（0=不限制） |
 
 开启方式（任选其一）：
 - 编辑 `application.yml` 添加 `agent.rag.enabled: true`；
 - 运行时覆盖：`mwb-ai-claw --agent.rag.enabled=true`。
 
 > RAG 依赖 Embedding 接口可用，开启前请在 `.env` 配置 `RAG_EMBEDDING_*`（见第 3 节）；未配置时写入 / 检索会报错。
+
+PDF / Word 解析：`MultiFormatRagDocumentParser` 按内容类型 / 扩展名分发，引入
+`org.apache.pdfbox:pdfbox`（PDF）与 `org.apache.poi:poi-ooxml`（Word .docx）后自动启用；未引入时退化为纯文本解析并给出明确提示。
+
+PGVector 前置：目标库执行一次 `CREATE EXTENSION IF NOT EXISTS vector;`，应用侧引入 PostgreSQL 驱动并指向该库（`spring.datasource.*`），再配置 `agent.rag.provider=pgvector`。
 
 ### 6.2 写入与检索参数
 
@@ -134,13 +147,14 @@ RAG 提供与 Agent 记忆**完全独立**的知识库能力：后台上传文�
 | 接口 | 说明 |
 | --- | --- |
 | `POST /rag/knowledge-bases/{kb}/documents` | 摄入文档（JSON 内容） |
-| `POST /rag/knowledge-bases/{kb}/documents/upload` | 上传文件（multipart，无大小 / 字符限制） |
+| `POST /rag/knowledge-bases/{kb}/documents/upload` | 上传文件（multipart，无大小 / 字符限制；`.pdf` / `.docx` 自动走 PDF / Word 解析） |
 | `POST /rag/knowledge-bases/{kb}/documents/{id}/reindex` | 重建文档索引 |
 | `DELETE /rag/knowledge-bases/{kb}/documents/{id}` | 删除文档（含索引） |
 | `GET /rag/knowledge-bases/{kb}/documents` | 文档列表 |
 | `POST /rag/search` | 检索调试（返回带知识库 / 文档 / 分块引用的结果） |
 
 > 知识库**全局共享**（不按 AgentScope 隔离），通过 `knowledgeBaseId` 组织；对话时可通过 SSE 参数注入本次会话使用的知识库。
+> 需要租户 / 角色可见性时：`agent.rag.access.enabled=true` 并注册 `RagAccessPolicy` Bean，接口层按操作类型（READ / WRITE / DELETE）鉴权。
 
 ## 7. MCP Server（config/mcp-server.json）
 
@@ -170,12 +184,56 @@ mwb-ai-claw --agent.model=deepseek-chat             # 切换默认模型
 mwb-ai-claw --agent.security.shell-approval-mode=auto  # 工具审批自动放行
 ```
 
+### 8.1 会话锁（agent.collaboration.lock.*）
+
+会话级锁保证同一会话（scope + sessionId）的「读 → 追加 → 推理 → 保存」全程串行，不同会话 / 不同用户完全并行。
+
+| 配置 | 说明 | 默认 |
+| --- | --- | --- |
+| `agent.collaboration.lock.type` | `local`（JVM 内锁，单实例）| `redis`（SET NX 分布式锁，多实例共享） | `local` |
+| `agent.collaboration.lock.redis-uri` | Redis 连接串（type=redis 时生效，可带密码 `redis://:pass@host:port`） | `redis://localhost:6379` |
+| `agent.collaboration.lock.key-prefix` | 锁 key 前缀（多租户/多环境共享 Redis 时隔离命名空间） | `claw:lock:` |
+| `agent.collaboration.lock.lease-ms` | 锁自动过期毫秒数（持有者崩溃后自动释放，防死锁） | `30000` |
+| `agent.collaboration.lock.timeout-ms` | 获取锁等待超时毫秒数，超时抛「获取会话锁超时」 | `30000` |
+| `agent.collaboration.lock.retry-interval-ms` | 获取锁轮询间隔毫秒数 | `100` |
+
+> 切换 Redis 分布式锁需自行引入 `spring-boot-starter-data-redis` 依赖（框架将其设为 optional），并保证 Redis 可达；未引入该依赖或未设置 type=redis 时回退本地实现，完全向后兼容。
+
+```bash
+# 多实例部署示例：切换到 Redis 分布式锁
+mwb-ai-claw --agent.collaboration.lock.type=redis \
+            --agent.collaboration.lock.redis-uri=redis://:password@redis.internal:6379/0
+```
+
 ## 9. 数据与运行目录
 
 - 会话 / 记忆数据落在**运行目录** `.agent/` 下（按项目隔离）；
 - RAG 知识库索引与文档落 `.agent/rag/`（`agent.rag.local.dir` 可改，与记忆完全隔离）；
-- 运行用量记录写入 `.agent/runs/YYYY-MM-DD.jsonl`；
+- 运行用量记录写入 `.agent/runs/YYYY-MM-DD.jsonl`（`agent.observability.run-usage-store` 切 `db` 时落 `claw_run_usage` 表）
+- **步骤级 trace** 写入 `.agent/traces/`（`agent.observability.trace.dir` 可改）；切到 `store=db` 时落 PostgreSQL
+  （`claw_trace` 表，与会话/记忆/RAG 共用数据源）；`agent.observability.trace.enabled=false` 关闭；
 - 退出清理：删除运行目录 `.agent/` 即可重置全部会话记忆。
+
+## 9.1 步骤级 trace 存储（agent.observability.trace.*）
+
+| 配置项 | 默认 | 说明 |
+| --- | --- | --- |
+| `agent.observability.trace.enabled` | `true` | 步骤级 trace 记录与查询开关；`false` 时不装配 TraceStore（`/trace` 接口返回失败） |
+| `agent.observability.trace.store` | `local` | trace 后端：`local`（本地 JSON 文件，零依赖）\| `db`（JDBC 落 `claw_trace` 表，多实例共享，**生产推荐**） |
+| `agent.observability.trace.dir` | `{memory-dir}/traces` | 本地 trace 目录（仅 `store=local` 生效） |
+
+## 9.2 运行用量存储（agent.observability.run-usage-store）
+
+| 配置项 | 默认 | 说明 |
+| --- | --- | --- |
+| `agent.observability.run-usage-log` | `true` | 运行用量记录开关 |
+| `agent.observability.run-usage-store` | `local` | 运行用量后端：`local`（JSONL 逐行追加）\| `db`（JDBC 落 `claw_run_usage` 表，多实例共享，**生产推荐**） |
+| `agent.observability.run-usage-dir` | `{memory-dir}/runs` | 本地运行记录目录（仅 `store=local` 生效） |
+
+```bash
+# 生产多实例：运行用量落库（需先建表，见 start/.../schema.sql 或 example-web initdb 01-pgvector.sql）
+mwb-ai-claw --agent.observability.run-usage-store=db --spring.datasource.url=jdbc:postgresql://.../...
+```
 
 ## 10. 技能（skills/）
 

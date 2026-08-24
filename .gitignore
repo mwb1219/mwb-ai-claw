@@ -76,6 +76,10 @@ yarn-error.log*
 .pnpm-debug.log*
 example-web-frontend/dist/
 example-web-frontend/*.local
+example-commerce-frontend/vite.config.js
+example-commerce-frontend/vite.config.d.ts
+example-commerce-frontend/dist/
+example-commerce-frontend/*.local
 
 # VitePress 文档站点构建产物
 docs/.vitepress/dist/

@@ -38,7 +38,7 @@ AgentScope.defaultScope();             // 同上一行
 - `namespace()`：`tenantId + "/" + userId` —— 文件模式下作为存储子目录，DB 模式下作为表前缀/键维度
 - `AgentScopeContext`（ThreadLocal）：请求链路中临时持有当前 scope，入口设置、finally 清理
 - 异步任务（SSE / WebSocket 执行线程）：ThreadLocal 不跨线程，需显式捕获并 `AgentScopeContext.set(scope)`
-- 会话并发锁固定 `LocalSessionLockManager`（JVM 内 ReentrantLock，按 `scope.keyPrefix()` 维度隔离）
+- 会话并发锁默认 `LocalSessionLockManager`（JVM 内 ReentrantLock，按 `scope.keyPrefix()` 维度隔离）；多实例部署可切换 Redis 分布式锁（`agent.collaboration.lock.type=redis`，见 [横向扩展部署](horizontal-scaling.md)）
 
 ## 3. 各入口如何确定 scope
 
@@ -54,6 +54,10 @@ AgentScope.defaultScope();             // 同上一行
 - **兼容优先**：scope 为空 = 默认空间，行为与早期版本完全一致
 - **无全局隐式状态**：scope 作为参数/上下文显式传递，避免跨租户串数据
 - **鉴权可选**：`agent.auth.enabled` 关闭时所有人共享默认空间，开启后按 key 隔离（见 [design/security.md](security.md)）
+
+## 5. 多租户示例：example-commerce（多店铺隔离）
+
+T2 已落地可运行的参考实现：[example-commerce](https://github.com/mwb1219/mwb-ai-claw/tree/master/example-commerce) 通过 `CommerceTenantGateway` 将 API Key（`sk-store-a` / `sk-store-b`）反解为 (tenantId, userId)，两间店铺的商品 / 订单 / 活动数据完全隔离；前端按店铺选择入口，工具读取时经 `AgentScopeContext` 透传 scope。对接自有租户表 / SSO 时，实现 `TenantGateway` 并以 `@Bean` 覆盖默认 Bean 即可（参考该模块实现与上方「各入口如何确定 scope」）。
 
 ---
 

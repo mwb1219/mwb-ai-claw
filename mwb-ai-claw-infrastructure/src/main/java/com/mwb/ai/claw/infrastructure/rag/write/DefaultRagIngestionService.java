@@ -37,6 +37,7 @@ public class DefaultRagIngestionService implements RagIngestionService {
     private final RagIndexStore indexStore;
     private final RagDocumentStore documentStore;
     private final RagConfig.IngestionConfig config;
+    private final RagConfig.CapacityConfig capacity;
     private final ConcurrentMap<String, Object> locks = new ConcurrentHashMap<>();
 
     public DefaultRagIngestionService(RagDocumentParser parser,
@@ -51,6 +52,7 @@ public class DefaultRagIngestionService implements RagIngestionService {
         this.indexStore = indexStore;
         this.documentStore = documentStore;
         this.config = config.getIngestion();
+        this.capacity = config.getCapacity();
     }
 
     @Override
@@ -79,7 +81,9 @@ public class DefaultRagIngestionService implements RagIngestionService {
             command.setKnowledgeBaseId(knowledgeBaseId);
             command.setDocumentId(documentId);
             command.setName(document.getName());
-            command.setContentType(document.getContentType());
+            // 二进制文档仅持久化了解析出的全文，重建时以文本形式重新切分
+            command.setContentType(isBinaryContentType(document.getContentType())
+                    ? "text/plain" : document.getContentType());
             command.setContent(document.getSourceContent());
             command.setMetadata(document.getMetadata() == null
                     ? new LinkedHashMap<>() : new LinkedHashMap<>(document.getMetadata()));
@@ -94,19 +98,26 @@ public class DefaultRagIngestionService implements RagIngestionService {
         String documentId = command.getDocumentId();
         synchronized (lock(knowledgeBaseId, documentId)) {
             RagDocument previous = documentStore.find(knowledgeBaseId, documentId);
-            String checksum = checksum(command.getContent());
+            String checksum = checksum(command);
             if (!force && previous != null && previous.getStatus() == RagDocument.Status.READY
                     && checksum.equals(previous.getChecksum())) {
                 return result(previous, true);
             }
+            enforceKnowledgeBaseCapacity(knowledgeBaseId, previous);
 
             RagDocument processing = processingDocument(command, previous, checksum);
             documentStore.save(processing);
             try {
                 ParsedDocument parsed = parser.parse(toSource(command));
+                enforceDocumentChars(parsed);
                 List<RagChunk> chunks = chunker.split(processing, parsed);
                 if (chunks.isEmpty()) {
                     throw new IllegalArgumentException("文档切分后没有可索引内容");
+                }
+                enforceChunkCapacity(chunks);
+                if (isBinaryUpload(command) && blank(processing.getSourceContent())) {
+                    // 二进制文档存解析出的全文，供重建索引时复用（以文本形式重新切分）
+                    processing.setSourceContent(joinParsedText(parsed));
                 }
                 List<float[]> vectors = embed(chunks);
                 List<RagIndexEntry> entries = toEntries(chunks, vectors);
@@ -123,6 +134,63 @@ public class DefaultRagIngestionService implements RagIngestionService {
                 throw e;
             }
         }
+    }
+
+    private void enforceKnowledgeBaseCapacity(String knowledgeBaseId, RagDocument previous) {
+        int max = capacity.getMaxDocumentsPerKnowledgeBase();
+        if (max <= 0 || previous != null) {
+            return;
+        }
+        List<RagDocument> existing = documentStore.list(knowledgeBaseId);
+        int active = 0;
+        for (RagDocument document : existing) {
+            if (document.getStatus() != RagDocument.Status.FAILED) {
+                active++;
+            }
+        }
+        if (active >= max) {
+            throw new IllegalArgumentException("知识库文档数已达上限 " + max + "，请清理后重试: " + knowledgeBaseId);
+        }
+    }
+
+    private void enforceDocumentChars(ParsedDocument parsed) {
+        int max = capacity.getMaxDocumentChars();
+        if (max <= 0) {
+            return;
+        }
+        int total = 0;
+        for (ParsedDocument.Section section : parsed.getSections()) {
+            if (section.getContent() != null) {
+                total += section.getContent().length();
+            }
+        }
+        if (total > max) {
+            throw new IllegalArgumentException("文档解析后文本长度超过上限 " + max + " 字符，实际 " + total);
+        }
+    }
+
+    private void enforceChunkCapacity(List<RagChunk> chunks) {
+        int max = capacity.getMaxChunksPerDocument();
+        if (max > 0 && chunks.size() > max) {
+            throw new IllegalArgumentException("文档分块数超过上限 " + max + "，实际 " + chunks.size()
+                    + "，请调大 ingestion.chunk-size 或精简文档");
+        }
+    }
+
+    private String joinParsedText(ParsedDocument parsed) {
+        StringBuilder builder = new StringBuilder();
+        for (ParsedDocument.Section section : parsed.getSections()) {
+            if (section.getContent() != null && !section.getContent().trim().isEmpty()) {
+                if (builder.length() > 0) {
+                    builder.append('\n');
+                }
+                if (section.getTitlePath() != null && !section.getTitlePath().trim().isEmpty()) {
+                    builder.append(section.getTitlePath()).append('\n');
+                }
+                builder.append(section.getContent().trim());
+            }
+        }
+        return builder.toString();
     }
 
     private List<float[]> embed(List<RagChunk> chunks) {
@@ -211,6 +279,7 @@ public class DefaultRagIngestionService implements RagIngestionService {
         source.setName(command.getName());
         source.setContentType(command.getContentType());
         source.setContent(command.getContent());
+        source.setContentBytes(command.getContentBytes());
         return source;
     }
 
@@ -237,7 +306,8 @@ public class DefaultRagIngestionService implements RagIngestionService {
             throw new IllegalArgumentException("RAG 写入命令不能为空");
         }
         validateIds(command.getKnowledgeBaseId(), command.getDocumentId());
-        if (blank(command.getContent())) {
+        if (blank(command.getContent()) && (command.getContentBytes() == null
+                || command.getContentBytes().length == 0)) {
             throw new IllegalArgumentException("文档内容不能为空");
         }
     }
@@ -245,6 +315,24 @@ public class DefaultRagIngestionService implements RagIngestionService {
     private void validateIds(String knowledgeBaseId, String documentId) {
         RagFileSupport.requireId("knowledgeBaseId", knowledgeBaseId);
         RagFileSupport.requireId("documentId", documentId);
+    }
+
+    /** 是否为二进制内容上传（PDF / Word）：仅有 contentBytes 且无文本 content。 */
+    private boolean isBinaryUpload(RagIngestionCommand command) {
+        return blank(command.getContent())
+                && command.getContentBytes() != null && command.getContentBytes().length > 0;
+    }
+
+    /** 是否为二进制文档类型（重建索引时无法复用原始字节，需按已提取文本处理）。 */
+    private boolean isBinaryContentType(String contentType) {
+        if (contentType == null) {
+            return false;
+        }
+        String type = contentType.trim().toLowerCase();
+        return type.startsWith("application/pdf")
+                || type.startsWith("application/msword")
+                || type.startsWith("application/vnd.openxmlformats-officedocument.wordprocessingml")
+                || type.startsWith("application/octet-stream");
     }
 
     private Object lock(String knowledgeBaseId, String documentId) {
@@ -262,18 +350,25 @@ public class DefaultRagIngestionService implements RagIngestionService {
         return result;
     }
 
-    private String checksum(String content) {
+    private String checksum(RagIngestionCommand command) {
         try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(content.getBytes(StandardCharsets.UTF_8));
-            StringBuilder hex = new StringBuilder(hash.length * 2);
-            for (byte value : hash) {
-                hex.append(String.format("%02x", value & 0xff));
+            if (isBinaryUpload(command)) {
+                return "b:" + sha256Hex(command.getContentBytes());
             }
-            return hex.toString();
+            return "t:" + sha256Hex(command.getContent().getBytes(StandardCharsets.UTF_8));
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("当前 JDK 不支持 SHA-256", e);
         }
+    }
+
+    private String sha256Hex(byte[] data) throws NoSuchAlgorithmException {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        byte[] hash = digest.digest(data);
+        StringBuilder hex = new StringBuilder(hash.length * 2);
+        for (byte value : hash) {
+            hex.append(String.format("%02x", value & 0xff));
+        }
+        return hex.toString();
     }
 
     private boolean blank(String value) {

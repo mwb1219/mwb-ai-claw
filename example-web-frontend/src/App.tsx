@@ -9,6 +9,7 @@ import { ChatPage } from './pages/ChatPage';
 import { MemoryPage } from './pages/MemoryPage';
 import { RagPage } from './pages/RagPage';
 import { ApprovalPage } from './pages/ApprovalPage';
+import { ObservabilityPage } from './pages/ObservabilityPage';
 import { LoginPage } from './pages/LoginPage';
 import { applyTheme, useSettings } from './store/settings';
 
@@ -87,6 +88,7 @@ function MainLayout() {
             <Route path="/memory" element={<MemoryPage />} />
             <Route path="/rag" element={<RagPage />} />
             <Route path="/approval" element={<ApprovalPage />} />
+            <Route path="/observability" element={<ObservabilityPage />} />
           </Routes>
         </main>
       </div>
