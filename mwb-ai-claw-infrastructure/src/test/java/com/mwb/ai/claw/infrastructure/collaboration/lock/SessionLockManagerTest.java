@@ -118,6 +118,80 @@ public class SessionLockManagerTest {
         }
     }
 
+    @Test
+    public void localLock_highContentionSameSession_neverOverlaps() throws Exception {
+        LocalSessionLockManager manager = new LocalSessionLockManager();
+        AgentScope scope = AgentScope.of("tenant-a", "user-1");
+        int threads = 20;
+        CountDownLatch start = new CountDownLatch(1);
+        AtomicInteger concurrent = new AtomicInteger();
+        AtomicInteger maxConcurrent = new AtomicInteger();
+        AtomicInteger completed = new AtomicInteger();
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        try {
+            for (int i = 0; i < threads; i++) {
+                pool.execute(() -> manager.executeWithLock(scope, "session-hot", () -> {
+                    try {
+                        start.await();
+                    } catch (InterruptedException ignored) {
+                    }
+                    int c = concurrent.incrementAndGet();
+                    maxConcurrent.updateAndGet(m -> Math.max(m, c));
+                    try {
+                        Thread.sleep(5);
+                    } catch (InterruptedException ignored) {
+                    }
+                    concurrent.decrementAndGet();
+                    completed.incrementAndGet();
+                }));
+            }
+            start.countDown();
+            pool.shutdown();
+            assertTrue("所有任务应在超时前完成", pool.awaitTermination(15, TimeUnit.SECONDS));
+            assertEquals("全部线程均应获得锁执行", threads, completed.get());
+            assertEquals("同一会话锁在多线程竞争下必须互斥", 1, maxConcurrent.get());
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    public void localLock_sameSessionIdDifferentTenants_doNotBlockEachOther() throws Exception {
+        LocalSessionLockManager manager = new LocalSessionLockManager();
+        int threads = 8;
+        CountDownLatch start = new CountDownLatch(1);
+        AtomicInteger concurrent = new AtomicInteger();
+        AtomicInteger maxConcurrent = new AtomicInteger();
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        try {
+            for (int i = 0; i < threads; i++) {
+                final int idx = i;
+                // 相同 sessionId、不同租户，锁 key 含 scope 前缀，应各自独立并行
+                pool.execute(() -> manager.executeWithLock(
+                        AgentScope.of("tenant-" + (idx % 4), "user-1"), "session-shared", () -> {
+                    try {
+                        start.await();
+                    } catch (InterruptedException ignored) {
+                    }
+                    int c = concurrent.incrementAndGet();
+                    maxConcurrent.updateAndGet(m -> Math.max(m, c));
+                    try {
+                        Thread.sleep(30);
+                    } catch (InterruptedException ignored) {
+                    }
+                    concurrent.decrementAndGet();
+                }));
+            }
+            start.countDown();
+            pool.shutdown();
+            assertTrue(pool.awaitTermination(15, TimeUnit.SECONDS));
+            assertTrue("不同租户的相同会话不应互斥, 最大并发=" + maxConcurrent.get(),
+                    maxConcurrent.get() > 1);
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
     // ==================== 分布式实现（Redis，Mock 验证语义） ====================
 
     private AgentProperties.LockConfig lockConfig(long timeoutMs, long retryIntervalMs) {

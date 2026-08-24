@@ -1,6 +1,7 @@
 package com.mwb.ai.claw.example.commerce.store;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,29 +35,29 @@ public class CommerceDataStore {
 
     public CommerceDataStore() {
         // 店铺 store-a
-        products.put("store-a", List.of(
+        products.put("store-a", Arrays.asList(
                 new Product("p-a1", "无线蓝牙耳机 Pro", 299.0, "降噪 · 30小时续航", "https://images.example.com/store-a/p-a1.png"),
                 new Product("p-a2", "商务双肩包", 199.0, "15.6寸电脑仓 · 防泼水", "https://images.example.com/store-a/p-a2.png"),
                 new Product("p-a3", "智能手环", 149.0, "心率监测 · 睡眠分析", "https://images.example.com/store-a/p-a3.png")
         ));
-        orders.put("store-a", List.of(
+        orders.put("store-a", Arrays.asList(
                 new Order("o-a11", "p-a1", 2, 598.0, "已发货"),
                 new Order("o-a12", "p-a3", 1, 149.0, "待发货")
         ));
-        campaigns.put("store-a", List.of(
+        campaigns.put("store-a", Arrays.asList(
                 new Campaign("c-a1", "耳机周年庆", "满299减30", "进行中"),
                 new Campaign("c-a2", "开学季", "全店9折", "未开始")
         ));
 
         // 店铺 store-b（不同数据，体现隔离）
-        products.put("store-b", List.of(
+        products.put("store-b", Arrays.asList(
                 new Product("p-b1", "保温杯 500ml", 89.0, "316不锈钢 · 24小时保温", "https://images.example.com/store-b/p-b1.png"),
                 new Product("p-b2", "复古台灯", 129.0, "三档调光 · 暖光阅读", "https://images.example.com/store-b/p-b2.png")
         ));
-        orders.put("store-b", List.of(
+        orders.put("store-b", Arrays.asList(
                 new Order("o-b21", "p-b1", 3, 267.0, "已完成")
         ));
-        campaigns.put("store-b", List.of(
+        campaigns.put("store-b", Arrays.asList(
                 new Campaign("c-b1", "春季上新", "任意两件95折", "进行中")
         ));
     }
