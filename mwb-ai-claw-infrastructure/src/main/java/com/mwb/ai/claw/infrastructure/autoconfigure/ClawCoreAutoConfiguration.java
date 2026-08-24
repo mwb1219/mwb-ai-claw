@@ -210,9 +210,10 @@ public class ClawCoreAutoConfiguration {
             return new OpenAiRagEmbeddingGateway(config, restTemplate);
         }
 
+        // 文档元数据存储与向量索引 provider 正交：local（本地 JSON）与 pgvector（Postgres 向量索引）共用
+        // 文件版元数据存储，仅当业务侧未注册自定义 RagDocumentStore 时装配。
         @Bean
         @ConditionalOnMissingBean(RagDocumentStore.class)
-        @ConditionalOnProperty(name = "agent.rag.provider", havingValue = "local", matchIfMissing = true)
         public FileRagDocumentStore ragDocumentStore(RagConfig config) {
             return new FileRagDocumentStore(config);
         }

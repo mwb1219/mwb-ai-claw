@@ -46,6 +46,30 @@
             <artifactId>mysql-connector-java</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <!-- PostgreSQL 驱动（RAG provider=pgvector 向量库 / 存储 db 后端；版本由 spring-boot-dependencies BOM 管理） -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <!-- Redis 分布式会话锁（agent.collaboration.lock.type=redis，多实例部署；infra 中为 optional 需在此显式引入，
+             RedisLockConfiguration 由 @ConditionalOnClass 保护，未配置 type=redis 时不启用） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <!-- PDF 文档解析（RAG 上传 .pdf 时使用；与 infra 的 optional 同版本，此处显式引入以在 example-web 启用） -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>2.0.31</version>
+        </dependency>
+        <!-- Word(.docx) 文档解析（RAG 上传 .docx 时使用；同上） -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.2.5</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

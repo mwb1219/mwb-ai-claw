@@ -1,0 +1,37 @@
+# example-web 演示依赖的中间件：PostgreSQL(pgvector) + Redis
+# 用法：在 example-web 目录执行 `docker compose up -d` 后启动后端即可。
+#   - pgvector：RAG 向量库（agent.rag.provider=pgvector）
+#   - redis：分布式会话锁（agent.collaboration.lock.type=redis）
+services:
+  pgvector:
+    image: pgvector/pgvector:pg16
+    container_name: example-web-pgvector
+    environment:
+      POSTGRES_USER: ${PG_USER:-claw}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-claw}
+      POSTGRES_DB: ${PG_DB:-clawdb}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgvector_data:/var/lib/postgresql/data
+      # 首次初始化时自动启用 pgvector 扩展（重建数据卷时生效）
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-claw} -d ${PG_DB:-clawdb}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: example-web-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgvector_data:

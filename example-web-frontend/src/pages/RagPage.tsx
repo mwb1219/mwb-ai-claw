@@ -242,7 +242,7 @@ export function RagPage() {
               <span className="form-label">文档文件</span>
               <input
                 type="file"
-                accept=".txt,.md,.markdown,text/plain,text/markdown"
+                accept=".txt,.md,.markdown,.pdf,.docx,text/plain,text/markdown,application/pdf"
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               />
               {file ? (
@@ -251,7 +251,7 @@ export function RagPage() {
                 </span>
               ) : (
                 <span className="text-faint">
-                  支持 Markdown / 纯文本，提交后自动解析 → 切分 → 向量化 → 写入索引，无大小限制
+                  支持 Markdown / 纯文本 / PDF / Word(.docx)，提交后自动解析 → 切分 → 向量化 → 写入 PGVector，无大小限制
                 </span>
               )}
             </label>

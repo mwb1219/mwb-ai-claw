@@ -7,7 +7,9 @@ import org.springframework.context.annotation.Configuration;
 
 import com.mwb.ai.claw.domain.rag.config.RagConfig;
 import com.mwb.ai.claw.domain.rag.retrieve.RagReranker;
+import com.mwb.ai.claw.domain.rag.store.RagDocumentStore;
 import com.mwb.ai.claw.domain.rag.write.RagChunker;
+import com.mwb.ai.claw.domain.rag.write.RagIngestionService;
 import com.mwb.ai.claw.infrastructure.rag.write.TextRagChunker;
 
 /**
@@ -36,5 +38,12 @@ public class ExampleRagConfiguration {
     @ConditionalOnMissingBean(RagReranker.class)
     public RagReranker exampleRagReranker() {
         return new ExampleRagReranker();
+    }
+
+    @Bean
+    public ExampleRagSeedInitializer exampleRagSeedInitializer(
+            RagIngestionService ingestionService, RagDocumentStore documentStore) {
+        // 启动时自动创建示例知识库并摄入 Markdown / PDF / Word 种子文档（幂等：同名文档已存在则跳过）
+        return new ExampleRagSeedInitializer(ingestionService, documentStore);
     }
 }
