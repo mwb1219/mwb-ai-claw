@@ -41,7 +41,7 @@
           "retries": 1,
           "thinking": false,
           "resultPass": "text",
-          "approvalGate": "none",
+          "approvalGate": "root",
           "approvalTimeoutMs": 0,
           "topK": 3,
           "replanRounds": 0

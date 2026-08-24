@@ -143,6 +143,28 @@ by `agent.observability.trace.store=db`), shared across instances and isolated p
 
 ![Observability - full chain trace](screenshots/07-observability-trace.jpg)
 
+**⑦ Human approval (`#/approval`)**: when the orchestration enables an approval gate (`approvalGate: "root"` in
+`orchestrations.json`, i.e. the `todo-delegate` escalation/planning must be manually confirmed before continuing),
+the backend generates pending-approval nodes (`PendingApproval`). The approval page pulls the list via
+`GET /agent/pending-tasks`, showing the original task and the todo titles to execute, with "approve / reject" actions:
+
+- **Pending**: the page lists the pending root node with the original task "请规划并实现一个用户积分与等级体系…"
+  and its 8 todo titles.
+
+![Approval - pending](screenshots/05-approval-pending.png)
+
+- **Approved**: clicking "approve" marks the node APPROVED and wakes it up; the card disappears and the page shows
+  "暂无待审批任务", while `/agent/pending-tasks` returns an empty list.
+
+![Approval - approved](screenshots/06-approval-approved.png)
+
+- **Rejected**: clicking "reject" and confirming marks the node REJECTED, so that layer degrades to direct execution
+  (backend logs: `审批门禁: 节点已决策 REJECTED`, `审批已拒绝，该层降级直执行`); the list likewise becomes empty.
+
+![Approval - before reject](screenshots/07-approval-reject-pending.jpg)
+
+![Approval - rejected](screenshots/08-approval-rejected.jpg)
+
 ## 6. REST Verification (optional)
 
 ```bash

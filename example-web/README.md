@@ -138,6 +138,26 @@ npm run build      # 生产构建 → dist/
 
 ![可观测性-全链路 trace](screenshots/07-observability-trace.jpg)
 
+**⑦ 人工审批（`#/approval`）**：当编排配置了审批门禁（`orchestrations.json` 中 `approvalGate: "root"`，即
+`todo-delegate` 首层升级/规划完成后需人工确认）时，后台会生成待审批节点（`PendingApproval`）。审批页面通过
+`GET /agent/pending-tasks` 拉取待审批列表，展示原始任务与待执行的 todo 标题清单，支持「审批通过 / 审批拒绝」：
+
+- **待审批**：页面列出待审批的 root 节点，包含原始任务「请规划并实现一个用户积分与等级体系…」及 8 个 todo 标题。
+
+![审批-待审批](screenshots/05-approval-pending.png)
+
+- **审批通过**：点击「审批通过」后将该节点标记为 APPROVED 并唤醒执行；卡片消失，页面转为「暂无待审批任务」，
+  后端 `/agent/pending-tasks` 返回空列表。
+
+![审批-通过](screenshots/06-approval-approved.png)
+
+- **审批拒绝**：点击「审批拒绝」并确认后，节点被标记为 REJECTED，该层降级直执行（后端日志：
+  `审批门禁: 节点已决策 REJECTED`、`审批已拒绝，该层降级直执行`），列表同样转为空状态。
+
+![审批-拒绝前](screenshots/07-approval-reject-pending.jpg)
+
+![审批-拒绝后](screenshots/08-approval-rejected.jpg)
+
 ## 6. REST 验证（可选）
 
 ```bash
