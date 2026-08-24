@@ -7,6 +7,8 @@ nav_order: 1
 # 使用指南
 
 > 面向「想用起来」的用户。按真实使用路径组织：装起来 → 配起来 → 用起来。
+>
+> 📦 想直接体验可运行的示例项目（example-web / example-embed / **example-commerce**），见[文档中心 · 示例项目](../index.md#examples)。
 
 | 文档 | 内容 |
 | --- | --- |

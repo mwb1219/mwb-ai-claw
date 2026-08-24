@@ -15,6 +15,21 @@ title: 文档中心
 
 ---
 
+## 🚀 示例项目（Examples） {#examples}
+
+仓库内置三个可运行示例模块，覆盖从「单点能力演示」到「多扩展点联合」：
+
+| 示例模块 | 演示重点 | 启动方式 |
+| --- | --- | --- |
+| [example-web](https://github.com/mwb1219/mwb-ai-claw/tree/master/example-web) | RAG 知识库管理 + Web 控制台前端；演示 RAG 扩展 SPI 的替换与增强（`ExampleRagChunker` / `ExampleRagReranker`） | 后端 `spring-boot:run` + `example-web-frontend` dev server |
+| [example-embed](https://github.com/mwb1219/mwb-ai-claw/tree/master/example-embed) | 嵌入式集成：`ClawRuntime` 最小接入 | 直接运行 main |
+| [example-commerce](https://github.com/mwb1219/mwb-ai-claw/tree/master/example-commerce)（推荐） | **多扩展点旗舰示例**：电商/营销运营助手，一个业务流联合演示自定义工具、自定义编排、多租户、RAG、审批门禁；含前端页面与操作截图 | 后端 `spring-boot:run` + `example-commerce-frontend`（端口 5174） |
+
+> 💡 首次体验推荐 `example-commerce`：从「查商品 → 看活动 → 生成促销方案」串联起框架绝大部分扩展点。
+> 各扩展点「默认实现 / SPI / 如何覆盖 / 如何增强」的对照说明见模块 README。
+
+---
+
 ## 📘 使用指南（guide/）
 
 面向「想用起来」的用户。按真实使用路径组织：装起来 → 配起来 → 用起来。

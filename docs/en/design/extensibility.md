@@ -131,6 +131,10 @@ When you don't want to throw away the default but only add logic around it, wrap
 
 You can use `example-web`'s `ExampleRagConfiguration` / `ExampleRagChunker` / `ExampleRagReranker` as the minimal reference for SPI replacement and enhancement (see the RAG design doc in the Chinese section).
 
+**Flagship example: example-commerce (combined extension points)**
+
+T1/T2 have landed a fully runnable end-to-end business example. To feel how "multi-extension-point, pluggable" works together in a real business, run [example-commerce](https://github.com/mwb1219/mwb-ai-claw/tree/master/example-commerce) (an e-commerce / marketing assistant): a "list products → view campaigns → generate a promo plan" flow combines custom business tools (`list_products` / `list_orders` / `list_campaigns`, auto-collected via `@Component`), a custom orchestration (`marketing`, registered into `OrchestratorRegistry`), multi-tenancy (`CommerceTenantGateway` resolving API keys into isolated stores), and more. Its README provides the "default impl / SPI / how to override / how to enhance" matrix for each extension point — a blueprint for integrating real businesses.
+
 ---
 
 See also: [Architecture](architecture.md) ｜ [Multi-Agent Orchestration](collaboration.md) ｜ [Layered Memory](memory-model.md) ｜ [Configuration](../guide/configuration.md)

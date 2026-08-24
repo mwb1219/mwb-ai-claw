@@ -55,6 +55,10 @@ AgentScope.defaultScope();             // 同上一行
 - **无全局隐式状态**：scope 作为参数/上下文显式传递，避免跨租户串数据
 - **鉴权可选**：`agent.auth.enabled` 关闭时所有人共享默认空间，开启后按 key 隔离（见 [design/security.md](security.md)）
 
+## 5. 多租户示例：example-commerce（多店铺隔离）
+
+T2 已落地可运行的参考实现：[example-commerce](https://github.com/mwb1219/mwb-ai-claw/tree/master/example-commerce) 通过 `CommerceTenantGateway` 将 API Key（`sk-store-a` / `sk-store-b`）反解为 (tenantId, userId)，两间店铺的商品 / 订单 / 活动数据完全隔离；前端按店铺选择入口，工具读取时经 `AgentScopeContext` 透传 scope。对接自有租户表 / SSO 时，实现 `TenantGateway` 并以 `@Bean` 覆盖默认 Bean 即可（参考该模块实现与上方「各入口如何确定 scope」）。
+
 ---
 
 相关：[配置详解](../guide/configuration.md) ｜ [安全模型](security.md)

@@ -15,6 +15,21 @@ title: Documentation (English)
 
 ---
 
+## 🚀 Example Projects {#examples}
+
+Three runnable example modules ship in the repo, from single-capability demos to combined extension points:
+
+| Module | Focus | How to run |
+| --- | --- | --- |
+| [example-web](https://github.com/mwb1219/mwb-ai-claw/tree/master/example-web) | RAG knowledge-base management + web console; shows RAG SPI replacement & enhancement (`ExampleRagChunker` / `ExampleRagReranker`) | backend `spring-boot:run` + `example-web-frontend` dev server |
+| [example-embed](https://github.com/mwb1219/mwb-ai-claw/tree/master/example-embed) | Embedded integration: minimal `ClawRuntime` setup | run `main` directly |
+| [example-commerce](https://github.com/mwb1219/mwb-ai-claw/tree/master/example-commerce) (recommended) | **Flagship multi-extension-point example**: e-commerce / marketing assistant; one business flow combining custom tools, custom orchestration, multi-tenancy, RAG, and approval gates; ships a frontend with operation screenshots | backend `spring-boot:run` + `example-commerce-frontend` (port 5174) |
+
+> 💡 Start with `example-commerce`: the flow "list products → view campaigns → generate a promo plan" chains together most of the framework's extension points.
+> See the module README for the "default impl / SPI / how to override / how to enhance" matrix for each extension point.
+
+---
+
 ## 📘 User Guide (guide/)
 
 | Doc | Content | Audience |
