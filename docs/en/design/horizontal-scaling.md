@@ -127,7 +127,7 @@ upstream claw_cluster {
 
 ### 6.2 Database readiness
 
-With `agent.storage.type=db` the datasource is connected at startup, so the database must be reachable (MySQL, etc.); see the `DB_*` variables in the [configuration guide](../../CONFIG-GUIDE.md).
+With `agent.storage.type=db` the datasource is connected at startup, so the database must be reachable (MySQL, etc.); see the `DB_*` variables in the [configuration guide](https://github.com/mwb1219/mwb-ai-claw/blob/master/CONFIG-GUIDE.md).
 
 ## 7. Verification
 
@@ -148,4 +148,4 @@ Unit tests: `infrastructure/.../collaboration/lock/SessionLockManagerTest` (same
 
 ---
 
-Related: [Storage & Multi-Tenancy](storage-multitenancy.md) ｜ [Observability & Resilience](observability.md) ｜ [Configuration Guide](../../CONFIG-GUIDE.md)
+Related: [Storage & Multi-Tenancy](storage-multitenancy.md) ｜ [Observability & Resilience](observability.md) ｜ [Configuration Guide](https://github.com/mwb1219/mwb-ai-claw/blob/master/CONFIG-GUIDE.md)

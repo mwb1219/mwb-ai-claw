@@ -41,7 +41,7 @@ Shell 内 `/metrics` 实时查看快照；引入 actuator 后可经 `/actuator/m
 Thought / Action / Observation 逐条明细，可关联 `traceId` 还原整条链路。
 
 - **模型**：`TraceStore` SPI（`domain.observability`）——`saveTrace` / `findTrace(scope, traceId)`，
-  由 [ChatCmdExe](../../mwb-ai-claw-app/src/main/java/com/mwb/ai/claw/agent/executor/ChatCmdExe.java)
+  由 [ChatCmdExe](https://github.com/mwb1219/mwb-ai-claw/blob/master/mwb-ai-claw-app/src/main/java/com/mwb/ai/claw/agent/executor/ChatCmdExe.java)
   在每次执行（含失败）后记录，`traceId` 复用请求链路 MDC（缺失自动生成）；
 - **两套默认实现**（`@ConditionalOnMissingBean` 可替换为自定义 / OTLP 导出等）：
   | store | 实现 | 说明 |

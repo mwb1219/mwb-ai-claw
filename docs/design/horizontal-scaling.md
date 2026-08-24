@@ -129,7 +129,7 @@ upstream claw_cluster {
 
 ### 6.2 数据库就绪
 
-`agent.storage.type=db` 时数据源为启动即连，需先确保数据库可达（MySQL 等），见 [配置指南](../../CONFIG-GUIDE.md) 的 `DB_*` 变量。
+`agent.storage.type=db` 时数据源为启动即连，需先确保数据库可达（MySQL 等），见 [配置指南](https://github.com/mwb1219/mwb-ai-claw/blob/master/CONFIG-GUIDE.md) 的 `DB_*` 变量。
 
 ## 7. 验证
 
@@ -150,4 +150,4 @@ upstream claw_cluster {
 
 ---
 
-相关：[存储与多租户](storage-multitenancy.md) ｜ [可观测性与韧性](observability.md) ｜ [配置指南](../../CONFIG-GUIDE.md)
+相关：[存储与多租户](storage-multitenancy.md) ｜ [可观测性与韧性](observability.md) ｜ [配置指南](https://github.com/mwb1219/mwb-ai-claw/blob/master/CONFIG-GUIDE.md)
