@@ -38,7 +38,7 @@ AgentScope.defaultScope();             // 同上一行
 - `namespace()`：`tenantId + "/" + userId` —— 文件模式下作为存储子目录，DB 模式下作为表前缀/键维度
 - `AgentScopeContext`（ThreadLocal）：请求链路中临时持有当前 scope，入口设置、finally 清理
 - 异步任务（SSE / WebSocket 执行线程）：ThreadLocal 不跨线程，需显式捕获并 `AgentScopeContext.set(scope)`
-- 会话并发锁固定 `LocalSessionLockManager`（JVM 内 ReentrantLock，按 `scope.keyPrefix()` 维度隔离）
+- 会话并发锁默认 `LocalSessionLockManager`（JVM 内 ReentrantLock，按 `scope.keyPrefix()` 维度隔离）；多实例部署可切换 Redis 分布式锁（`agent.collaboration.lock.type=redis`，见 [横向扩展部署](horizontal-scaling.md)）
 
 ## 3. 各入口如何确定 scope
 

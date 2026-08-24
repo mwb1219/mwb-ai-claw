@@ -53,6 +53,30 @@
             <artifactId>micrometer-core</artifactId>
         </dependency>
 
+        <!-- 分布式会话锁（agent.collaboration.lock.type=redis 时使用；optional 不向下游传递，
+             需使用方自行引入该依赖，RedisLockConfiguration 由 @ConditionalOnClass 保护） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- PDF 文档解析（RAG 上传 .pdf 时使用；optional，MultiFormatRagDocumentParser 由 @ConditionalOnClass 保护） -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>2.0.31</version>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Word(.docx) 文档解析（RAG 上传 .docx 时使用；optional，同上） -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.2.5</version>
+            <optional>true</optional>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

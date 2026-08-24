@@ -156,6 +156,11 @@ public class AgentProperties {
      */
     private StorageConfig storage = new StorageConfig();
 
+    /**
+     * 协作配置（agent.collaboration.*，会话锁等）
+     */
+    private CollaborationConfig collaboration = new CollaborationConfig();
+
     @Data
     public static class ToolSecurityConfig {
         /** 是否启用安全沙箱 */
@@ -312,5 +317,38 @@ public class AgentProperties {
     public static class StorageConfig {
         /** 存储后端：file（本地文件，默认）| db（JDBC 持久化） */
         private String type = "file";
+    }
+
+    /**
+     * 协作配置（agent.collaboration.*）
+     */
+    @Data
+    public static class CollaborationConfig {
+        /** 会话锁配置（agent.collaboration.lock.*） */
+        private LockConfig lock = new LockConfig();
+    }
+
+    /**
+     * 会话锁配置：本地（单实例）与分布式（多实例）实现切换
+     */
+    @Data
+    public static class LockConfig {
+        /** 会话锁实现：local（JVM 内 ReentrantLock，单实例，默认）| redis（SET NX 分布式锁，多实例） */
+        private String type = "local";
+
+        /** Redis 连接串（type=redis 时生效，如 redis://localhost:6379，可带密码 redis://:pass@host:port） */
+        private String redisUri = "redis://localhost:6379";
+
+        /** 锁 key 前缀（type=redis 时生效，多租户/多环境共享 Redis 时可前缀隔离命名空间） */
+        private String keyPrefix = "claw:lock:";
+
+        /** 锁自动过期毫秒数：持有者崩溃后锁自动释放，防止死锁（默认 30s） */
+        private long leaseMs = 30000;
+
+        /** 获取锁等待超时毫秒数：超时抛「获取会话锁超时」（默认 30s） */
+        private long timeoutMs = 30000;
+
+        /** 获取锁轮询间隔毫秒数（默认 100ms） */
+        private long retryIntervalMs = 100;
     }
 }

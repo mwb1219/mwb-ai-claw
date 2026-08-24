@@ -18,4 +18,5 @@ parent: Documentation (English)
 | [Storage & Multi-Tenancy](storage-multitenancy.md) | file / db backends / AgentScope |
 | [Security Model](security.md) | Tool sandbox / approval / injection defense |
 | [Observability & Resilience](observability.md) | Metrics / run logs / retry & degradation |
+| [Horizontal Scaling](horizontal-scaling.md) | Multi-instance / shared storage / distributed lock / session routing |
 | [Extensibility Design](extensibility.md) | Design intent / user-facing extension / SPI extension points |

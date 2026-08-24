@@ -34,7 +34,7 @@ RAG 与 Agent 记忆是两类不同能力，相互独立、互不复用：
 
 ```text
 RagIngestionService
-  |-- RagDocumentParser   解析（纯文本 / Markdown）
+  |-- RagDocumentParser   解析（文本 / Markdown / PDF / Word）
   |-- RagChunker          切分（标题 / 空行 / 长度 / overlap）
   |-- RagEmbeddingGateway 批量向量化
   |-- RagIndexStore       写入向量索引
@@ -58,8 +58,17 @@ RAG 失败默认降级为空知识上下文，不阻断 Agent 主流程。
 
 - **SPI 化扩展**：解析、切分、Embedding、文档存储、向量索引、重排均为独立 SPI，
   默认 Bean 以 `@ConditionalOnMissingBean` 注册，业务方可整体替换（如换 Milvus / PGVector / ES）。
+- **多格式解析**：默认 `MultiFormatRagDocumentParser` 按内容类型 / 扩展名分发——文本 / Markdown 内置，
+  PDF（PDFBox）与 Word（POI）为 optional 依赖，引入即启用、未引入则退化为纯文本解析并给出明确提示。
 - **默认本地实现**：文本 / Markdown 解析 + 本地文件向量索引 + 余弦相似度检索，零依赖开箱即用；
   存储目录 `${user.dir}/.agent/rag`，与 `.agent/memory` 完全隔离。
+- **向量库适配（provider=pgvector）**：内置 PGVector 参考实现（`PgVectorRagIndexStore`，基于 `JdbcTemplate`），
+  首次写入按实际向量维度建表并尝试建 `ivfflat` / `hnsw` 向量索引，检索走 `<=>` / `<->` 算子；
+  表名 / schema / 索引类型 / 相似度算子可配，标识符做白名单校验防注入。
+- **API 层访问控制（可选）**：`RagAccessPolicy` SPI 在 `agent.rag.access.enabled=true` 时于 REST 接口层
+  按租户 / 用户做知识库可见性授权；关闭时全部放行，**不改变全局共享检索语义**。
+- **容量与配额（可选）**：`agent.rag.capacity.*` 限制单知识库最大文档数、单文档最大分块数、
+  单文档解析后最大字符数，0 表示不限制。
 - **索引一致性**：索引元数据记录 `modelId` 与向量维度，避免 Embedding 模型切换导致维度不一致。
 - **Embedding 批量约束**：模型对单次请求有批量上限（如阿里云 MaaS 为 20），
   Gateway 按 `max-batch-size` 内部分批，外层 `embedding-batch-size` 只控制吞吐分组。
@@ -82,8 +91,15 @@ domain.rag            infrastructure.rag
 
 ## 5. 配置与启用
 
-`agent.rag.enabled=true` 开启（默认关闭）；`provider=local` 零依赖索引实现；
+`agent.rag.enabled=true` 开启（默认关闭）；索引实现由 `agent.rag.provider` 选择：
+`local`（零依赖本地文件向量索引，默认）| `pgvector`（PostgreSQL + pgvector 扩展）。
 依赖 OpenAI 兼容 `/embeddings` 接口，需在 `.env` 配置 `RAG_EMBEDDING_MODEL/BASE_URL/API_KEY`。
+
+- PDF / Word 解析：引入 optional 依赖 `org.apache.pdfbox:pdfbox`、`org.apache.poi:poi-ooxml` 即自动启用；
+- 向量库：`provider=pgvector` 时需 PostgreSQL 驱动 + 目标库执行 `CREATE EXTENSION IF NOT EXISTS vector;`；
+- 访问控制：`agent.rag.access.enabled=true` 并注册 `RagAccessPolicy` Bean 后按租户 / 角色授权；
+- 容量配额：`agent.rag.capacity.*`（见 [配置项速查](../reference/config-full.md)）。
+
 完整配置见 [配置项速查](../reference/config-full.md) 与 [配置详解](../guide/configuration.md)。
 
 ## 6. 示例：example-web

@@ -11,11 +11,20 @@ public class RagConfig {
     /** 总开关，默认关闭以保持现有 Agent 行为。 */
     private boolean enabled = false;
 
-    /** 索引实现类型，内置 local。 */
+    /** 索引实现类型，内置 local / pgvector。 */
     private String provider = "local";
 
     /** 本地索引实现配置。 */
     private LocalConfig local = new LocalConfig();
+
+    /** PGVector 索引实现配置（provider=pgvector 时生效）。 */
+    private PgVectorConfig pgvector = new PgVectorConfig();
+
+    /** 知识库 API 层访问控制（可选，默认关闭，不改变全局共享检索语义）。 */
+    private AccessConfig access = new AccessConfig();
+
+    /** 容量与配额管理（0 表示不限制）。 */
+    private CapacityConfig capacity = new CapacityConfig();
 
     /** 写入阶段（解析、切分、向量化）配置。 */
     private IngestionConfig ingestion = new IngestionConfig();
@@ -33,6 +42,34 @@ public class RagConfig {
     public static class LocalConfig {
         /** 默认 {@code ${user.dir}/.agent/rag}。 */
         private String dir = "";
+    }
+
+    @Data
+    public static class PgVectorConfig {
+        /** 索引表名。 */
+        private String table = "rag_index_entries";
+        /** 表所在 schema。 */
+        private String schema = "public";
+        /** 向量索引类型：ivfflat（默认，创建快）| hnsw（召回更准，写入更重）。 */
+        private String indexType = "ivfflat";
+        /** 相似度算子：vector_cosine_ops（默认）| vector_l2_ops | vector_ip_ops。 */
+        private String similarity = "vector_cosine_ops";
+    }
+
+    @Data
+    public static class AccessConfig {
+        /** 是否启用知识库 API 层访问控制（默认关闭，关闭时全部放行、保持全局共享语义）。 */
+        private boolean enabled = false;
+    }
+
+    @Data
+    public static class CapacityConfig {
+        /** 单个知识库最大文档数，0=不限制。 */
+        private int maxDocumentsPerKnowledgeBase = 0;
+        /** 单个文档最大分块数，0=不限制。 */
+        private int maxChunksPerDocument = 0;
+        /** 单个文档解析后文本最大字符数，0=不限制。 */
+        private int maxDocumentChars = 0;
     }
 
     @Data

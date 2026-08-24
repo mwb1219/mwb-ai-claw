@@ -19,8 +19,10 @@ public class RagIngestionCommand {
     private String name;
     /** 文档 MIME 类型，默认纯文本。 */
     private String contentType = "text/plain";
-    /** 文档正文内容。 */
+    /** 文档正文内容（文本 / Markdown 时使用）。 */
     private String content;
+    /** 文档原始二进制内容（PDF / Word 等二进制格式时使用，与 content 二选一）。 */
+    private byte[] contentBytes;
     /** 附加元数据。 */
     private Map<String, String> metadata = new LinkedHashMap<>();
 }

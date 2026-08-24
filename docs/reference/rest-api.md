@@ -83,12 +83,13 @@ event: done       → 结束
 
 > `agent.rag.enabled=true` 时装配（默认关闭）。知识库为**全局资源**，不读取 `AgentScope`；
 > 依赖 OpenAI 兼容 `/embeddings`（`.env` 配置 `RAG_EMBEDDING_*`）。
+> `agent.rag.access.enabled=true` 时，各接口按注入的 `RagAccessPolicy` 做租户 / 角色授权（默认放行）。
 
 | 方法 | 路径 | 说明 | 关键参数 |
 | --- | --- | --- | --- |
 | `GET` | `/rag/knowledge-bases/{kb}/documents` | 列出知识库下全部文档 | - |
-| `POST` | `/rag/knowledge-bases/{kb}/documents` | 摄入文档（JSON：解析→切分→向量化→索引） | body: `RagIngestionCommand`（documentId? / name / contentType / content / metadata；documentId 留空自动生成） |
-| `POST` | `/rag/knowledge-bases/{kb}/documents/upload` | **文件上传摄入**（multipart，默认不限制大小） | form: `file`（必填）、`documentId?`、`name?`；`.md/.markdown` → `text/markdown`，其余按纯文本 |
+| `POST` | `/rag/knowledge-bases/{kb}/documents` | 摄入文档（JSON：解析→切分→向量化→索引） | body: `RagIngestionCommand`（documentId? / name / contentType / content / contentBytes? / metadata；documentId 留空自动生成） |
+| `POST` | `/rag/knowledge-bases/{kb}/documents/upload` | **文件上传摄入**（multipart，默认不限制大小） | form: `file`（必填）、`documentId?`、`name?`；`.md/.markdown` → `text/markdown`、`.pdf` → PDF（需 PDFBox）、`.docx` → Word（需 POI），其余按纯文本 |
 | `POST` | `/rag/knowledge-bases/{kb}/documents/{id}/reindex` | 重建指定文档索引 | - |
 | `DELETE` | `/rag/knowledge-bases/{kb}/documents/{id}` | 删除文档及其索引 | - |
 | `POST` | `/rag/search` | 独立 RAG 检索 | body: `RagQuery`（knowledgeBaseIds / text / topK / minScore / filters） |

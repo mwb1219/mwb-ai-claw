@@ -38,7 +38,7 @@ AgentScope.defaultScope();             // same as the line above
 - `namespace()`: `tenantId + "/" + userId` — used as the storage subdirectory in file mode, and as the table prefix / key dimension in db mode
 - `AgentScopeContext` (ThreadLocal): temporarily holds the current scope during the request chain; set at the entry point and cleared in `finally`
 - Asynchronous tasks (SSE / WebSocket execution threads): ThreadLocal does not cross threads, so the scope must be explicitly captured and set via `AgentScopeContext.set(scope)`
-- Session concurrency locks are fixed to `LocalSessionLockManager` (in-JVM ReentrantLock, isolated by the `scope.keyPrefix()` dimension)
+- Session concurrency locks default to `LocalSessionLockManager` (in-JVM ReentrantLock, isolated by the `scope.keyPrefix()` dimension); for multi-instance deployments, switch to the Redis distributed lock via `agent.collaboration.lock.type=redis` (see [horizontal scaling](horizontal-scaling.md))
 
 ## 3. How Each Entry Point Determines the Scope
 

@@ -4,11 +4,17 @@ import java.util.List;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.util.ClassUtils;
 
 import com.mwb.ai.claw.domain.core.AgentGateway;
 import com.mwb.ai.claw.domain.llm.EmbeddingGateway;
@@ -16,9 +22,10 @@ import com.mwb.ai.claw.domain.llm.LlmGateway;
 import com.mwb.ai.claw.domain.memory.gateway.LayeredMemoryGateway;
 import com.mwb.ai.claw.domain.memory.gateway.LongTermMemoryGateway;
 import com.mwb.ai.claw.domain.memory.gateway.MemoryGateway;
-import com.mwb.ai.claw.domain.memory.store.MemoryPageStore;
 import com.mwb.ai.claw.domain.memory.retrieve.MemoryRetriever;
+import com.mwb.ai.claw.domain.memory.store.MemoryPageStore;
 import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesizer;
+import com.mwb.ai.claw.domain.rag.access.RagAccessPolicy;
 import com.mwb.ai.claw.domain.rag.config.RagConfig;
 import com.mwb.ai.claw.domain.rag.context.RagContextProvider;
 import com.mwb.ai.claw.domain.rag.embed.RagEmbeddingGateway;
@@ -35,6 +42,7 @@ import com.mwb.ai.claw.domain.tool.ToolGateway;
 import com.mwb.ai.claw.domain.tool.ToolPermissionChecker;
 import com.mwb.ai.claw.infrastructure.auth.ConfigToolPermissionChecker;
 import com.mwb.ai.claw.infrastructure.collaboration.lock.LocalSessionLockManager;
+import com.mwb.ai.claw.infrastructure.collaboration.lock.RedisSessionLockManager;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.config.AgentRegistryLoader;
 import com.mwb.ai.claw.infrastructure.config.AuthProperties;
@@ -46,8 +54,6 @@ import com.mwb.ai.claw.infrastructure.llm.provider.AnthropicLlmGateway;
 import com.mwb.ai.claw.infrastructure.llm.provider.GeminiLlmGateway;
 import com.mwb.ai.claw.infrastructure.llm.provider.ProviderRoutingGateway;
 import com.mwb.ai.claw.infrastructure.memory.gateway.LayeredMemoryGatewayImpl;
-import com.mwb.ai.claw.infrastructure.memory.synthesis.MemorySynthesisExecutor;
-import com.mwb.ai.claw.infrastructure.memory.synthesis.SynthesisCache;
 import com.mwb.ai.claw.infrastructure.memory.storage.file.FileBasedMemoryGateway;
 import com.mwb.ai.claw.infrastructure.memory.storage.file.FileBasedSessionGateway;
 import com.mwb.ai.claw.infrastructure.memory.storage.file.FileMemoryPageStore;
@@ -55,19 +61,27 @@ import com.mwb.ai.claw.infrastructure.memory.storage.jdbc.JdbcLongTermMemoryGate
 import com.mwb.ai.claw.infrastructure.memory.storage.jdbc.JdbcMemoryPageStore;
 import com.mwb.ai.claw.infrastructure.memory.storage.jdbc.JdbcSessionGateway;
 import com.mwb.ai.claw.infrastructure.memory.strategy.LlmMemorySynthesizer;
+import com.mwb.ai.claw.infrastructure.memory.synthesis.MemorySynthesisExecutor;
+import com.mwb.ai.claw.infrastructure.memory.synthesis.SynthesisCache;
 import com.mwb.ai.claw.infrastructure.observability.MetricsRecorder;
+import com.mwb.ai.claw.infrastructure.rag.access.AllowAllRagAccessPolicy;
 import com.mwb.ai.claw.infrastructure.rag.context.DefaultRagContextProvider;
 import com.mwb.ai.claw.infrastructure.rag.embed.OpenAiRagEmbeddingGateway;
 import com.mwb.ai.claw.infrastructure.rag.retrieve.DefaultRagRetrievalService;
 import com.mwb.ai.claw.infrastructure.rag.store.FileRagDocumentStore;
 import com.mwb.ai.claw.infrastructure.rag.store.LocalRagIndexStore;
+import com.mwb.ai.claw.infrastructure.rag.store.PgVectorRagIndexStore;
 import com.mwb.ai.claw.infrastructure.rag.write.DefaultRagIngestionService;
+import com.mwb.ai.claw.infrastructure.rag.write.MultiFormatRagDocumentParser;
+import com.mwb.ai.claw.infrastructure.rag.write.PdfRagDocumentParser;
 import com.mwb.ai.claw.infrastructure.rag.write.TextRagChunker;
 import com.mwb.ai.claw.infrastructure.rag.write.TextRagDocumentParser;
+import com.mwb.ai.claw.infrastructure.rag.write.WordRagDocumentParser;
 import com.mwb.ai.claw.infrastructure.skill.SkillLoader;
 import com.mwb.ai.claw.infrastructure.skill.SkillRegistryImpl;
 import com.mwb.ai.claw.infrastructure.tool.ToolGatewayImpl;
 
+import io.lettuce.core.RedisURI;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
@@ -166,8 +180,21 @@ public class ClawCoreAutoConfiguration {
 
         @Bean
         @ConditionalOnMissingBean(RagDocumentParser.class)
-        public TextRagDocumentParser ragDocumentParser() {
-            return new TextRagDocumentParser();
+        public MultiFormatRagDocumentParser ragDocumentParser() {
+            // 具体解析器在组合器内部按 classpath 探测构建，避免与 @ConditionalOnMissingBean 顺序冲突；
+            // 未引入 PDFBox / POI 时对应解析器为 null，组合器退化为纯文本解析（与旧行为一致）。
+            ClassLoader loader = MultiFormatRagDocumentParser.class.getClassLoader();
+            RagDocumentParser pdfParser = ClassUtils.isPresent(
+                    "org.apache.pdfbox.pdmodel.PDDocument", loader) ? new PdfRagDocumentParser() : null;
+            RagDocumentParser wordParser = ClassUtils.isPresent(
+                    "org.apache.poi.xwpf.usermodel.XWPFDocument", loader) ? new WordRagDocumentParser() : null;
+            return new MultiFormatRagDocumentParser(new TextRagDocumentParser(), pdfParser, wordParser);
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(RagAccessPolicy.class)
+        public AllowAllRagAccessPolicy ragAccessPolicy() {
+            return new AllowAllRagAccessPolicy();
         }
 
         @Bean
@@ -195,6 +222,13 @@ public class ClawCoreAutoConfiguration {
         @ConditionalOnProperty(name = "agent.rag.provider", havingValue = "local", matchIfMissing = true)
         public LocalRagIndexStore ragIndexStore(RagConfig config) {
             return new LocalRagIndexStore(config);
+        }
+
+        @Bean
+        @ConditionalOnMissingBean(RagIndexStore.class)
+        @ConditionalOnProperty(name = "agent.rag.provider", havingValue = "pgvector")
+        public PgVectorRagIndexStore pgVectorRagIndexStore(RagConfig config, JdbcTemplate jdbc) {
+            return new PgVectorRagIndexStore(jdbc, config);
         }
 
         @Bean
@@ -316,6 +350,41 @@ public class ClawCoreAutoConfiguration {
         @ConditionalOnMissingBean(com.mwb.ai.claw.infrastructure.collaboration.lock.SessionLockManager.class)
         public LocalSessionLockManager localSessionLockManager() {
             return new LocalSessionLockManager();
+        }
+    }
+
+    // ==================== 分布式会话锁（Redis 实现，多实例部署） ====================
+    // 启用条件：agent.collaboration.lock.type=redis 且 classpath 含 spring-data-redis
+    // （starter-data-redis 为 optional 依赖，需使用方自行引入后自动启用）
+
+    @Configuration
+    @ConditionalOnProperty(prefix = "agent.collaboration.lock", name = "type", havingValue = "redis")
+    @ConditionalOnClass(RedisConnectionFactory.class)
+    public static class RedisLockConfiguration {
+
+        @Bean
+        @ConditionalOnMissingBean(com.mwb.ai.claw.infrastructure.collaboration.lock.SessionLockManager.class)
+        public RedisSessionLockManager redisSessionLockManager(AgentProperties properties) {
+            AgentProperties.LockConfig cfg = properties.getCollaboration().getLock();
+            StringRedisTemplate template = new StringRedisTemplate(redisConnectionFactory(cfg));
+            template.afterPropertiesSet();
+            return new RedisSessionLockManager(template, cfg);
+        }
+
+        private RedisConnectionFactory redisConnectionFactory(AgentProperties.LockConfig cfg) {
+            RedisStandaloneConfiguration standalone = new RedisStandaloneConfiguration();
+            RedisURI uri = RedisURI.create(cfg.getRedisUri());
+            standalone.setHostName(uri.getHost());
+            standalone.setPort(uri.getPort());
+            if (uri.getPassword() != null) {
+                standalone.setPassword(uri.getPassword());
+            }
+            if (uri.getDatabase() != 0) {
+                standalone.setDatabase(uri.getDatabase());
+            }
+            LettuceConnectionFactory factory = new LettuceConnectionFactory(standalone);
+            factory.afterPropertiesSet();
+            return factory;
         }
     }
 }

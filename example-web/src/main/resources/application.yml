@@ -42,7 +42,8 @@ example:
 agent:
   # 存储后端：file（本地文件，默认，零依赖）| db（JDBC 持久化：会话/长期记忆/记忆页落库）
   # 配置 db 时需保证数据源可达（见顶部 spring.datasource 或 .env 中 DB_* 变量），否则启动即连库报错
-  # 会话并发锁固定本地 JVM 实现（LocalSessionLockManager），无需额外配置（Redis 已移除）
+  # 会话并发锁默认本地 JVM 实现（LocalSessionLockManager，单实例，零依赖）；
+  # 多实例部署可切换 Redis 分布式锁：--agent.collaboration.lock.type=redis --agent.collaboration.lock.redis-uri=redis://:pass@host:port（需引入 spring-boot-starter-data-redis）
   # 可通过环境变量 STORAGE_TYPE 覆盖（如 .env 中 STORAGE_TYPE=db；命令行 --agent.storage.type=db 优先级更高）
   storage:
     type: ${STORAGE_TYPE:file}

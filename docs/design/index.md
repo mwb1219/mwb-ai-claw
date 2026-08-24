@@ -18,4 +18,5 @@ nav_order: 2
 | [存储与多租户](storage-multitenancy.md) | file / db 后端 / AgentScope |
 | [安全模型](security.md) | 工具沙箱 / 审批 / 防注入 |
 | [可观测性与韧性](observability.md) | 指标 / 运行记录 / 重试降级 |
+| [横向扩展部署](horizontal-scaling.md) | 多实例 / 共享存储 / 分布式锁 / 会话路由 |
 | [扩展能力设计](extensibility.md) | 设计初衷 / 用户视角扩展 / SPI 扩展点 |
