@@ -4,8 +4,7 @@
 
     <!-- ============================================================
          example-embed 独立工程：不随 mwb-ai-claw 仓库 reactor 构建，单独管理版本号。
-         框架依赖 mwb-ai-claw-app / mwb-ai-claw-domain 为本地 SNAPSHOT：
-           本地运行：仓库根目录执行 mvn install 后，从宿主机 ~/.m2 解析。
+         框架依赖 mwb-ai-claw-app / mwb-ai-claw-domain:1.0.3（Maven Central 正式版，自动下载）。
          运行方式（嵌入式，无 Web 容器 / 端口）：
            cd example-embed
            cp .env.example .env   # 填入 DEFAULT_API_KEY
@@ -28,8 +27,8 @@
     <properties>
         <java.version>1.8</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <!-- 框架版本：跟随仓库当前 SNAPSHOT；正式发布后建议固定为已发布版本（如 1.0.1）以便脱离本地仓库独立构建 -->
-        <mwb-ai-claw.version>1.0.3-SNAPSHOT</mwb-ai-claw.version>
+        <!-- 框架版本：Maven Central 正式版，脱离本地仓库即可独立构建 -->
+        <mwb-ai-claw.version>1.0.3</mwb-ai-claw.version>
     </properties>
 
     <dependencies>

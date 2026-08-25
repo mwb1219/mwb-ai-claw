@@ -46,7 +46,7 @@ backend and frontend in one shot:
 cp src/main/resources/.env.example .env
 
 # 2. Build and start (run inside the example-commerce directory)
-# Prerequisite: run mvn install in the repo root first (framework SNAPSHOT is injected from host ~/.m2 via host-m2)
+#    Framework dep mwb-ai-claw-spring-boot-starter:1.0.3 (pulled from Maven Central, no local repo needed)
 docker compose up -d --build
 
 # 3. Verify

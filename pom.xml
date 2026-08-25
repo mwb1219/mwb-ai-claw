@@ -13,7 +13,7 @@
 
     <properties>
         <!-- 统一版本号：全模块共享，升级时仅修改此处的 revision -->
-        <revision>1.0.3-SNAPSHOT</revision>
+        <revision>1.0.3</revision>
 
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>${maven.compiler.source}</maven.compiler.target>

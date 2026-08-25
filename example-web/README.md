@@ -50,8 +50,8 @@ docker compose ps   # mysql / redis 两个中间件容器均 healthy 即可
 cp src/main/resources/.env.example .env
 
 # 2. 构建并启动（example-web 为独立工程，独立版本号，不随仓库 reactor 构建）
-#    框架依赖 mwb-ai-claw-spring-boot-starter:1.0.3-SNAPSHOT：先在仓库根目录 mvn install（保证 ~/.m2 最新）
-mvn clean package -DskipTests   # 1) 本地编译打包（依赖 ~/.m2 中的框架 SNAPSHOT）
+#    框架依赖 mwb-ai-claw-spring-boot-starter:1.0.3（Central 正式版自动下载，无需本地仓库）
+mvn clean package -DskipTests   # 1) 本地编译打包（框架依赖 1.0.3 自动从 Central 拉取）
 mvn spring-boot:run             # 2) 启动 example-web（端口 8080）
 ```
 

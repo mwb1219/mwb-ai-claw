@@ -2,9 +2,9 @@
 # example-web 应用镜像：多阶段构建（example-web 为独立工程，不随 mwb-ai-claw 仓库 reactor 构建，
 # 独立管理版本号；构建上下文 = 本目录）
 #
-# 框架依赖 mwb-ai-claw-spring-boot-starter:1.0.3-SNAPSHOT 为本地 SNAPSHOT：
-#   docker compose 通过 additional_contexts(host-m2) 将宿主机 ~/.m2 中的框架制品注入容器本地仓库，
-#   无需在容器内联编框架（宿主机需先在仓库根目录执行 mvn install 保证 ~/.m2 中的 SNAPSHOT 最新）。
+# 框架依赖 mwb-ai-claw-spring-boot-starter:1.0.3：Central 正式版，Maven 构建时自动下载；
+# docker compose 仍通过 additional_contexts(host-m2) 可选注入宿主机 ~/.m2 的框架制品（本机构建加速，
+# 缺失时 Maven 自动从 Central 拉取，无需在容器内联编框架）。
 #
 # 构建命令（推荐走 docker compose，context 已指向本目录）：
 #   docker compose up -d --build
@@ -16,9 +16,9 @@
 FROM maven:3.9-eclipse-temurin-8 AS builder
 WORKDIR /app
 
-# 框架 SNAPSHOT 制品：从宿主机 ~/.m2（docker compose additional context: host-m2）拷入镜像层，
-# 再在 RUN 中复制进容器本地仓库（--mount=type=cache 缓存的 /root/.m2），避免容器内联编框架；
-# 宿主机需先在仓库根目录执行 mvn install 保证 ~/.m2 中的 SNAPSHOT 最新
+# 框架制品加速：从宿主机 ~/.m2（docker compose additional context: host-m2）拷入镜像层，
+# 再在 RUN 中复制进容器本地仓库（--mount=type=cache 缓存的 /root/.m2），避免容器内重复下载
+# Central 依赖（1.0.3 正式版；未注入时 Maven 自动从 Central 拉取）
 COPY --from=host-m2 /repository/io/github/mwb1219 /framework-m2/io/github/mwb1219
 COPY pom.xml ./
 COPY src ./src

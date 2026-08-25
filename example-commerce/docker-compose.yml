@@ -1,7 +1,7 @@
 # ============================================================
 # example-commerce 一键完整构建：后端应用 + 前端控制台
 #   - example-commerce：后端服务（独立工程，独立版本号），镜像由本目录源码构建（框架依赖
-#     mwb-ai-claw-spring-boot-starter:1.0.3-SNAPSHOT，经 additional_contexts 注入宿主机 ~/.m2 框架制品）
+#     mwb-ai-claw-spring-boot-starter:1.0.3（Central 正式版自动下载；additional_contexts 注入为可选加速）
 #   - example-commerce-frontend：前端控制台（React + Vite），Nginx 静态托管 + API 反代到后端
 #
 # 本示例零中间件依赖：H2 内存库（agent.storage.type 默认 file）+ RAG local 检索，
@@ -18,8 +18,7 @@
 #
 # 说明：
 #   - 后端镜像构建上下文 = 本目录（example-commerce 独立工程）；框架依赖 mwb-ai-claw-spring-boot-starter
-#     为 SNAPSHOT，经 additional_contexts(host-m2) 注入宿主机 ~/.m2 的框架制品（仓库根目录执行
-#     mvn install 后 ~/.m2 中即包含），无需在容器内联编框架
+#     :1.0.3 为 Central 正式版，Maven 自动下载；additional_contexts(host-m2) 仅作本机构建加速
 #   - 前端镜像构建上下文 = ../example-commerce-frontend：npm ci → vite build → Nginx（静态 + 反代）
 #   - Dockerfile 构建时会复制 .env（容器版）与 src/main/resources 下的 agents.json、orchestrations.json
 #     到镜像 /app，实例启动后按「运行目录优先」加载（ConfigFileLocator / DotenvEnvironmentPostProcessor）
@@ -32,8 +31,8 @@ services:
   # ===== 应用：example-commerce（Dockerfile 多阶段构建，端口 8080） =====
   example-commerce:
     build:
-      # example-commerce 为独立工程：构建上下文 = 本目录；框架 SNAPSHOT 依赖经 additional_contexts(host-m2)
-      # 注入宿主机 ~/.m2 的框架制品（构建前需在仓库根目录执行 mvn install 保证 SNAPSHOT 最新）
+      # example-commerce 为独立工程：构建上下文 = 本目录；框架依赖 1.0.3 自动从 Central 下载，
+      # additional_contexts(host-m2) 可选注入宿主机 ~/.m2 的框架制品（本机构建加速）
       context: .
       dockerfile: Dockerfile
       additional_contexts:

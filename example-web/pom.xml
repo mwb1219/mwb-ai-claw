@@ -4,9 +4,9 @@
 
     <!-- ============================================================
          example-web 独立工程：不随 mwb-ai-claw 仓库 reactor 构建，单独管理版本号。
-         框架依赖 mwb-ai-claw-spring-boot-starter 为本地 SNAPSHOT：
-           - 本地运行：仓库根目录执行 mvn install 后，从宿主机 ~/.m2 解析；
-           - Docker 构建：docker compose 经 additional_contexts(host-m2) 注入宿主机 ~/.m2 的框架制品。
+         框架依赖 mwb-ai-claw-spring-boot-starter:1.0.3（Maven Central 正式版，自动下载）：
+           - 本地运行：直接 mvn spring-boot:run 即可，无需先在仓库根目录 mvn install；
+           - Docker 构建：additional_contexts(host-m2) 仅作为可选加速（复用宿主机 ~/.m2 缓存）。
          ============================================================ -->
     <parent>
         <groupId>org.springframework.boot</groupId>
@@ -25,8 +25,8 @@
     <properties>
         <java.version>1.8</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <!-- 框架版本：跟随仓库当前 SNAPSHOT；正式发布后建议固定为已发布版本（如 1.0.1）以便脱离本地仓库独立构建 -->
-        <mwb-ai-claw.version>1.0.3-SNAPSHOT</mwb-ai-claw.version>
+        <!-- 框架版本：Maven Central 正式版，脱离本地仓库即可独立构建 -->
+        <mwb-ai-claw.version>1.0.3</mwb-ai-claw.version>
         <!-- 覆盖 Lombok 版本以兼容 JDK 21 及新版语言服务器编译器（1.18.30 会触发 lombok.javac.Javac 初始化失败） -->
         <lombok.version>1.18.46</lombok.version>
     </properties>

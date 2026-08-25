@@ -1,7 +1,7 @@
 # ============================================================
 # example-web 一键完整构建：后端应用 + 前端控制台 + 中间件
 #   - example-web：后端服务（独立工程，独立版本号），镜像由本目录源码构建（框架依赖
-#     mwb-ai-claw-spring-boot-starter:1.0.3-SNAPSHOT，经 additional_contexts 注入宿主机 ~/.m2 框架制品）
+#     mwb-ai-claw-spring-boot-starter:1.0.3（Central 正式版自动下载；additional_contexts 注入为可选加速）
 #   - example-web-frontend：前端控制台（React + Vite），Nginx 静态托管 + API 反代到后端
 #   - mysql：MySQL 8（权威存储：会话/记忆/知识库文档与索引条目文本）
 #   - redis：Redis Stack Server（召回：RediSearch 向量 + 全文索引；分布式会话锁）
@@ -13,9 +13,9 @@
 #   4. 浏览器访问 http://localhost:5173           # 前端控制台（API 经 Nginx 反代到后端 8080）
 #
 # 说明：
-#   - 后端镜像构建上下文 = 本目录（example-web 独立工程）；框架依赖 mwb-ai-claw-spring-boot-starter
-#     为 SNAPSHOT，经 additional_contexts(host-m2) 注入宿主机 ~/.m2 的框架制品（仓库根目录执行
-#     mvn install 后 ~/.m2 中即包含），无需在容器内联编框架
+#   - 后端镜像构建上下文 = 本目录（example-web 独立工程）；框架依赖 mwb-ai-claw-spring-boot-starter:1.0.3
+#     为 Maven Central 正式版（Maven 自动下载）；additional_contexts(host-m2) 注入宿主机 ~/.m2 仅作为
+#     可选加速（复用已缓存依赖，无需在容器内重新下载）
 #   - 前端镜像构建上下文 = ../example-web-frontend：npm ci → vite build → Nginx（静态 + 反代）
 #   - mysql 首次初始化执行 ./db/mysql/*.sql：建框架表（记忆/会话/知识库/索引条目/可观测性）与用户表
 #     同目录 SQL 按字母序执行：framework-schema.sql → example-web-schema.sql
@@ -66,8 +66,8 @@ services:
   # ===== 应用：example-web（Dockerfile 多阶段构建，端口 8080） =====
   example-web:
     build:
-      # example-web 为独立工程：构建上下文 = 本目录；框架 SNAPSHOT 依赖经 additional_contexts(host-m2)
-      # 注入宿主机 ~/.m2 的框架制品（构建前需在仓库根目录执行 mvn install 保证 SNAPSHOT 最新）
+      # example-web 为独立工程：构建上下文 = 本目录；框架依赖 1.0.3 为 Maven Central 正式版（自动下载），
+      # additional_contexts(host-m2) 注入宿主机 ~/.m2 仅作为可选加速（复用已缓存依赖）
       # Dockerfile 构建时会复制 src/main/resources 下的 .env（容器版：DB_URL/REDIS_URI 改写为
       # mysql/redis 服务名）、agents.json、orchestrations.json、mcp-server.json 到镜像 /app，
       # 实例启动后按「运行目录优先」加载（ConfigFileLocator / DotenvEnvironmentPostProcessor）

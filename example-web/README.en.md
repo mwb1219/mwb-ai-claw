@@ -54,8 +54,8 @@ docker compose ps   # mysql / redis middleware containers should both be healthy
 cp src/main/resources/.env.example .env
 
 # 2. Build & run (example-web is a standalone project with its own version, not part of the repo reactor)
-#    Framework dep mwb-ai-claw-spring-boot-starter:1.0.3-SNAPSHOT: run `mvn install` at the repo root first
-mvn clean package -DskipTests   # 1) compile & package locally (uses the framework SNAPSHOT in ~/.m2)
+#    Framework dep mwb-ai-claw-spring-boot-starter:1.0.3 (downloaded from Maven Central, no local repo needed)
+mvn clean package -DskipTests   # 1) compile & package locally (framework 1.0.3 pulled from Maven Central)
 mvn spring-boot:run             # 2) start example-web (port 8080)
 ```
 
