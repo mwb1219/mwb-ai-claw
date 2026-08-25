@@ -32,7 +32,7 @@ mwb-ai-claw **不是**一个模型集成库（同类的 LangChain4j / Spring AI 
 - **多 Agent 编排** —— routing / conversational / delegate 三种协作模式
 - **技能系统（Skills）** —— 遵循 `SKILL.md` 规范的可插拔技能，三级加载
 - **多租户** —— 基于 AgentScope 的数据隔离
-- **存储后端** —— file 或 MySQL
+- **存储后端** —— file（零依赖），或 db = MySQL 存储 + Redis Stack 召回（关键词 + 向量 KNN）
 - **可观测性与韧性** —— 指标、JSONL 运行记录、重试/降级
 - **可嵌入** —— 在你自己的 Java 应用中嵌入 `ClawRuntime`（流式对话、多租户 scope）
 

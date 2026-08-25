@@ -26,13 +26,13 @@ parent: 设计概要
 ```
                     ┌────────────┐
   客户端 ──► LB ───►│ Instance 1 │─┐
-        (轮询/哈希)  ├────────────┤ ├─► 共享 Redis（分布式锁/会话路由）
+        (轮询/哈希)  ├────────────┤ ├─► 共享 Redis（检索索引 + 分布式锁）
                     │ Instance 2 │─┤
-                    ├────────────┤ ├─► 共享 DB（会话/记忆/RAG 元数据，agent.storage.type=db）
+                    ├────────────┤ ├─► 共享 MySQL（会话/记忆/RAG 文本，agent.storage.type=db）
                     │ Instance N │─┘
                     └────────────┘
                             │
-                            └─► 共享文件系统（可选：file 后端、RAG 文档/索引、运行记录）
+                            └─► 共享文件系统（可选：file 后端、RAG 文档、运行记录）
 ```
 
 要点：**应用无状态**（不持有会话/记忆/审批的独占状态），所有可变状态落在共享组件上。
@@ -51,7 +51,7 @@ parent: 设计概要
 | --- | --- | --- | --- |
 | 审批待办 | `ApprovalRegistry`（JVM ConcurrentHashMap，审批 API 在内存中定位节点） | 内存态 | 审批在环依赖「请求命中与审批决策命中同一实例」。多实例需**粘性路由**（按 sessionId 哈希到固定实例），或后续将待审批状态外置 Redis/DB 实现跨实例可见（见 7 演进）。 |
 | 会话 / 长期记忆 / 记忆页 | `FileBased*`（本地文件）或 `Jdbc*`（JDBC） | 落盘态 | 文件后端需**共享文件系统**（NFS / 分布式存储 / 对象存储挂载）；DB 后端天然共享。推荐多实例使用 `agent.storage.type=db`。 |
-| RAG 文档 / 索引 | `FileRagDocumentStore` + `LocalRagIndexStore`（本地文件 JSONL + 内存扫描） | 落盘态 + 内存态 | 文档/索引需**共享文件系统**；索引为内存扫描，多实例各自维护一份，写入需跨实例串行（RAG 写入锁，见 3.3）。规模化场景建议按 TODO T4 替换为向量库（Milvus/PGVector/ES）。 |
+| RAG 文档 / 索引 | `file`：`FileRagDocumentStore` + `LocalRagIndexStore`（本地 JSONL + 内存扫描）；`db`：`JdbcRagDocumentStore` + `RedisRagIndexStore`（**MySQL 文本权威存储 + Redis Stack 召回索引**） | 落盘态（+ Redis 派生索引） | `db` 形态下文本落 MySQL、召回索引落 Redis Stack，均天然跨实例共享，Redis 丢失可从 MySQL 重灌；`file` 形态需**共享文件系统**，索引为内存扫描、写入需跨实例串行（RAG 写入锁，见 3.3）。 |
 | 运行记录（runs） | 本地文件 JSONL | 落盘态 | 需共享文件系统或汇聚到日志/可观测平台（TODO T5 全量 trace 时统一）。 |
 
 ### 3.3 可单实例执行的组件（多实例为冗余/竞争）
@@ -99,7 +99,7 @@ agent:
 推荐组合（当前可落地）：
 
 ```text
-LB(按 sessionId 粘性) + 共享 Redis(分布式锁) + DB(会话/记忆) + 共享文件系统(可选)
+LB(按 sessionId 粘性) + 共享 Redis(检索索引 + 分布式锁) + 共享 MySQL(会话/记忆/RAG 文本) + 共享文件系统(可选)
 ```
 
 ## 6. 配置与部署示例
@@ -127,9 +127,9 @@ upstream claw_cluster {
 
 > 注意：审批在环（SSE 长连接 / WebSocket）天然粘性（连接建立后不迁移），结合 `ip_hash` 可保证审批 API 与发起请求命中同一实例。
 
-### 6.2 数据库就绪
+### 6.2 数据库与 Redis 就绪
 
-`agent.storage.type=db` 时数据源为启动即连，需先确保数据库可达（MySQL 等），见 [配置指南](https://github.com/mwb1219/mwb-ai-claw/blob/master/CONFIG-GUIDE.md) 的 `DB_*` 变量。
+`agent.storage.type=db` 时数据源为启动即连，需先确保 MySQL 可达（见 [配置指南](https://github.com/mwb1219/mwb-ai-claw/blob/master/CONFIG-GUIDE.md) 的 `DB_*` 变量）；db 形态的召回索引与 Redis 分布式锁依赖 Redis Stack（RediSearch），需同时保证 Redis 可达（`REDIS_URI`，默认 `redis://localhost:6379`）。
 
 ## 7. 验证
 
@@ -145,7 +145,7 @@ upstream claw_cluster {
 | --- | --- |
 | 审批待办为 JVM 内状态，跨实例可见依赖粘性路由 | 审批状态外置 Redis/DB（待审批表 + 决策事件），任意实例可决策（TODO 后续迭代） |
 | 记忆提炼为每实例单线程队列，多实例重复调度 | 提炼任务外置分布式队列（Redis Stream），按 scope+任务名去重 |
-| RAG 索引为内存扫描，多实例各自一份 | 替换为向量库（TODO T4），写入用分布式锁串行 |
+| RAG/记忆召回索引在 `file` 形态下为内存扫描，多实例各自一份 | `db` 形态已由 Redis Stack 召回索引替代（多实例共享、可从 MySQL 重灌），`file` 形态写入用分布式锁串行 |
 | 运行记录落本地文件 | 全量 trace + 汇聚日志/OTel（TODO T5） |
 
 ---

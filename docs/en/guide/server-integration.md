@@ -27,7 +27,7 @@ nav_order: 10
 - [ ] Auto-configured via `ClawAutoConfiguration` — no extra annotation or config class needed
 - [ ] Default beans: `infrastructure` (memory / LLM / tools / orchestration / storage), `agent` (application use cases), `web` (REST / SSE / WebSocket, active under `web` profile), `shell` (CLI, active under `shell` profile)
 - [ ] Override defaults: declare a `@Bean` / `@Component` of the same type (e.g. a custom `MemoryPageStore` or `LlmGateway`)
-- [ ] Storage type: `agent.storage.type` (`file` | `db`), file storage by default
+- [ ] Storage type: `agent.storage.type` (`file` local | `db` = **MySQL authoritative storage + Redis Stack retrieval**), file storage by default; in `db` mode the Redis retrieval index is dual-written on write and can be rebuilt from MySQL if Redis is lost
 
 ## 3. Capabilities & Endpoints
 
@@ -75,7 +75,7 @@ java -jar example-web/target/example-web-*.jar
 # 3. Open http://localhost:8080 in your browser
 ```
 
-- [ ] Switch storage: `--agent.storage.type=db` (H2 for development), or set `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` for MySQL (run `src/main/resources/schema.sql` first)
+- [ ] Switch storage: `--agent.storage.type=db` (H2 for development), or set `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` for MySQL (run `src/main/resources/schema.sql` first); in `db` mode retrieval (Memory / RAG) uses Redis Stack, so configure `REDIS_URI` and keep Redis Stack (RediSearch) reachable
 
 ---
 

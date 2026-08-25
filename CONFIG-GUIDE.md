@@ -56,12 +56,18 @@
 | `SYNTHESIS_MODEL` / `SYNTHESIS_BASE_URL` / `SYNTHESIS_API_KEY` | 摘要/事实提炼的小模型（成本优化） |
 | `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` / `DB_DRIVER` | 数据库连接（`agent.storage.type=db` 时生效；默认嵌入式 H2，生产配 MySQL 连接串） |
 | `SQL_INIT_MODE` | SQL 初始化模式：`embedded`（默认，仅 H2）| `never`（关闭）|
+| `RAG_PROVIDER` | `auto` | RAG 索引实现：`auto`（跟随 `STORAGE_TYPE`：file→local、db→redis）\| `redis`（显式声明） |
+| `REDIS_INDEX_PREFIX` | `claw` | Redis 召回索引 key 前缀（多环境/多租户共享 Redis 时隔离命名空间） |
+| `LOCK_TYPE` | `local` | 会话并发锁渠道：`local`（JVM 内锁，单实例）\| `redis`（SET NX 分布式锁，多实例） |
+| `REDIS_URI` | `redis://localhost:6379` | Redis 连接串（召回索引 + 分布式锁；`agent.redis` 连接复用 `spring.data.redis.*`，未配置时以本值兜底） |
+| `RUN_USAGE_STORE` | `local` | 运行用量摘要存储：`local`（JSONL 文件）\| `db`（落 `claw_run_usage` 表，生产推荐） |
+| `TRACE_ENABLED` / `TRACE_STORE` | `true` / `local` | 步骤级 trace 开关 / 存储：`local`（本地 JSON）\| `db`（落 `claw_trace` 表，生产推荐） |
 
 `.env` 支持 `${VAR}` 占位符引用，例如 `agents.json` 中的 `"model": "${CODER_MODEL:${DEFAULT_MODEL:deepseek-chat}}"`、`"baseUrl": "${CODER_BASE_URL:${DEFAULT_BASE_URL:https://api.deepseek.com}}"`。
 
-> **存储后端 `agent.storage.type`**：`file`（本地文件，默认，零依赖）| `db`（JDBC 持久化：会话 / 长期记忆 / 记忆页落库）。
+> **存储后端 `agent.storage.type`**：`file`（本地文件，默认，零依赖）| `db`（**MySQL 存储 + Redis Stack 召回**：会话 / 长期记忆 / 记忆页 / 知识库文本落 MySQL，关键词与向量召回走 Redis）。
 > 设置位置：`application.yml` 的 `agent.storage.type`，环境变量 `STORAGE_TYPE`（写入 `.env`），或命令行覆盖 `mwb-ai-claw --agent.storage.type=db`（优先级递增）。
-> 注意：`db` 时数据源为启动即连（见上表 DB_* 变量），需先确保数据库可达。
+> 注意：`db` 时数据源为启动即连（见上表 DB_* 变量），需先确保数据库可达；`db` 形态的召回依赖 Redis Stack（RediSearch），需保证 Redis 可达（见 [横向扩展](docs/design/horizontal-scaling.md)）。
 > 会话并发锁默认使用本地 JVM 实现（`LocalSessionLockManager`，单实例部署，零依赖）；多实例部署时可切换为 Redis 分布式锁（见 8.1 会话锁）。
 
 ## 4. 专家 Agent（config/agents.json）
@@ -100,19 +106,16 @@
 
 ## 6. RAG 知识库（agent.rag.*）
 
-RAG 提供与 Agent 记忆**完全独立**的知识库能力：后台上传文档 → 解析 / 切分 / 向量化 → 建索引 → 按需检索并注入上下文。默认关闭，开启后零依赖可用（`provider=local` 本地文件向量索引）；需 PDF / Word 解析时引入 optional 依赖即自动启用，需向量库时切 `provider=pgvector`。
+RAG 提供与 Agent 记忆**完全独立**的知识库能力：后台上传文档 → 解析 / 切分 / 向量化 → 建索引 → 按需检索并注入上下文。默认关闭；开启后零依赖可用（`provider=auto` + `STORAGE_TYPE=file` → 本地文件索引）；需 PDF / Word 解析时引入 optional 依赖即自动启用；生产推荐 `STORAGE_TYPE=db`（文本落 MySQL，召回走 Redis Stack）。
 
 ### 6.1 启用与开关
 
 | 配置 | 默认 | 说明 |
 | --- | --- | --- |
 | `agent.rag.enabled` | `false` | 总开关；开启后装配 RAG Bean 与 `/rag` 接口，关闭后行为与未接入前一致 |
-| `agent.rag.provider` | `local` | 索引实现：`local`（本地文件向量索引，零依赖）\| `pgvector`（PostgreSQL + pgvector 扩展） |
+| `agent.rag.provider` | `auto` | 索引实现：`auto`（跟随 `agent.storage.type`：file→`local` 本地文件索引，db→`redis` 走 Redis Stack 召回）\| `redis`（显式声明，与 auto+db 等价） |
 | `agent.rag.local.dir` | `${user.dir}/.agent/rag` | 索引存储目录（与 `.agent/memory` 完全隔离） |
-| `agent.rag.pgvector.table` | `rag_index_entries` | PGVector 索引表名（仅字母 / 数字 / 下划线 / 点，防注入） |
-| `agent.rag.pgvector.schema` | `public` | 表所在 schema |
-| `agent.rag.pgvector.index-type` | `ivfflat` | 向量索引类型：`ivfflat`（创建快）\| `hnsw`（召回更准） |
-| `agent.rag.pgvector.similarity` | `vector_cosine_ops` | 相似度算子：`vector_cosine_ops` \| `vector_l2_ops` \| `vector_ip_ops` |
+| `agent.rag.redis.index-prefix` | 继承 `agent.redis.index-prefix` | Redis 召回索引 key 前缀（多环境/多租户共享 Redis 时隔离命名空间） |
 | `agent.rag.access.enabled` | `false` | 是否启用知识库 API 层访问控制（关闭时全部放行、保持全局共享检索语义） |
 | `agent.rag.capacity.max-documents-per-knowledge-base` | `0` | 单个知识库最大文档数（0=不限制） |
 | `agent.rag.capacity.max-chunks-per-document` | `0` | 单个文档最大分块数（0=不限制） |
@@ -127,7 +130,7 @@ RAG 提供与 Agent 记忆**完全独立**的知识库能力：后台上传文�
 PDF / Word 解析：`MultiFormatRagDocumentParser` 按内容类型 / 扩展名分发，引入
 `org.apache.pdfbox:pdfbox`（PDF）与 `org.apache.poi:poi-ooxml`（Word .docx）后自动启用；未引入时退化为纯文本解析并给出明确提示。
 
-PGVector 前置：目标库执行一次 `CREATE EXTENSION IF NOT EXISTS vector;`，应用侧引入 PostgreSQL 驱动并指向该库（`spring.datasource.*`），再配置 `agent.rag.provider=pgvector`。
+Redis Stack（RediSearch）前置：`agent.rag.provider=redis`（或 `auto` + `STORAGE_TYPE=db`）时，需保证 Redis Stack 可达（docker compose 一键起 `redis/redis-stack-server`）；召回索引（全文倒排 + 向量 KNN）在首次写入时自动 `FT.CREATE`，Redis 丢失可从 MySQL 文本重新向量化重建。
 
 ### 6.2 写入与检索参数
 
@@ -210,7 +213,7 @@ mwb-ai-claw --agent.collaboration.lock.type=redis \
 - 会话 / 记忆数据落在**运行目录** `.agent/` 下（按项目隔离）；
 - RAG 知识库索引与文档落 `.agent/rag/`（`agent.rag.local.dir` 可改，与记忆完全隔离）；
 - 运行用量记录写入 `.agent/runs/YYYY-MM-DD.jsonl`（`agent.observability.run-usage-store` 切 `db` 时落 `claw_run_usage` 表）
-- **步骤级 trace** 写入 `.agent/traces/`（`agent.observability.trace.dir` 可改）；切到 `store=db` 时落 PostgreSQL
+- **步骤级 trace** 写入 `.agent/traces/`（`agent.observability.trace.dir` 可改）；切到 `store=db` 时落 MySQL
   （`claw_trace` 表，与会话/记忆/RAG 共用数据源）；`agent.observability.trace.enabled=false` 关闭；
 - 退出清理：删除运行目录 `.agent/` 即可重置全部会话记忆。
 
@@ -231,8 +234,8 @@ mwb-ai-claw --agent.collaboration.lock.type=redis \
 | `agent.observability.run-usage-dir` | `{memory-dir}/runs` | 本地运行记录目录（仅 `store=local` 生效） |
 
 ```bash
-# 生产多实例：运行用量落库（需先建表，见 start/.../schema.sql 或 example-web initdb 01-pgvector.sql）
-mwb-ai-claw --agent.observability.run-usage-store=db --spring.datasource.url=jdbc:postgresql://.../...
+# 生产多实例：运行用量落库（需先建表，见 start/src/main/resources/schema.sql 或 example-web/db/mysql/framework-schema.sql）
+mwb-ai-claw --agent.observability.run-usage-store=db --spring.datasource.url=jdbc:mysql://localhost:3306/clawdb --spring.datasource.username=root
 ```
 
 ## 10. 技能（skills/）

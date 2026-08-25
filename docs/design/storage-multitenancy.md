@@ -10,16 +10,17 @@ nav_order: 5
 
 ## 1. 存储后端（可插拔）
 
-存储通过三个领域端口抽象（Session / MemoryPage / LongTermMemory），按 `agent.storage.type` 二选一装配：
+存储通过三个领域端口抽象（Session / MemoryPage / LongTermMemory）与检索端口（`MemorySearchable`），按 `agent.storage.type` 二选一装配：
 
-| 类型 | 实现 | 数据位置 | 适用 |
-| --- | --- | --- | --- |
-| `file`（默认） | `FileBasedSessionGateway` / `FileMemoryPageStore` / `FileBasedMemoryGateway` | `.agent/` 目录（JSON / JSONL） | 本地个人使用，零依赖 |
-| `db` | `JdbcSessionGateway` / `JdbcMemoryPageStore` / `JdbcLongTermMemoryGateway` | JDBC（默认 H2，可切 MySQL） | 服务端部署、多实例共享 |
+| 类型 | 实现 | 数据位置 | 召回 | 适用 |
+| --- | --- | --- | --- | --- |
+| `file`（默认） | `FileBasedSessionGateway` / `FileMemoryPageStore` / `FileBasedMemoryGateway` | `.agent/` 目录（JSON / JSONL） | 全量加载 + 内存打分（零依赖） | 本地个人使用，零依赖 |
+| `db` | `JdbcSessionGateway` / `JdbcMemoryPageStore` / `JdbcLongTermMemoryGateway` + `RedisMemoryIndexer` / `RedisMemorySearchable` | **MySQL 权威存储**（会话/事实/记忆页/长期记忆文本） | **Redis Stack**（关键词 FT.SEARCH + 向量 KNN） | 服务端部署、多实例共享 |
 
 - 切换方式：`agent.storage.type`（或环境变量 `STORAGE_TYPE`），见 [reference/config-full.md](../reference/config-full.md)
 - 三端口语义不变：切换后端无需改业务代码
-- `db` 模式下需先执行 `start/src/main/resources/schema.sql` 建表（MySQL 语法，H2 兼容模式可直接执行）
+- `db` 模式为「MySQL 存储 + Redis 召回」：写入时 MySQL 成功后同步双写 Redis 索引，Redis 丢失可从 MySQL 文本重新向量化重建（MySQL 是权威、Redis 是派生检索层）
+- `db` 模式下需先执行 `start/src/main/resources/schema.sql` 或 `example-web/db/mysql/framework-schema.sql` 建表（MySQL 语法，H2 兼容模式可直接执行）；召回需 Redis Stack（RediSearch）可达
 
 ## 2. 多租户隔离模型（AgentScope）
 

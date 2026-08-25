@@ -17,6 +17,7 @@ parent: Documentation (English)
 | [ReAct Loop](core-loop.md) | Thought → Action → Observation |
 | [Multi-Agent Orchestration](collaboration.md) | routing / conversational / delegate |
 | [Layered Memory](memory-model.md) | Five-layer model / dynamic paging |
+| [RAG Retrieval](rag.md) | Independent knowledge ingest / index / retrieve / context injection |
 | [Storage & Multi-Tenancy](storage-multitenancy.md) | file / db backends / AgentScope |
 | [Security Model](security.md) | Tool sandbox / approval / injection defense |
 | [Observability & Resilience](observability.md) | Metrics / run logs / retry & degradation |

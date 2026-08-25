@@ -33,9 +33,6 @@
         <module>mwb-ai-claw-domain</module>
         <module>mwb-ai-claw-infrastructure</module>
         <module>mwb-ai-claw-spring-boot-starter</module>
-        <module>example-embed</module>
-        <module>example-web</module>
-        <module>example-commerce</module>
         <module>start</module>
     </modules>
 
@@ -193,9 +190,6 @@
                     <!-- central-publishing-maven-plugin 不识别 maven.deploy.skip，示例/启动器模块按 artifactId 排除 -->
                     <excludeArtifacts>
                         <excludeArtifact>start</excludeArtifact>
-                        <excludeArtifact>example-embed</excludeArtifact>
-                        <excludeArtifact>example-web</excludeArtifact>
-                        <excludeArtifact>example-commerce</excludeArtifact>
                     </excludeArtifacts>
                 </configuration>
             </plugin>

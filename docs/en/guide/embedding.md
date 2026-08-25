@@ -73,16 +73,16 @@ nav_order: 6
 
 - [ ] Covers: first chat (session auto-created), follow-up in the same session (context continuity), streaming chat (`LlmStreamCallback` incremental callbacks), `.env` config loading
 - [ ] Key source: [EmbedDemo.java](https://github.com/mwb1219/mwb-ai-claw/blob/master/example-embed/src/main/java/com/mwb/ai/claw/example/embed/EmbedDemo.java)
-- [ ] Run:
+- [ ] Run (example-embed is an independent project, not built as part of the repo reactor):
 
 ```bash
 # 1. Prepare your key: .env is loaded from run dir → ~/.mwb-ai-claw
+cd example-embed
 cp .env.example .env        # fill in DEFAULT_API_KEY
+# Prerequisite: run mvn install in the repo root first (framework SNAPSHOT lives in ~/.m2)
 
-# 2. Build core modules and run the demo
-mvn -q -pl example-embed -am install -DskipTests
-mvn -q -pl example-embed org.codehaus.mojo:exec-maven-plugin:3.1.0:java \
-    -Dexec.mainClass=com.mwb.ai.claw.example.embed.EmbedDemo
+# 2. Run the demo (the main class is configured in the exec plugin in pom.xml)
+mvn -q exec:java
 ```
 
 > Alternatively run `EmbedDemo.main()` directly from your IDE.

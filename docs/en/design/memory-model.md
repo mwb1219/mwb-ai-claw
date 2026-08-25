@@ -29,6 +29,9 @@ nav_order: 4
 - [ ] Keyword search (Chinese bigram BM25)
 - [ ] Vector search (Embedding + cosine similarity, three-level cache)
 - [ ] Hybrid search (RRF fusion), automatically degrades when embedding fails
+- [ ] The retrieval implementation follows the storage form: `file` (default) full load + in-memory scoring
+  (strategies above); `db` uses Redis Stack retrieval (keyword FT.SEARCH + vector KNN, `RedisMemorySearchable`),
+  with MySQL as the authoritative store from which the Redis index can be rebuilt
 
 ## 4. Fact Distillation and Merging
 

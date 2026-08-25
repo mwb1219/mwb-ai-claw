@@ -24,12 +24,18 @@ nav_order: 3
 | `EMBEDDING_MODEL` / `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` | 继承默认 | 向量检索 embedding（DeepSeek 主模型不支持 embeddings，需单独配置） |
 | `RAG_EMBEDDING_MODEL` / `RAG_EMBEDDING_BASE_URL` / `RAG_EMBEDDING_API_KEY` | （空） | **独立 RAG 知识库** Embedding（`agent.rag.embedding.*`；与记忆 Embedding 相互独立，可复用同一模型服务，未配置时 RAG 写入/检索报错） |
 | `SYNTHESIS_MODEL` / `SYNTHESIS_BASE_URL` / `SYNTHESIS_API_KEY` | 继承默认 | 小模型提炼（成本优化） |
-| `STORAGE_TYPE` | `file` | 存储后端：`file` / `db` |
-| `DB_URL` | `jdbc:h2:mem:clawdb;MODE=MySQL;...` | JDBC 连接（db 模式） |
-| `DB_USERNAME` | `sa` | JDBC 用户 |
-| `DB_PASSWORD` | （空） | JDBC 密码 |
-| `DB_DRIVER` | `org.h2.Driver` | JDBC 驱动（MySQL：`com.mysql.cj.jdbc.Driver`） |
+| `STORAGE_TYPE` | `file` | 存储形态：`file`（本地文件，零依赖）\| `db`（**MySQL 存储 + Redis Stack 召回**） |
+| `DB_URL` | `jdbc:h2:mem:clawdb;MODE=MySQL;...` | MySQL 连接（db 模式） |
+| `DB_USERNAME` | `sa` | MySQL 用户 |
+| `DB_PASSWORD` | （空） | MySQL 密码 |
+| `DB_DRIVER` | `org.h2.Driver` | 驱动（生产：`com.mysql.cj.jdbc.Driver`） |
 | `SQL_INIT_MODE` | `embedded` | SQL 初始化：`embedded`（仅嵌入式库）/ `never`（关闭） |
+| `RAG_PROVIDER` | `auto` | RAG 索引：`auto`（跟随存储：file→local、db→redis）\| `redis`（显式） |
+| `REDIS_INDEX_PREFIX` | `claw` | Redis 召回索引 key 前缀（多环境隔离） |
+| `LOCK_TYPE` | `local` | 会话锁：`local`（JVM 内锁）\| `redis`（分布式锁） |
+| `REDIS_URI` | `redis://localhost:6379` | Redis 连接串（召回索引 + 分布式锁兜底） |
+| `RUN_USAGE_STORE` | `local` | 运行用量存储：`local`（JSONL）\| `db`（表） |
+| `TRACE_ENABLED` / `TRACE_STORE` | `true` / `local` | 步骤级 trace 开关 / 存储：`local` \| `db` |
 
 ## 2. Spring 基础（application.yml）
 
@@ -57,7 +63,7 @@ nav_order: 3
 | `agent.skills-enabled` | `true` | 技能总开关 |
 | `agent.skills-dir` | `${user.dir}/skills` | 技能根目录 |
 | `agent.tools` | 全部注册工具 | 强制仅绑定声明的工具列表 |
-| `agent.storage.type` | `file` | 存储后端（见 `STORAGE_TYPE`） |
+| `agent.storage.type` | `file` | 存储形态（见 `STORAGE_TYPE`）：`file` 全本地；`db` 走 MySQL 存储 + Redis Stack 召回 |
 
 ## 4. 分层记忆（agent.memory.*）
 
@@ -88,12 +94,9 @@ nav_order: 3
 | 配置 | 默认值 | 说明 |
 | --- | --- | --- |
 | `enabled` | `false` | RAG 总开关（关闭后 RAG Bean 与 `/rag` 接口不装配，行为与未接入前一致） |
-| `provider` | `local` | 索引实现：`local`（本地文件向量索引，零依赖）\| `pgvector`（PostgreSQL + pgvector） |
+| `provider` | `auto` | 索引实现：`auto`（跟随 `agent.storage.type`：file→`local`、db→`redis`）\| `redis`（显式，与 auto+db 等价） |
 | `local.dir` | `${user.dir}/.agent/rag` | 索引存储目录（与 `.agent/memory` 完全隔离） |
-| `pgvector.table` | `rag_index_entries` | PGVector 索引表名（仅字母 / 数字 / 下划线 / 点，防注入） |
-| `pgvector.schema` | `public` | 表所在 schema |
-| `pgvector.index-type` | `ivfflat` | 向量索引类型：`ivfflat`（默认，创建快）\| `hnsw`（召回更准，写入更重） |
-| `pgvector.similarity` | `vector_cosine_ops` | 相似度算子：`vector_cosine_ops` \| `vector_l2_ops` \| `vector_ip_ops` |
+| `redis.index-prefix` | 继承 `agent.redis.index-prefix` | Redis 召回索引 key 前缀（多环境隔离） |
 | `access.enabled` | `false` | 是否启用知识库 API 层访问控制（关闭时全部放行，保持全局共享检索语义） |
 | `capacity.max-documents-per-knowledge-base` | `0` | 单个知识库最大文档数（0=不限制） |
 | `capacity.max-chunks-per-document` | `0` | 单个文档最大分块数（0=不限制） |
@@ -150,9 +153,27 @@ nav_order: 3
 
 | 配置 | 默认值 | 说明 |
 | --- | --- | --- |
+| `run-usage-store` | `local` | 运行用量摘要：`local`（JSONL）\| `db`（落 `claw_run_usage` 表，多实例共享，生产推荐） |
 | `run-usage-log` | `true` | 是否记录运行用量 JSONL |
-| `run-usage-dir` | `{memory-dir}/runs` | 运行记录目录 |
+| `run-usage-dir` | `{memory-dir}/runs` | 运行记录目录（仅 `store=local`） |
+| `trace.enabled` | `true` | 步骤级 trace 开关 |
+| `trace.store` | `local` | trace 存储：`local`（本地 JSON）\| `db`（落 `claw_trace` 表，生产推荐） |
+| `trace.dir` | `{memory-dir}/traces` | trace 目录（仅 `store=local`） |
 | `metrics-exporter` | `none` | `none` / `actuator` / `prometheus`（实际暴露依赖引入的依赖） |
+
+## 9. Redis 召回索引与会话锁（agent.redis.* / agent.collaboration.*）
+
+| 配置 | 默认值 | 说明 |
+| --- | --- | --- |
+| `agent.redis.index-prefix` | `claw` | 召回索引 key 前缀（`{prefix}:memory:idx` / `{prefix}:rag:idx`，多环境隔离；连接复用 `spring.data.redis.*`，未配置时兜底 `collaboration.lock.redis-uri`） |
+| `agent.collaboration.lock.type` | `local` | 会话并发锁：`local`（JVM 内锁，单实例）\| `redis`（SET NX 分布式锁，多实例共享） |
+| `agent.collaboration.lock.redis-uri` | `redis://localhost:6379` | Redis 连接串（type=redis 时生效，可带密码 `redis://:pass@host:port`） |
+| `agent.collaboration.lock.key-prefix` | `claw:lock:` | 锁 key 前缀（多租户/多环境共享 Redis 时隔离命名空间） |
+
+> `agent.storage.type=db`（召回）与 `agent.collaboration.lock.type=redis`（锁）共用同一 Redis 连接：
+> 优先复用业务方 `spring.data.redis.*` 自动装配的 `RedisConnectionFactory`，未配置时以
+> `agent.collaboration.lock.redis-uri` 兜底创建；redis 依赖在框架中为 optional，需业务方显式引入
+> `spring-boot-starter-data-redis`（`@ConditionalOnClass` 门控，未引入时 db 召回退化为空结果、锁回退本地）。
 
 ## 10. 外部 JSON 配置
 

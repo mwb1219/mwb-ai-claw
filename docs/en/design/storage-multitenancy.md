@@ -10,16 +10,17 @@ nav_order: 5
 
 ## 1. Storage Backends (pluggable)
 
-Storage is abstracted through three domain ports (Session / MemoryPage / LongTermMemory) and assembled by selecting one of two modes via `agent.storage.type`:
+Storage is abstracted through three domain ports (Session / MemoryPage / LongTermMemory) plus the retrieval port (`MemorySearchable`), and assembled by selecting one of two modes via `agent.storage.type`:
 
-| Type | Implementation | Data location | Use cases |
-| --- | --- | --- | --- |
-| `file` (default) | `FileBasedSessionGateway` / `FileMemoryPageStore` / `FileBasedMemoryGateway` | `.agent/` directory (JSON / JSONL) | Local personal use, zero dependencies |
-| `db` | `JdbcSessionGateway` / `JdbcMemoryPageStore` / `JdbcLongTermMemoryGateway` | JDBC (H2 by default, switchable to MySQL) | Server-side deployment, shared across instances |
+| Type | Implementation | Data location | Retrieval | Use cases |
+| --- | --- | --- | --- | --- |
+| `file` (default) | `FileBasedSessionGateway` / `FileMemoryPageStore` / `FileBasedMemoryGateway` | `.agent/` directory (JSON / JSONL) | Full load + in-memory scoring (zero dependency) | Local personal use, zero dependencies |
+| `db` | `JdbcSessionGateway` / `JdbcMemoryPageStore` / `JdbcLongTermMemoryGateway` + `RedisMemoryIndexer` / `RedisMemorySearchable` | **MySQL authoritative storage** (sessions/facts/memory pages/long-term memory text) | **Redis Stack** (keyword FT.SEARCH + vector KNN) | Server-side deployment, shared across instances |
 
 - Switching method: `agent.storage.type` (or the environment variable `STORAGE_TYPE`), see [reference/config-full.md](../reference/config-full.md)
 - The semantics of the three ports remain unchanged: switching backends requires no business-code changes
-- In `db` mode, you must first run `start/src/main/resources/schema.sql` to create the tables (MySQL syntax; can be run directly in H2 compatibility mode)
+- `db` mode is "MySQL storage + Redis retrieval": on write, the Redis index is dual-written after the MySQL write succeeds; if Redis is lost it can be rebuilt by re-vectorizing the MySQL text (MySQL is authoritative, Redis is the derived retrieval layer)
+- In `db` mode, you must first run `start/src/main/resources/schema.sql` or `example-web/db/mysql/framework-schema.sql` to create the tables (MySQL syntax; H2 compatibility mode can run it directly); retrieval requires a reachable Redis Stack (RediSearch)
 
 ## 2. Multi-Tenancy Isolation Model (AgentScope)
 

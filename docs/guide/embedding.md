@@ -73,16 +73,16 @@ nav_order: 6
 
 - [ ] 覆盖场景：首次对话（自动创建会话）、同会话追问（上下文连续）、流式对话（`LlmStreamCallback` 增量回调）、`.env` 配置加载
 - [ ] 关键代码：[EmbedDemo.java](https://github.com/mwb1219/mwb-ai-claw/blob/master/example-embed/src/main/java/com/mwb/ai/claw/example/embed/EmbedDemo.java)
-- [ ] 运行：
+- [ ] 运行（example-embed 为独立工程，不随仓库 reactor 构建）：
 
 ```bash
 # 1. 准备密钥：.env 按 运行目录 → ~/.mwb-ai-claw 顺序加载
+cd example-embed
 cp .env.example .env        # 填入 DEFAULT_API_KEY
+# 前置：仓库根目录已 mvn install（框架 SNAPSHOT 在 ~/.m2 中）
 
-# 2. 构建核心模块并直接运行示例
-mvn -q -pl example-embed -am install -DskipTests
-mvn -q -pl example-embed org.codehaus.mojo:exec-maven-plugin:3.1.0:java \
-    -Dexec.mainClass=com.mwb.ai.claw.example.embed.EmbedDemo
+# 2. 直接运行示例（pom.xml 已配置 exec 插件主类）
+mvn -q exec:java
 ```
 
 > 也可在 IDE 中直接运行 `EmbedDemo.main()`。

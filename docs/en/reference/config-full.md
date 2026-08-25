@@ -23,12 +23,18 @@ nav_order: 3
 | `MODERATOR_MODEL` / `MODERATOR_BASE_URL` / `MODERATOR_API_KEY` | Inherits default | Independent model for the moderator expert |
 | `EMBEDDING_MODEL` / `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` | Inherits default | Embedding for vector retrieval (DeepSeek main model does not support embeddings, must be configured separately) |
 | `SYNTHESIS_MODEL` / `SYNTHESIS_BASE_URL` / `SYNTHESIS_API_KEY` | Inherits default | Small-model synthesis (cost optimization) |
-| `STORAGE_TYPE` | `file` | Storage backend: `file` / `db` |
-| `DB_URL` | `jdbc:h2:mem:clawdb;MODE=MySQL;...` | JDBC connection (db mode) |
-| `DB_USERNAME` | `sa` | JDBC username |
-| `DB_PASSWORD` | (empty) | JDBC password |
-| `DB_DRIVER` | `org.h2.Driver` | JDBC driver (MySQL: `com.mysql.cj.jdbc.Driver`) |
+| `STORAGE_TYPE` | `file` | Storage form: `file` (local files, zero dependency) \| `db` (**MySQL storage + Redis Stack retrieval**) |
+| `DB_URL` | `jdbc:h2:mem:clawdb;MODE=MySQL;...` | MySQL connection (db mode) |
+| `DB_USERNAME` | `sa` | MySQL username |
+| `DB_PASSWORD` | (empty) | MySQL password |
+| `DB_DRIVER` | `org.h2.Driver` | Driver (production: `com.mysql.cj.jdbc.Driver`) |
 | `SQL_INIT_MODE` | `embedded` | SQL initialization: `embedded` (embedded DB only) / `never` (disabled) |
+| `RAG_PROVIDER` | `auto` | RAG index: `auto` (follows storage: file→local, db→redis) \| `redis` (explicit) |
+| `REDIS_INDEX_PREFIX` | `claw` | Redis retrieval-index key prefix (multi-environment isolation) |
+| `LOCK_TYPE` | `local` | Session lock: `local` (JVM lock) \| `redis` (distributed lock) |
+| `REDIS_URI` | `redis://localhost:6379` | Redis URI (retrieval index + distributed-lock fallback) |
+| `RUN_USAGE_STORE` | `local` | Run-usage storage: `local` (JSONL) \| `db` (table) |
+| `TRACE_ENABLED` / `TRACE_STORE` | `true` / `local` | Step-level trace switch / storage: `local` \| `db` |
 
 ## 2. Spring Basics (application.yml)
 
@@ -55,7 +61,7 @@ nav_order: 3
 | `agent.skills-enabled` | `true` | Master switch for skills |
 | `agent.skills-dir` | `${user.dir}/skills` | Skills root directory |
 | `agent.tools` | All registered tools | Force-bind to the declared tool list only |
-| `agent.storage.type` | `file` | Storage backend (see `STORAGE_TYPE`) |
+| `agent.storage.type` | `file` | Storage form (see `STORAGE_TYPE`): `file` fully local; `db` = MySQL storage + Redis Stack retrieval |
 
 ## 4. Tiered Memory (agent.memory.*)
 
@@ -81,7 +87,29 @@ nav_order: 3
 | `synthesizer-model` / `-base-url` / `-api-key` | Inherits default | Dedicated small model for synthesis |
 | `synthesis-cache-size` | `50` | Synthesis cache capacity (≤0 disables it) |
 
-## 5. Tool Security (agent.security.*)
+## 5. RAG Retrieval (agent.rag.*)
+
+| Config | Default | Description |
+| --- | --- | --- |
+| `enabled` | `false` | Master switch (when off, no RAG bean or `/rag` endpoint is assembled) |
+| `provider` | `auto` | Index implementation: `auto` (follows `agent.storage.type`: file→`local`, db→`redis`) \| `redis` (explicit, equivalent to auto+db) |
+| `local.dir` | `${user.dir}/.agent/rag` | Index directory (fully isolated from `.agent/memory`) |
+| `redis.index-prefix` | inherits `agent.redis.index-prefix` | Redis retrieval-index key prefix (multi-environment isolation) |
+| `access.enabled` | `false` | Knowledge-base API-level access control (when off, all requests pass; keeps the globally-shared retrieval semantics) |
+| `capacity.max-documents-per-knowledge-base` | `0` | Max documents per knowledge base (0 = unlimited) |
+| `capacity.max-chunks-per-document` | `0` | Max chunks per document (0 = unlimited) |
+| `capacity.max-document-chars` | `0` | Max parsed-text characters per document (0 = unlimited) |
+| `ingestion.chunk-size` | `500` | Max text length per chunk (chars) |
+| `ingestion.chunk-overlap` | `50` | Overlap between adjacent chunks (chars) |
+| `ingestion.embedding-batch-size` | `32` | Batch size per vectorization group (throughput grouping; per-HTTP cap is `embedding.max-batch-size`) |
+| `retrieval.top-k` | `5` | Default retrieval count |
+| `retrieval.min-score` | `0.2` | Default minimum similarity threshold |
+| `retrieval.require-knowledge-base-id` | `false` | Whether requests must explicitly specify a knowledge base |
+| `embedding.model` / `-base-url` / `-api-key` | env reference | RAG-specific embedding (OpenAI-compatible `/embeddings`, injected via `RAG_EMBEDDING_*`) |
+| `embedding.max-batch-size` | `16` | Max text entries per HTTP request (model-side batch cap; the gateway batches internally) |
+| `context.max-chars` | `8000` | Max knowledge-content chars injected into the system prompt |
+
+## 6. Tool Security (agent.security.*)
 
 | Config | Default | Description |
 | --- | --- | --- |
@@ -96,7 +124,7 @@ nav_order: 3
 | `http-allowed-hosts` | (empty = all allowed) | HTTP request host whitelist (SSRF protection) |
 | `prompt-injection-guard` | `true` | Prompt injection protection |
 
-## 6. Authentication (agent.auth.*)
+## 7. Authentication (agent.auth.*)
 
 | Config | Default | Description |
 | --- | --- | --- |
@@ -106,7 +134,7 @@ nav_order: 3
 | `default-user` | `default` | Fallback user when no permission is configured |
 | `tool-permissions` | (empty = all allowed) | Static tool-level authorization |
 
-## 7. LLM Resilience (agent.llm.*)
+## 8. LLM Resilience (agent.llm.*)
 
 | Config | Default | Description |
 | --- | --- | --- |
@@ -119,15 +147,34 @@ nav_order: 3
 | `run-budget-tokens` | `0` | Token budget per run (0 = unlimited) |
 | `max-single-message-tokens` | `12000` | Max tokens for a single message (truncated with a warning if exceeded) |
 
-## 8. Observability (agent.observability.*)
+## 9. Observability (agent.observability.*)
 
 | Config | Default | Description |
 | --- | --- | --- |
+| `run-usage-store` | `local` | Run-usage summary: `local` (JSONL) \| `db` (into `claw_run_usage`, shared across instances, **recommended for production**) |
 | `run-usage-log` | `true` | Whether run usage JSONL is recorded |
-| `run-usage-dir` | `{memory-dir}/runs` | Run records directory |
+| `run-usage-dir` | `{memory-dir}/runs` | Run records directory (only when `store=local`) |
+| `trace.enabled` | `true` | Step-level trace switch |
+| `trace.store` | `local` | Trace storage: `local` (local JSON) \| `db` (into `claw_trace`, recommended for production) |
+| `trace.dir` | `{memory-dir}/traces` | Trace directory (only when `store=local`) |
 | `metrics-exporter` | `none` | `none` / `actuator` / `prometheus` (actual exposure depends on the dependencies introduced) |
 
-## 9. External JSON Config
+## 10. Redis Retrieval & Session Lock (agent.redis.* / agent.collaboration.*)
+
+| Config | Default | Description |
+| --- | --- | --- |
+| `agent.redis.index-prefix` | `claw` | Retrieval-index key prefix (`{prefix}:memory:idx` / `{prefix}:rag:idx`, multi-environment isolation; connection reuses `spring.data.redis.*`, falls back to `collaboration.lock.redis-uri`) |
+| `agent.collaboration.lock.type` | `local` | Session lock: `local` (JVM lock, single instance) \| `redis` (SET NX distributed lock, shared across instances) |
+| `agent.collaboration.lock.redis-uri` | `redis://localhost:6379` | Redis URI (active when `type=redis`; may include password `redis://:pass@host:port`) |
+| `agent.collaboration.lock.key-prefix` | `claw:lock:` | Lock-key prefix (namespace isolation when sharing Redis) |
+
+> `agent.storage.type=db` (retrieval) and `agent.collaboration.lock.type=redis` (lock) share the same Redis
+> connection: it reuses the `RedisConnectionFactory` auto-configured by `spring.data.redis.*`, or falls back
+> to `agent.collaboration.lock.redis-uri`. The Redis dependency is `optional` in the framework — integrators
+> must add `spring-boot-starter-data-redis` explicitly (gated by `@ConditionalOnClass`; without it, db retrieval
+> returns empty results and the lock falls back to local).
+
+## 11. External JSON Config
 
 | File | Description |
 | --- | --- |

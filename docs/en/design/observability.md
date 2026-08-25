@@ -50,11 +50,12 @@ linkable by `traceId` to reconstruct the whole chain.
   | store | Implementation | Description |
   | --- | --- | --- |
   | `local` (default) | `LocalTraceStore` | one JSON file per traceId under `{memory-dir}/traces/`, zero dependency |
-  | `db` | `JdbcTraceStore` | `claw_trace` table (MySQL / PostgreSQL), shared across instances, **recommended for production** |
+  | `db` | `JdbcTraceStore` | `claw_trace` table (MySQL), shared across instances, **recommended for production** |
 - **Switch**: `agent.observability.trace.enabled` (default true); no `TraceStore` is assembled when `false`;
 - **Query**: `GET /trace/{traceId}` (authenticated, tenant/user isolated), steps rebuilt by `step_index`;
-- **Schema**: MySQL `start/src/main/resources/schema.sql`; PostgreSQL
-  `example-web/docker/initdb/01-pgvector.sql` (same database as session/memory/RAG).
+- **Schema**: MySQL `start/src/main/resources/schema.sql` and
+  `example-web/db/mysql/framework-schema.sql` (same database as session/memory/RAG,
+  `claw_trace` / `claw_run_usage` share the datasource).
 
 ## 4. LLM Resilience (agent.llm.*)
 

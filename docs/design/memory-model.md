@@ -29,6 +29,7 @@ nav_order: 4
 - [ ] 关键词检索（中文 bigram BM25）
 - [ ] 向量检索（Embedding + 余弦相似度，三级缓存）
 - [ ] 混合检索（RRF 融合），embedding 失败自动降级
+- [ ] 召回实现随存储形态切换：`file`（默认）全量加载 + 内存打分（上述策略）；`db` 走 Redis Stack 召回（关键词 FT.SEARCH + 向量 KNN，`RedisMemorySearchable`），MySQL 为权威存储、Redis 索引可从其重建
 
 ## 4. 事实提炼与合并
 

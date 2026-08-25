@@ -37,7 +37,7 @@ RagIngestionService
   |-- RagDocumentParser   解析（文本 / Markdown / PDF / Word）
   |-- RagChunker          切分（标题 / 空行 / 长度 / overlap）
   |-- RagEmbeddingGateway 批量向量化
-  |-- RagIndexStore       写入向量索引
+  |-- RagIndexStore       写入索引（MySQL 文本权威存储 + Redis Stack 召回索引，双写）
   `-- RagDocumentStore    记录文档状态
 ```
 
@@ -46,7 +46,7 @@ RagIngestionService
 ```text
 RagRetrievalService
   |-- RagEmbeddingGateway 生成查询向量
-  |-- RagIndexStore.search 向量召回（余弦相似度）
+  |-- RagIndexStore.search 向量召回（Redis KNN，score=1-余弦距离；关键词全文走 FT.SEARCH）
   |-- RagReranker         可选重排
   `-- List<RagSearchResult>（携带知识库 / 文档 / 分块引用）
 ```
@@ -60,11 +60,11 @@ RAG 失败默认降级为空知识上下文，不阻断 Agent 主流程。
   默认 Bean 以 `@ConditionalOnMissingBean` 注册，业务方可整体替换（如换 Milvus / PGVector / ES）。
 - **多格式解析**：默认 `MultiFormatRagDocumentParser` 按内容类型 / 扩展名分发——文本 / Markdown 内置，
   PDF（PDFBox）与 Word（POI）为 optional 依赖，引入即启用、未引入则退化为纯文本解析并给出明确提示。
-- **默认本地实现**：文本 / Markdown 解析 + 本地文件向量索引 + 余弦相似度检索，零依赖开箱即用；
+- **默认本地实现（=file）**：文本 / Markdown 解析 + 本地文件向量索引 + 余弦相似度检索，零依赖开箱即用；
   存储目录 `${user.dir}/.agent/rag`，与 `.agent/memory` 完全隔离。
-- **向量库适配（provider=pgvector）**：内置 PGVector 参考实现（`PgVectorRagIndexStore`，基于 `JdbcTemplate`），
-  首次写入按实际向量维度建表并尝试建 `ivfflat` / `hnsw` 向量索引，检索走 `<=>` / `<->` 算子；
-  表名 / schema / 索引类型 / 相似度算子可配，标识符做白名单校验防注入。
+- **Redis Stack 召回（内置推荐形态，=db）**：`RedisRagIndexStore` 组合「写 MySQL（`rag_index_entries` 文本 + 元数据，
+  无向量列）→ 写 Redis Stack 索引」「删双侧」「搜 Redis KNN / 全文 + 回 MySQL 补 metadata」；召回依赖 Redis Stack
+  （RediSearch，`FT.CREATE` / `FT.SEARCH`），Redis 丢失可从 MySQL 文本重新向量化重建（reindex）。
 - **API 层访问控制（可选）**：`RagAccessPolicy` SPI 在 `agent.rag.access.enabled=true` 时于 REST 接口层
   按租户 / 用户做知识库可见性授权；关闭时全部放行，**不改变全局共享检索语义**。
 - **容量与配额（可选）**：`agent.rag.capacity.*` 限制单知识库最大文档数、单文档最大分块数、
@@ -92,11 +92,13 @@ domain.rag            infrastructure.rag
 ## 5. 配置与启用
 
 `agent.rag.enabled=true` 开启（默认关闭）；索引实现由 `agent.rag.provider` 选择：
-`local`（零依赖本地文件向量索引，默认）| `pgvector`（PostgreSQL + pgvector 扩展）。
+`auto`（跟随 `agent.storage.type`：file→`local` 零依赖本地文件索引，db→`redis` 走 Redis Stack 召回，默认）
+| `redis`（显式声明，与 auto + db 等价）。
 依赖 OpenAI 兼容 `/embeddings` 接口，需在 `.env` 配置 `RAG_EMBEDDING_MODEL/BASE_URL/API_KEY`。
 
 - PDF / Word 解析：引入 optional 依赖 `org.apache.pdfbox:pdfbox`、`org.apache.poi:poi-ooxml` 即自动启用；
-- 向量库：`provider=pgvector` 时需 PostgreSQL 驱动 + 目标库执行 `CREATE EXTENSION IF NOT EXISTS vector;`；
+- Redis 召回：`provider=redis`（或 `auto` + `STORAGE_TYPE=db`）时需保证 Redis Stack 可达（docker compose 起
+  `redis/redis-stack-server`），索引首次写入自动 `FT.CREATE`；
 - 访问控制：`agent.rag.access.enabled=true` 并注册 `RagAccessPolicy` Bean 后按租户 / 角色授权；
 - 容量配额：`agent.rag.capacity.*`（见 [配置项速查](../reference/config-full.md)）。
 

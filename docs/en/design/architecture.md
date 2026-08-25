@@ -73,7 +73,7 @@ nav_order: 1
 1. The startup class imports `ClawAutoConfiguration` (starter), whose `@ComponentScan` scans the
    `infrastructure`, `app`, and `adapter` packages;
 2. `ClawCoreAutoConfiguration` in `infrastructure` conditionally assembles the infrastructure beans
-   (e.g., JDBC storage is assembled when `agent.storage.type=db`);
+   (e.g., MySQL storage + Redis Stack retrieval are assembled when `agent.storage.type=db`);
 3. `AgentConfiguration` loads `agents.json` / `orchestrations.json`, registering the agent registry and the orchestration registry;
 4. Application-layer executors (ChatCmdExe, etc.) select an orchestration per request and drive the ReAct loop.
 

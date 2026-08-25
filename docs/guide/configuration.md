@@ -20,16 +20,19 @@ nav_order: 3
 
 - [ ] 复制模板：`cp .env.example .env`
 - [ ] 常用变量：`DEFAULT_API_KEY` / `DEFAULT_MODEL` / `DEFAULT_BASE_URL`
-- [ ] 存储变量：`STORAGE_TYPE`、`DB_URL` / `DB_USERNAME` / `DB_PASSWORD` / `DB_DRIVER` / `SQL_INIT_MODE`
+- [ ] 存储变量：`STORAGE_TYPE`（`file` 本地 | `db` = **MySQL 存储 + Redis Stack 召回**）、`DB_URL` / `DB_USERNAME` / `DB_PASSWORD` / `DB_DRIVER` / `SQL_INIT_MODE`
+- [ ] Redis / 会话锁变量：`REDIS_INDEX_PREFIX`（召回索引前缀，默认 `claw`）、`LOCK_TYPE`（`local` | `redis`）、`REDIS_URI`（默认 `redis://localhost:6379`）
+- [ ] RAG 变量：`RAG_PROVIDER`（默认 `auto`：file→local、db→redis）、**`RAG_EMBEDDING_MODEL` / `RAG_EMBEDDING_BASE_URL` / `RAG_EMBEDDING_API_KEY`**（独立 RAG 知识库向量化，OpenAI 兼容 `/embeddings`）
+- [ ] 可观测性变量：`RUN_USAGE_STORE`（`local` | `db`）、`TRACE_ENABLED` / `TRACE_STORE`（`local` | `db`）
 - [ ] Agent 级变量：`CODER_MODEL` / `CODER_BASE_URL` / `CODER_API_KEY` 等（供 `agents.json` 引用）
-- [ ] **RAG Embedding**：`RAG_EMBEDDING_MODEL` / `RAG_EMBEDDING_BASE_URL` / `RAG_EMBEDDING_API_KEY`（独立 RAG 知识库向量化，OpenAI 兼容 `/embeddings`）
 
 ## 3. `application.yml` 核心段
 
 - [ ] `agent.*`：模型、步数、工具绑定、技能、记忆、安全、存储、鉴权
 - [ ] 工具绑定策略：缺省=全部，显式 `tools` = 强制仅绑定声明
 - [ ] 记忆参数：`agent.memory.*`（分层记忆预算/换页/检索）
-- [ ] **RAG 参数**：`agent.rag.*`（`enabled` 总开关 / 分块 / 召回 / Embedding `max-batch-size` / 上下文注入上限）
+- [ ] **RAG 参数**：`agent.rag.*`（`enabled` 总开关 / `provider`=`auto` 跟随存储类型 / 分块 / 召回 / Embedding `max-batch-size` / 上下文注入上限）
+- [ ] Redis 召回与会话锁：`agent.redis.index-prefix`（索引前缀，继承默认 `claw`）、`agent.collaboration.lock.*`（会话锁 `local` | `redis`）
 - [ ] 安全参数：`agent.security.*`（沙箱/审批/超时）
 - [ ] 文件上传：`spring.servlet.multipart.max-file-size` / `max-request-size`（默认 `-1` 不限制，RAG 知识库文档上传用）
 - [ ] 跨域（example-web）：`example.cors.allowed-origins`（默认 `http://localhost:5173,http://localhost:5174`）

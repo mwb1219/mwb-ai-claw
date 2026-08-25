@@ -27,7 +27,7 @@ nav_order: 10
 - [ ] 引入依赖即自动装配（`ClawAutoConfiguration`），无需额外注解或配置类
 - [ ] 默认装配：`infrastructure`（记忆 / LLM / 工具 / 编排 / 存储）、`agent`（应用层用例）、`web`（REST / SSE / WebSocket，`web` profile 激活）、`shell`（CLI，`shell` profile 激活）
 - [ ] 覆盖默认实现：声明同名类型的 `@Bean` / `@Component` 即可（如自定义 `MemoryPageStore` / `LlmGateway`）
-- [ ] 存储类型：`agent.storage.type`（`file` | `db`），默认文件存储
+- [ ] 存储类型：`agent.storage.type`（`file` 本地 | `db` = **MySQL 权威存储 + Redis Stack 召回**），默认文件存储；`db` 形态写入时双写 Redis 召回索引，Redis 丢失可从 MySQL 重建
 
 ## 3. 能力端点
 
@@ -75,7 +75,7 @@ java -jar example-web/target/example-web-*.jar
 # 3. 浏览器访问 http://localhost:8080
 ```
 
-- [ ] 切换存储：`--agent.storage.type=db`（H2 联调用），或设 `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` 接入 MySQL（先执行 `src/main/resources/schema.sql` 建表）
+- [ ] 切换存储：`--agent.storage.type=db`（H2 联调用），或设 `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` 接入 MySQL（先执行 `src/main/resources/schema.sql` 建表）；db 形态的召回（Memory / RAG）走 Redis Stack，需同时配置 `REDIS_URI` 并保证 Redis Stack（RediSearch）可达
 
 ---
 

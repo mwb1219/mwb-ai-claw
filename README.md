@@ -30,7 +30,7 @@ If LangChain4j / Spring AI are the **parts** for building a harness, mwb-ai-claw
 - **Multi-agent orchestration** — routing / conversational / delegate collaboration modes
 - **Skills** — pluggable skills following the `SKILL.md` spec with three-level loading
 - **Multi-tenancy** — AgentScope-based data isolation
-- **Storage backends** — file or MySQL
+- **Storage backends** — file (zero dependency), or `db` = MySQL storage + Redis Stack retrieval (keyword + vector KNN)
 - **Observability & resilience** — metrics, JSONL run logs, retry / degradation
 - **Embeddable** — embed `ClawRuntime` in your own Java app (streaming chat, multi-tenant scope)
 

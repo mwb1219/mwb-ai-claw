@@ -47,11 +47,11 @@ Thought / Action / Observation 逐条明细，可关联 `traceId` 还原整条�
   | store | 实现 | 说明 |
   | --- | --- | --- |
   | `local`（默认） | `LocalTraceStore` | 每个 traceId 一个 JSON 文件，`{memory-dir}/traces/`，零依赖 |
-  | `db` | `JdbcTraceStore` | 落 `claw_trace` 表（MySQL / PostgreSQL），多实例共享，**生产推荐** |
+  | `db` | `JdbcTraceStore` | 落 `claw_trace` 表（MySQL），多实例共享，**生产推荐** |
 - **开关**：`agent.observability.trace.enabled`（默认 true）；`false` 时不装配 TraceStore；
 - **查询**：`GET /trace/{traceId}`（需鉴权，按租户/用户隔离），按 `step_index` 还原步骤明细；
-- **表结构**：MySQL 见 `start/src/main/resources/schema.sql`；PostgreSQL 见
-  `example-web/docker/initdb/01-pgvector.sql`（会话/记忆/RAG 同库）。
+- **表结构**：MySQL 见 `start/src/main/resources/schema.sql` 与 `example-web/db/mysql/framework-schema.sql`
+  （会话/记忆/RAG 同库，`claw_trace` / `claw_run_usage` 与其同库）。
 
 ## 4. LLM 韧性（agent.llm.*）
 

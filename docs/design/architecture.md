@@ -66,7 +66,7 @@ nav_order: 1
 1. 启动类引入 `ClawAutoConfiguration`（starter），其 `@ComponentScan` 扫描
    `infrastructure`、`app`、`adapter` 包；
 2. `infrastructure` 的 `ClawCoreAutoConfiguration` 按条件装配各基础设施 Bean
-   （如 `agent.storage.type=db` 时装配 JDBC 存储）；
+   （如 `agent.storage.type=db` 时装配 MySQL 存储与 Redis Stack 召回）；
 3. `AgentConfiguration` 加载 `agents.json` / `orchestrations.json`，注册 Agent 注册表与编排注册表；
 4. 应用层执行器（ChatCmdExe 等）按请求选择编排，驱动 ReAct 循环。
 

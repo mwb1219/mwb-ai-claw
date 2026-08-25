@@ -24,13 +24,13 @@ Horizontal scaling goals:
 ```
                     ┌────────────┐
   clients ──► LB ───►│ Instance 1 │─┐
-        (round/hash) ├────────────┤ ├─► Shared Redis (distributed lock / session routing)
+        (round/hash) ├────────────┤ ├─► Shared Redis (retrieval index + distributed lock)
                     │ Instance 2 │─┤
-                    ├────────────┤ ├─► Shared DB (sessions/memory/RAG metadata, agent.storage.type=db)
+                    ├────────────┤ ├─► Shared MySQL (sessions/memory/RAG text, agent.storage.type=db)
                     │ Instance N │─┘
                     └────────────┘
                             │
-                            └─► Shared filesystem (optional: file backend, RAG docs/index, run logs)
+                            └─► Shared filesystem (optional: file backend, RAG docs, run logs)
 ```
 
 Key point: **the application is stateless** (it never owns session/memory/approval state exclusively); all mutable state lives on shared components.
@@ -49,7 +49,7 @@ Key point: **the application is stateless** (it never owns session/memory/approv
 | --- | --- | --- | --- |
 | Approval todos | `ApprovalRegistry` (in-JVM ConcurrentHashMap; approval API locates nodes in memory) | In-memory | Human-in-the-loop requires the request and the approval decision to hit the same instance. Multi-instance needs **sticky routing** (hash by sessionId to a fixed instance), or later externalize approval state to Redis/DB for cross-instance visibility (see §7 evolution). |
 | Sessions / long-term memory / memory pages | `FileBased*` (local files) or `Jdbc*` (JDBC) | On-disk | File backend needs a **shared filesystem** (NFS / distributed storage / object-storage mount); DB backend is naturally shared. Prefer `agent.storage.type=db` for multi-instance. |
-| RAG documents / index | `FileRagDocumentStore` + `LocalRagIndexStore` (local-file JSONL + in-memory scan) | On-disk + in-memory | Documents/index need a **shared filesystem**; the index is an in-memory scan maintained per instance, so writes must be serialized across instances (RAG write lock, see §3.3). For scale, replace with a vector store (Milvus/PGVector/ES) per TODO T4. |
+| RAG documents / index | `file`: `FileRagDocumentStore` + `LocalRagIndexStore` (local-file JSONL + in-memory scan); `db`: `JdbcRagDocumentStore` + `RedisRagIndexStore` (**MySQL text authoritative storage + Redis Stack retrieval index**) | On-disk (+ derived Redis index) | In `db` mode both the MySQL text and the Redis Stack retrieval index are naturally shared across instances; if Redis is lost it can be rebuilt from MySQL. `file` mode needs a **shared filesystem**; the index is an in-memory scan whose writes must be serialized across instances (RAG write lock, see §3.3). |
 | Run usage logs | Local-file JSONL | On-disk | Needs shared filesystem or aggregation into a logging/observability platform (unified with full-trace TODO T5). |
 
 ### 3.3 Components that may run on a single instance (multi-instance = redundancy/contention)
@@ -97,7 +97,7 @@ In multi-instance, "which instance handles a request for a given session" determ
 Recommended combination (currently deployable):
 
 ```text
-LB(sessionId sticky) + shared Redis(distributed lock) + DB(session/memory) + shared filesystem(optional)
+LB(sessionId sticky) + shared Redis(retrieval index + distributed lock) + shared MySQL(session/memory/RAG text) + shared filesystem(optional)
 ```
 
 ## 6. Configuration & Deployment Examples
@@ -125,9 +125,9 @@ upstream claw_cluster {
 
 > Note: human-in-the-loop (SSE long connections / WebSocket) is naturally sticky (connections don't migrate after being established); combined with `ip_hash`, approval APIs and the initiating request hit the same instance.
 
-### 6.2 Database readiness
+### 6.2 Database and Redis readiness
 
-With `agent.storage.type=db` the datasource is connected at startup, so the database must be reachable (MySQL, etc.); see the `DB_*` variables in the [configuration guide](https://github.com/mwb1219/mwb-ai-claw/blob/master/CONFIG-GUIDE.md).
+With `agent.storage.type=db` the datasource is connected at startup, so MySQL must be reachable (see the `DB_*` variables in the [configuration guide](https://github.com/mwb1219/mwb-ai-claw/blob/master/CONFIG-GUIDE.md)); the retrieval index and the Redis distributed lock in `db` mode depend on Redis Stack (RediSearch), so Redis must also be reachable (`REDIS_URI`, default `redis://localhost:6379`).
 
 ## 7. Verification
 
@@ -143,7 +143,7 @@ Unit tests: `infrastructure/.../collaboration/lock/SessionLockManagerTest` (same
 | --- | --- |
 | Approval todos are in-JVM state; cross-instance visibility depends on sticky routing | Externalize approval state to Redis/DB (pending-approval table + decision events) so any instance can decide (later iteration) |
 | Memory synthesis is a per-instance single-thread queue; multi-instance causes duplicate scheduling | Externalize synthesis tasks to a distributed queue (Redis Stream), deduped by scope + task name |
-| RAG index is an in-memory scan, one copy per instance | Replace with a vector store (TODO T4); serialize writes with a distributed lock |
+| RAG/memory retrieval index is an in-memory scan in `file` mode, one copy per instance | Already replaced by the Redis Stack retrieval index in `db` mode (shared across instances, rebuildable from MySQL); serialize `file`-mode writes with a distributed lock |
 | Run logs land in local files | Full trace + aggregation to logging/OTel (TODO T5) |
 
 ---
