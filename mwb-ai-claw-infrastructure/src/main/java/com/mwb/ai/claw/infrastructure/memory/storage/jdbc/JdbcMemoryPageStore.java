@@ -7,21 +7,56 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.mwb.ai.claw.domain.memory.model.MemoryPage;
 import com.mwb.ai.claw.domain.memory.store.MemoryPageStore;
+import com.mwb.ai.claw.domain.memory.store.MemorySearchable;
 import com.mwb.ai.claw.domain.scope.AgentScope;
+import com.mwb.ai.claw.infrastructure.memory.storage.redis.RedisMemoryIndexer;
 
 /**
- * JDBC 版记忆页存储（agent.storage.type=jdbc）：claw_fact / claw_memory_page 表。
+ * JDBC 版记忆页存储（agent.storage.type=db）：claw_fact / claw_memory_page 表。
  * <p>
  * - 事实表按 (tenant, user, fact_key) 主键去重（同 key 合并落在 DB 层）；
  * - 记忆页表按 (tenant, user, page_id) 主键，page_type 区分 SUMMARY / ARCHIVE；
- * - tenant_id / user_id 用空字符串 '' 表示默认空间（MySQL 主键列不允许 NULL）。
+ * - tenant_id / user_id 用空字符串 '' 表示默认空间（MySQL 主键列不允许 NULL）；
+ * - MySQL 为权威存储（纯文本，无向量列）；召回统一委托 Redis 检索索引
+ *   （{@link MemorySearchable}，db 形态下为 {@code RedisMemorySearchable}），
+ *   写 MySQL 成功后由 {@link RedisMemoryIndexer} 同步双写到 Redis；
+ * - 未注入 Redis 检索能力时（无 spring-data-redis 依赖）：双写跳过、召回委托返回空，
+ *   召回策略层回退为全量加载 + 应用层打分。
  */
-public class JdbcMemoryPageStore implements MemoryPageStore {
+public class JdbcMemoryPageStore implements MemoryPageStore, MemorySearchable {
 
     private final JdbcTemplate jdbc;
+    private final RedisMemoryIndexer indexer;
+    private final MemorySearchable searchable;
 
+    /** 兼容构造：无 Redis 双写 / 检索下推（存储职责完整，召回走应用层回退）。 */
     public JdbcMemoryPageStore(JdbcTemplate jdbc) {
+        this(jdbc, null, null);
+    }
+
+    public JdbcMemoryPageStore(JdbcTemplate jdbc,
+                               RedisMemoryIndexer indexer,
+                               MemorySearchable searchable) {
         this.jdbc = jdbc;
+        this.indexer = indexer;
+        this.searchable = searchable;
+    }
+
+    // ==================== MemorySearchable：委托 Redis 检索索引（db 形态召回） ====================
+
+    @Override
+    public List<MemoryPage> searchFacts(AgentScope scope, List<String> terms, int topK) {
+        return searchable != null ? searchable.searchFacts(scope, terms, topK) : new ArrayList<>();
+    }
+
+    @Override
+    public List<MemoryPage> searchPages(AgentScope scope, List<String> terms, int topK) {
+        return searchable != null ? searchable.searchPages(scope, terms, topK) : new ArrayList<>();
+    }
+
+    @Override
+    public List<MemoryPage> searchByVector(AgentScope scope, float[] queryVector, int topK) {
+        return searchable != null ? searchable.searchByVector(scope, queryVector, topK) : new ArrayList<>();
     }
 
     // ==================== 摘要页 ====================
@@ -78,6 +113,10 @@ public class JdbcMemoryPageStore implements MemoryPageStore {
                     fact.getImportance(), fact.getSessionId(), fact.getVersion(),
                     fact.getTokenCount(), fact.getCreateTime(), System.currentTimeMillis());
         }
+        // MySQL 权威写入成功后同步双写 Redis 派生索引（失败不阻断主事务）
+        if (indexer != null) {
+            indexer.upsertFact(scope, fact);
+        }
     }
 
     @Override
@@ -108,6 +147,9 @@ public class JdbcMemoryPageStore implements MemoryPageStore {
         args.add(key);
         args.addAll(where.args);
         jdbc.update(sql, args.toArray());
+        if (indexer != null) {
+            indexer.deleteFact(scope, key);
+        }
     }
 
     @Override
@@ -118,6 +160,9 @@ public class JdbcMemoryPageStore implements MemoryPageStore {
         args.add(sessionId);
         args.addAll(where.args);
         jdbc.update(sql, args.toArray());
+        if (indexer != null) {
+            indexer.deleteSessionPages(scope, sessionId);
+        }
     }
 
     // ==================== 归档（跨会话 RAG） ====================
@@ -152,6 +197,9 @@ public class JdbcMemoryPageStore implements MemoryPageStore {
         args.add(sessionId);
         args.addAll(where.args);
         jdbc.update(sql, args.toArray());
+        if (indexer != null) {
+            indexer.deleteSessionArchive(scope, sessionId);
+        }
     }
 
     // ==================== 工具方法 ====================
@@ -194,6 +242,10 @@ public class JdbcMemoryPageStore implements MemoryPageStore {
                     page.getType() == null ? null : page.getType().name(),
                     page.getSessionId(), page.getBlockStart(), page.getBlockEnd(),
                     page.getContent(), page.getTokenCount(), page.getCreateTime());
+        }
+        // MySQL 权威写入成功后同步双写 Redis 派生索引（失败不阻断主事务）
+        if (indexer != null) {
+            indexer.upsertPage(scope, page);
         }
     }
 

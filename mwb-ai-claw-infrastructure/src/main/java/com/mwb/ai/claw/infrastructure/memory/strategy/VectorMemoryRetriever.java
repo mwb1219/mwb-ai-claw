@@ -5,6 +5,7 @@ import com.mwb.ai.claw.domain.memory.model.LayeredMemoryConfig;
 import com.mwb.ai.claw.domain.memory.model.MemoryPage;
 import com.mwb.ai.claw.domain.memory.retrieve.MemoryRetriever;
 import com.mwb.ai.claw.domain.memory.store.MemoryPageStore;
+import com.mwb.ai.claw.domain.memory.store.MemorySearchable;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.util.JsonUtils;
@@ -79,6 +80,12 @@ public class VectorMemoryRetriever implements MemoryRetriever {
         float[] queryVec = embeddingGateway.embed(query);
         if (queryVec == null || queryVec.length == 0) {
             return new ArrayList<>();
+        }
+        // db 形态：存储实现 MemorySearchable（Redis 召回）时直接下推，跳过本地磁盘向量缓存
+        if (pageStore instanceof MemorySearchable) {
+            List<MemoryPage> pushed = ((MemorySearchable) pageStore).searchByVector(scope, queryVec, topK);
+            log.debug("向量记忆检索(Redis 下推) '{}' 命中 {} 条", query, pushed.size());
+            return pushed;
         }
 
         // 候选 = 事实 + 摘要 + 档案（跨会话，多 Agent 共享，scope 隔离）

@@ -20,7 +20,7 @@ import com.mwb.ai.claw.domain.observability.RunUsageStore;
 /**
  * JDBC 版运行用量存储（{@code agent.observability.run-usage-store=db}）：落库到 {@code claw_run_usage} 表。
  * <p>
- * 表结构（MySQL 见启动模块 schema.sql，PostgreSQL 见 example-web initdb 01-pgvector.sql），
+ * 表结构（MySQL 见 start/src/main/resources/schema.sql 或 example-web/db/mysql/framework-schema.sql），
  * 依赖 SQL 脚本建好（与记忆/会话/RAG 同库），表存在性与实现无耦合。
  */
 public class JdbcRunUsageStore implements RunUsageStore {

@@ -8,7 +8,12 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Condition;
+import org.springframework.context.annotation.ConditionContext;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
+import org.springframework.core.type.AnnotatedTypeMetadata;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
@@ -62,6 +67,8 @@ import com.mwb.ai.claw.infrastructure.memory.storage.file.FileMemoryPageStore;
 import com.mwb.ai.claw.infrastructure.memory.storage.jdbc.JdbcLongTermMemoryGateway;
 import com.mwb.ai.claw.infrastructure.memory.storage.jdbc.JdbcMemoryPageStore;
 import com.mwb.ai.claw.infrastructure.memory.storage.jdbc.JdbcSessionGateway;
+import com.mwb.ai.claw.infrastructure.memory.storage.redis.RedisMemoryIndexer;
+import com.mwb.ai.claw.infrastructure.memory.storage.redis.RedisMemorySearchable;
 import com.mwb.ai.claw.infrastructure.memory.strategy.LlmMemorySynthesizer;
 import com.mwb.ai.claw.infrastructure.memory.synthesis.MemorySynthesisExecutor;
 import com.mwb.ai.claw.infrastructure.memory.synthesis.SynthesisCache;
@@ -71,12 +78,14 @@ import com.mwb.ai.claw.infrastructure.observability.LocalRunUsageStore;
 import com.mwb.ai.claw.infrastructure.observability.LocalTraceStore;
 import com.mwb.ai.claw.infrastructure.observability.MetricsRecorder;
 import com.mwb.ai.claw.infrastructure.rag.access.AllowAllRagAccessPolicy;
+import com.mwb.ai.claw.infrastructure.redis.RedisSearchTemplate;
 import com.mwb.ai.claw.infrastructure.rag.context.DefaultRagContextProvider;
 import com.mwb.ai.claw.infrastructure.rag.embed.OpenAiRagEmbeddingGateway;
 import com.mwb.ai.claw.infrastructure.rag.retrieve.DefaultRagRetrievalService;
 import com.mwb.ai.claw.infrastructure.rag.store.FileRagDocumentStore;
+import com.mwb.ai.claw.infrastructure.rag.store.JdbcRagDocumentStore;
 import com.mwb.ai.claw.infrastructure.rag.store.LocalRagIndexStore;
-import com.mwb.ai.claw.infrastructure.rag.store.PgVectorRagIndexStore;
+import com.mwb.ai.claw.infrastructure.rag.store.RedisRagIndexStore;
 import com.mwb.ai.claw.infrastructure.rag.write.DefaultRagIngestionService;
 import com.mwb.ai.claw.infrastructure.rag.write.MultiFormatRagDocumentParser;
 import com.mwb.ai.claw.infrastructure.rag.write.PdfRagDocumentParser;
@@ -262,26 +271,34 @@ public class ClawCoreAutoConfiguration {
             return new OpenAiRagEmbeddingGateway(config, restTemplate);
         }
 
-        // 文档元数据存储与向量索引 provider 正交：local（本地 JSON）与 pgvector（Postgres 向量索引）共用
-        // 文件版元数据存储，仅当业务侧未注册自定义 RagDocumentStore 时装配。
+        // 文档元数据存储随生效 provider 切换：effective=local → 文件版；其余（redis）→ JDBC 版。
+        // 仅当业务侧未注册自定义 RagDocumentStore 时装配。
         @Bean
         @ConditionalOnMissingBean(RagDocumentStore.class)
-        public FileRagDocumentStore ragDocumentStore(RagConfig config) {
+        @Conditional(RagDocumentStoreFileCondition.class)
+        public FileRagDocumentStore fileRagDocumentStore(RagConfig config) {
             return new FileRagDocumentStore(config);
         }
 
         @Bean
+        @ConditionalOnMissingBean(RagDocumentStore.class)
+        @Conditional(RagDocumentStoreDbCondition.class)
+        public JdbcRagDocumentStore jdbcRagDocumentStore(JdbcTemplate jdbc) {
+            return new JdbcRagDocumentStore(jdbc);
+        }
+
+        @Bean
         @ConditionalOnMissingBean(RagIndexStore.class)
-        @ConditionalOnProperty(name = "agent.rag.provider", havingValue = "local", matchIfMissing = true)
+        @Conditional(RagIndexStoreLocalCondition.class)
         public LocalRagIndexStore ragIndexStore(RagConfig config) {
             return new LocalRagIndexStore(config);
         }
 
         @Bean
         @ConditionalOnMissingBean(RagIndexStore.class)
-        @ConditionalOnProperty(name = "agent.rag.provider", havingValue = "pgvector")
-        public PgVectorRagIndexStore pgVectorRagIndexStore(RagConfig config, JdbcTemplate jdbc) {
-            return new PgVectorRagIndexStore(jdbc, config);
+        @Conditional(RagIndexStoreRedisCondition.class)
+        public RedisRagIndexStore redisRagIndexStore(JdbcTemplate jdbc, RedisSearchTemplate redisSearchTemplate) {
+            return new RedisRagIndexStore(jdbc, redisSearchTemplate);
         }
 
         @Bean
@@ -314,6 +331,62 @@ public class ClawCoreAutoConfiguration {
         public DefaultRagContextProvider ragContextProvider(
                 RagRetrievalService retrievalService, RagConfig config) {
             return new DefaultRagContextProvider(retrievalService, config);
+        }
+    }
+
+    // ==================== RAG 生效 provider 装配条件 ====================
+    // agent.rag.provider 支持 auto（默认，跟随 agent.storage.type：file→local，db→redis）与
+    // 显式 redis（高级用法，语义与 auto+db 一致）。内置不再提供 jdbc / pgvector 实现，
+    // 其它 provider 值由业务方自定义 RagIndexStore 扩展 Bean 表达。单一 @ConditionalOnProperty
+    // 无法表达「auto + storage」组合，故用自定义 Condition 解析「生效 provider」后按值匹配。
+
+    /** 解析生效 provider：auto → 跟随 storage.type，否则取显式值。 */
+    public abstract static class RagEffectiveProviderCondition implements Condition {
+
+        @Override
+        public final boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
+            Environment env = context.getEnvironment();
+            String provider = env.getProperty("agent.rag.provider", "auto");
+            String storage = env.getProperty("agent.storage.type", "file");
+            String effective = "auto".equalsIgnoreCase(provider)
+                    ? ("db".equalsIgnoreCase(storage) ? "redis" : "local")
+                    : provider;
+            return matchesEffective(effective);
+        }
+
+        /** 子类判断是否匹配当前生效 provider。 */
+        protected abstract boolean matchesEffective(String effective);
+    }
+
+    /** 生效 provider = local（provider=local，或 auto + storage=file）。 */
+    public static class RagIndexStoreLocalCondition extends RagEffectiveProviderCondition {
+        @Override
+        protected boolean matchesEffective(String effective) {
+            return "local".equals(effective);
+        }
+    }
+
+    /** 生效 provider = redis（provider=redis，或 auto + storage=db，内置推荐形态）。 */
+    public static class RagIndexStoreRedisCondition extends RagEffectiveProviderCondition {
+        @Override
+        protected boolean matchesEffective(String effective) {
+            return "redis".equals(effective);
+        }
+    }
+
+    /** 文档存储走本地文件：生效 provider = local。 */
+    public static class RagDocumentStoreFileCondition extends RagEffectiveProviderCondition {
+        @Override
+        protected boolean matchesEffective(String effective) {
+            return "local".equals(effective);
+        }
+    }
+
+    /** 文档存储走 JDBC：生效 provider = redis（业务数据落 MySQL）。 */
+    public static class RagDocumentStoreDbCondition extends RagEffectiveProviderCondition {
+        @Override
+        protected boolean matchesEffective(String effective) {
+            return "redis".equals(effective);
         }
     }
 
@@ -389,8 +462,67 @@ public class ClawCoreAutoConfiguration {
 
         @Bean
         @ConditionalOnMissingBean(MemoryPageStore.class)
-        public JdbcMemoryPageStore jdbcMemoryPageStore(JdbcTemplate jdbc) {
-            return new JdbcMemoryPageStore(jdbc);
+        public JdbcMemoryPageStore jdbcMemoryPageStore(JdbcTemplate jdbc,
+                                                       ObjectProvider<RedisMemoryIndexer> indexer,
+                                                       ObjectProvider<RedisMemorySearchable> searchable) {
+            // Redis 检索能力为可选（无 spring-data-redis 时双写跳过、召回委托返回空，回退应用层打分）。
+            // 委托用具体类型 RedisMemorySearchable 而非 MemorySearchable：JdbcMemoryPageStore 自身
+            // 即实现 MemorySearchable（供召回策略 instanceof 判断做下推），按接口注入会自我解析造成循环依赖。
+            return new JdbcMemoryPageStore(jdbc, indexer.getIfAvailable(), searchable.getIfAvailable());
+        }
+
+        /** Memory Redis 双写器（classpath 含 spring-data-redis 时装配）。 */
+        @Bean
+        @ConditionalOnMissingBean(RedisMemoryIndexer.class)
+        @ConditionalOnClass(RedisConnectionFactory.class)
+        public RedisMemoryIndexer redisMemoryIndexer(RedisSearchTemplate redisSearchTemplate,
+                                                     EmbeddingGateway embeddingGateway,
+                                                     AgentProperties properties) {
+            return new RedisMemoryIndexer(redisSearchTemplate, embeddingGateway, properties.getMemory());
+        }
+
+        /** Memory 检索下推 SPI 的 Redis 实现（JdbcMemoryPageStore 委托的召回执行体，业务方可整体替换）。 */
+        @Bean
+        @ConditionalOnMissingBean(RedisMemorySearchable.class)
+        @ConditionalOnClass(RedisConnectionFactory.class)
+        public RedisMemorySearchable redisMemorySearchable(RedisSearchTemplate redisSearchTemplate) {
+            return new RedisMemorySearchable(redisSearchTemplate);
+        }
+    }
+
+    // ==================== Redis 检索索引基础设施（Redis Stack / RediSearch） ====================
+    // Memory 与 RAG 召回共用：连接优先复用业务方 spring.data.redis.* 自动装配的
+    // RedisConnectionFactory；未配置时兜底与会话锁同源（agent.collaboration.lock.redisUri）创建。
+    // classpath 无 spring-data-redis 时不装配（db 形态召回回退应用层打分）。
+
+    @Configuration
+    @ConditionalOnClass(RedisConnectionFactory.class)
+    public static class RedisSearchConfiguration {
+
+        @Bean
+        @ConditionalOnMissingBean(RedisSearchTemplate.class)
+        public RedisSearchTemplate redisSearchTemplate(
+                ObjectProvider<RedisConnectionFactory> factoryProvider, AgentProperties properties) {
+            RedisConnectionFactory factory = factoryProvider.getIfAvailable(() -> fallbackFactory(properties));
+            StringRedisTemplate template = new StringRedisTemplate(factory);
+            template.afterPropertiesSet();
+            return new RedisSearchTemplate(template, properties.getRedis().getIndexPrefix());
+        }
+
+        private RedisConnectionFactory fallbackFactory(AgentProperties properties) {
+            RedisStandaloneConfiguration standalone = new RedisStandaloneConfiguration();
+            RedisURI uri = RedisURI.create(properties.getCollaboration().getLock().getRedisUri());
+            standalone.setHostName(uri.getHost());
+            standalone.setPort(uri.getPort());
+            if (uri.getPassword() != null) {
+                standalone.setPassword(uri.getPassword());
+            }
+            if (uri.getDatabase() != 0) {
+                standalone.setDatabase(uri.getDatabase());
+            }
+            LettuceConnectionFactory factory = new LettuceConnectionFactory(standalone);
+            factory.afterPropertiesSet();
+            return factory;
         }
     }
 

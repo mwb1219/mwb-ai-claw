@@ -161,6 +161,11 @@ public class AgentProperties {
      */
     private CollaborationConfig collaboration = new CollaborationConfig();
 
+    /**
+     * Redis 检索索引配置（agent.redis.*，db 形态下 Memory / RAG 召回共用；连接参数复用 spring.data.redis.*）
+     */
+    private RedisConfig redis = new RedisConfig();
+
     @Data
     public static class ToolSecurityConfig {
         /** 是否启用安全沙箱 */
@@ -333,8 +338,17 @@ public class AgentProperties {
      */
     @Data
     public static class StorageConfig {
-        /** 存储后端：file（本地文件，默认）| db（JDBC 持久化） */
+        /** 存储后端：file（本地文件，默认，即 local 形态）| db（MySQL 存储 + Redis 召回） */
         private String type = "file";
+    }
+
+    /**
+     * Redis 检索索引配置（agent.redis.*）
+     */
+    @Data
+    public static class RedisConfig {
+        /** 索引 key 前缀（多租户 / 多环境共享 Redis 时隔离命名空间，默认 claw） */
+        private String indexPrefix = "claw";
     }
 
     /**

@@ -11,14 +11,14 @@ public class RagConfig {
     /** 总开关，默认关闭以保持现有 Agent 行为。 */
     private boolean enabled = false;
 
-    /** 索引实现类型，内置 local / pgvector。 */
-    private String provider = "local";
+    /**
+     * 索引实现类型：auto（默认，跟随 agent.storage.type：file→local，db→redis）| redis（显式声明 db 召回）。
+     * 其它值不匹配内置装配，由业务方自定义 RagIndexStore 扩展实现。
+     */
+    private String provider = "auto";
 
-    /** 本地索引实现配置。 */
+    /** 本地索引实现配置（file = local 形态）。 */
     private LocalConfig local = new LocalConfig();
-
-    /** PGVector 索引实现配置（provider=pgvector 时生效）。 */
-    private PgVectorConfig pgvector = new PgVectorConfig();
 
     /** 知识库 API 层访问控制（可选，默认关闭，不改变全局共享检索语义）。 */
     private AccessConfig access = new AccessConfig();
@@ -42,18 +42,6 @@ public class RagConfig {
     public static class LocalConfig {
         /** 默认 {@code ${user.dir}/.agent/rag}。 */
         private String dir = "";
-    }
-
-    @Data
-    public static class PgVectorConfig {
-        /** 索引表名。 */
-        private String table = "rag_index_entries";
-        /** 表所在 schema。 */
-        private String schema = "public";
-        /** 向量索引类型：ivfflat（默认，创建快）| hnsw（召回更准，写入更重）。 */
-        private String indexType = "ivfflat";
-        /** 相似度算子：vector_cosine_ops（默认）| vector_l2_ops | vector_ip_ops。 */
-        private String similarity = "vector_cosine_ops";
     }
 
     @Data

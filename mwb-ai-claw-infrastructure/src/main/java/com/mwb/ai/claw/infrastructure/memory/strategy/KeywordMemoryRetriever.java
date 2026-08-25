@@ -3,6 +3,7 @@ package com.mwb.ai.claw.infrastructure.memory.strategy;
 import com.mwb.ai.claw.domain.memory.model.MemoryPage;
 import com.mwb.ai.claw.domain.memory.retrieve.MemoryRetriever;
 import com.mwb.ai.claw.domain.memory.store.MemoryPageStore;
+import com.mwb.ai.claw.domain.memory.store.MemorySearchable;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,6 +20,10 @@ import java.util.Set;
  * <p>
  * 简化 BM25：分词（英文按空格 / 中文按字符 bigram）→ 命中计数加权（标题/内容匹配加分）。
  * 候选范围跨会话（多 Agent 共享）：facts.jsonl + 全部会话摘要 + 全部会话归档。
+ * <p>
+ * 候选获取随存储后端联动：存储实现 {@link MemorySearchable}（db 模式，SQL 下推）时
+ * 优先走数据库关键词检索（避免整库加载），否则（file 模式）回退全量加载 + 内存打分，
+ * 保证 {@code agent.storage.type=file} 行为不变。
  */
 @Component
 public class KeywordMemoryRetriever implements MemoryRetriever {
@@ -40,7 +45,32 @@ public class KeywordMemoryRetriever implements MemoryRetriever {
         if (terms.isEmpty()) {
             return new ArrayList<>();
         }
+        if (pageStore instanceof MemorySearchable) {
+            return searchWithPushdown(scope, terms, topK);
+        }
+        return searchWithInMemoryScore(scope, terms, topK);
+    }
 
+    /** db 模式：SQL 下推（事实页 + 记忆页各自按权重排序，合并后截断 topK） */
+    private List<MemoryPage> searchWithPushdown(AgentScope scope, Set<String> terms, int topK) {
+        MemorySearchable searchable = (MemorySearchable) pageStore;
+        List<String> termList = new ArrayList<>(terms);
+        List<MemoryPage> hits = new ArrayList<>();
+        hits.addAll(searchable.searchFacts(scope, termList, topK));
+        hits.addAll(searchable.searchPages(scope, termList, topK));
+        if (hits.size() > topK) {
+            hits = new ArrayList<>(hits.subList(0, topK));
+        }
+        log.debug("记忆检索(SQL 下推) '{}' 命中 {} 条", queryOf(terms), hits.size());
+        return hits;
+    }
+
+    private String queryOf(Set<String> terms) {
+        return String.join(" ", terms);
+    }
+
+    /** file 模式：全量加载 + 内存打分（原有逻辑） */
+    private List<MemoryPage> searchWithInMemoryScore(AgentScope scope, Set<String> terms, int topK) {
         List<MemoryPage> candidates = new ArrayList<>();
         candidates.addAll(pageStore.loadFacts(scope));
         candidates.addAll(pageStore.listAllSummaries(scope));
@@ -59,7 +89,7 @@ public class KeywordMemoryRetriever implements MemoryRetriever {
         for (int i = 0; i < Math.min(topK, scored.size()); i++) {
             result.add(scored.get(i).page);
         }
-        log.debug("记忆检索 '{}' 命中 {} 条", query, result.size());
+        log.debug("记忆检索 '{}' 命中 {} 条", queryOf(terms), result.size());
         return result;
     }
 

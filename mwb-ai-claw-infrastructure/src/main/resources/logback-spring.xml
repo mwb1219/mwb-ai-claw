@@ -4,7 +4,8 @@
     <include resource="org/springframework/boot/logging/logback/defaults.xml" />
 
     <property name="APP_NAME" value="mwb-ai-claw" />
-    <property name="LOG_PATH" value="${user.home}/${APP_NAME}/logs" />
+    <!-- 日志目录支持外部覆盖（CLAW_LOG_PATH），默认 ${user.home}/${APP_NAME}/logs -->
+    <property name="LOG_PATH" value="${CLAW_LOG_PATH:-${user.home}/${APP_NAME}/logs}" />
     <property name="LOG_FILE" value="${LOG_PATH}/application.log" />
 
     <appender name="APPLICATION"

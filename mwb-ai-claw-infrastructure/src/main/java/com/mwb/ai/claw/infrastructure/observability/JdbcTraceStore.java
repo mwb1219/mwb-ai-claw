@@ -17,7 +17,7 @@ import com.mwb.ai.claw.domain.scope.AgentScope;
 /**
  * JDBC 版步骤级 trace 存储（{@code agent.observability.trace.store=db}）：落库到 {@code claw_trace} 表。
  * <p>
- * 表结构（MySQL 见启动模块 schema.sql，PostgreSQL 见 example-web initdb 01-pgvector.sql）：
+ * 表结构（MySQL 见 start/src/main/resources/schema.sql 或 example-web/db/mysql/framework-schema.sql）：
  * 每次运行写入一行 {@code step_type='__run__'} 的 run 标识行 + 每步一行明细，
  * 按 traceId 查询时以 {@code step_index} 还原步骤链路。表依赖 SQL 脚本建好（与记忆四表一致，不在代码建表）。
  */
