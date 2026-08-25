@@ -27,7 +27,7 @@ import com.mwb.ai.claw.domain.rag.write.RagIngestionService;
  * 示例知识库种子数据（仅 {@code agent.rag.enabled=true} 时装配）。
  *
  * <p>启动时自动创建两个知识库并摄入 Markdown / PDF / Word 三种格式示例文档，
- * 用于演示 T4 RAG 生产化能力：多格式解析（PDFBox / POI）、PGVector 向量库写入、
+ * 用于演示 T4 RAG 生产化能力：多格式解析（PDFBox / POI）、Redis Stack 召回索引写入、
  * 容量配额与幂等（同名文档已存在则跳过）。
  *
  * <p>依赖 Embedding 接口可用；不可用时打印警告但不阻断启动，可配置

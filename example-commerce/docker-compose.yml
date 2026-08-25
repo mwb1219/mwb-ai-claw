@@ -1,0 +1,81 @@
+# ============================================================
+# example-commerce 一键完整构建：后端应用 + 前端控制台
+#   - example-commerce：后端服务（独立工程，独立版本号），镜像由本目录源码构建（框架依赖
+#     mwb-ai-claw-spring-boot-starter:1.0.3-SNAPSHOT，经 additional_contexts 注入宿主机 ~/.m2 框架制品）
+#   - example-commerce-frontend：前端控制台（React + Vite），Nginx 静态托管 + API 反代到后端
+#
+# 本示例零中间件依赖：H2 内存库（agent.storage.type 默认 file）+ RAG local 检索，
+# 无需 MySQL / Redis 服务；如需 MySQL 持久化可参考 example-web/docker-compose.yml 补充中间件。
+#
+# 端口约定：后端宿主 8081（容器内 8080）—— 与 example-web（8080）并存部署不冲突；
+# 前端宿主 5174（Nginx 80）—— 与 example-web-frontend（5173）并存部署不冲突。
+#
+# 用法（在 example-commerce 目录下执行）：
+#   1. cp src/main/resources/.env.example .env   # 填入 DEFAULT_API_KEY（启用 RAG 另需 RAG_EMBEDDING_*）
+#   2. docker compose up -d --build              # 首次构建应用/前端镜像并启动全部服务
+#   3. docker compose ps                         # example-commerce / example-commerce-frontend 均 healthy
+#   4. 浏览器访问 http://localhost:5174           # 前端控制台（API 经 Nginx 反代到后端 8081/8080）
+#
+# 说明：
+#   - 后端镜像构建上下文 = 本目录（example-commerce 独立工程）；框架依赖 mwb-ai-claw-spring-boot-starter
+#     为 SNAPSHOT，经 additional_contexts(host-m2) 注入宿主机 ~/.m2 的框架制品（仓库根目录执行
+#     mvn install 后 ~/.m2 中即包含），无需在容器内联编框架
+#   - 前端镜像构建上下文 = ../example-commerce-frontend：npm ci → vite build → Nginx（静态 + 反代）
+#   - Dockerfile 构建时会复制 .env（容器版）与 src/main/resources 下的 agents.json、orchestrations.json
+#     到镜像 /app，实例启动后按「运行目录优先」加载（ConfigFileLocator / DotenvEnvironmentPostProcessor）
+#   - .env 缺失时容器使用 application.yml 内置默认值（DEFAULT_API_KEY 为空则 LLM 调用不可用，请务必配置）
+#   - env_file 的 required:false 需 Docker Compose v2.24+；老版本可去掉该字段（.env 必需存在）
+# ============================================================
+name: example-commerce
+
+services:
+  # ===== 应用：example-commerce（Dockerfile 多阶段构建，端口 8080） =====
+  example-commerce:
+    build:
+      # example-commerce 为独立工程：构建上下文 = 本目录；框架 SNAPSHOT 依赖经 additional_contexts(host-m2)
+      # 注入宿主机 ~/.m2 的框架制品（构建前需在仓库根目录执行 mvn install 保证 SNAPSHOT 最新）
+      context: .
+      dockerfile: Dockerfile
+      additional_contexts:
+        host-m2: ${HOME}/.m2
+    image: example-commerce:latest
+    container_name: example-commerce
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # 本示例默认零中间件：H2 内存 + file 存储 + RAG local（显式声明，避免全局配置干扰）
+      STORAGE_TYPE: file
+      # RAG 本地检索（不依赖 Redis/向量库）
+      RAG_PROVIDER: local
+    ports:
+      # 宿主 8081（避免与 example-web 的 8080 冲突）；容器内 8080，nginx 反代经服务名访问不受影响
+      - "8081:8080"
+    volumes:
+      - example_commerce_agent:/app/.agent   # 长期记忆（AGENT.md / MEMORY.md）
+      - example_commerce_logs:/app/logs      # 运行日志
+    healthcheck:
+      # TCP 探测 8080（eclipse-temurin 镜像无 curl/wget，用 bash /dev/tcp）
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    restart: unless-stopped
+
+  # ===== 前端控制台：example-commerce-frontend（React + Vite → Nginx，端口 5174） =====
+  example-commerce-frontend:
+    build:
+      context: ../example-commerce-frontend
+    image: example-commerce-frontend:latest
+    container_name: example-commerce-frontend
+    depends_on:
+      example-commerce:
+        condition: service_healthy
+    ports:
+      - "5174:80"
+    restart: unless-stopped
+
+volumes:
+  example_commerce_agent:
+  example_commerce_logs:

@@ -1,21 +1,34 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
+
+    <!-- ============================================================
+         example-web 独立工程：不随 mwb-ai-claw 仓库 reactor 构建，单独管理版本号。
+         框架依赖 mwb-ai-claw-spring-boot-starter 为本地 SNAPSHOT：
+           - 本地运行：仓库根目录执行 mvn install 后，从宿主机 ~/.m2 解析；
+           - Docker 构建：docker compose 经 additional_contexts(host-m2) 注入宿主机 ~/.m2 的框架制品。
+         ============================================================ -->
     <parent>
-        <groupId>io.github.mwb1219</groupId>
-        <artifactId>mwb-ai-claw-parent</artifactId>
-        <version>${revision}</version>
-        <relativePath>../pom.xml</relativePath>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>2.7.2</version>
+        <relativePath/>
     </parent>
 
+    <groupId>io.github.mwb1219</groupId>
     <artifactId>example-web</artifactId>
+    <version>1.0.0</version>
     <packaging>jar</packaging>
     <name>example-web</name>
-    <description>Web 服务端示例：演示 mwb-ai-claw Spring Boot Starter 的 REST / SSE / WebSocket 接入方式</description>
+    <description>Web 服务端示例（独立工程）：演示 mwb-ai-claw Spring Boot Starter 的 REST / SSE / WebSocket 接入方式</description>
 
     <properties>
-        <!-- 示例工程不发布到 Maven 仓库 -->
-        <maven.deploy.skip>true</maven.deploy.skip>
+        <java.version>1.8</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- 框架版本：跟随仓库当前 SNAPSHOT；正式发布后建议固定为已发布版本（如 1.0.1）以便脱离本地仓库独立构建 -->
+        <mwb-ai-claw.version>1.0.3-SNAPSHOT</mwb-ai-claw.version>
+        <!-- 覆盖 Lombok 版本以兼容 JDK 21 及新版语言服务器编译器（1.18.30 会触发 lombok.javac.Javac 初始化失败） -->
+        <lombok.version>1.18.46</lombok.version>
     </properties>
 
     <dependencies>
@@ -23,6 +36,7 @@
         <dependency>
             <groupId>io.github.mwb1219</groupId>
             <artifactId>mwb-ai-claw-spring-boot-starter</artifactId>
+            <version>${mwb-ai-claw.version}</version>
         </dependency>
 
         <!-- Web 服务端容器（spring.profiles.active=web 默认激活） -->
@@ -40,20 +54,14 @@
             <artifactId>h2</artifactId>
             <scope>runtime</scope>
         </dependency>
-        <!-- 生产 MySQL：切换 DB_DRIVER=com.mysql.cj.jdbc.Driver 即用（见 application.yml） -->
+        <!-- 生产 MySQL：DB_DRIVER=com.mysql.cj.jdbc.Driver（见 application.yml） -->
         <dependency>
             <groupId>mysql</groupId>
             <artifactId>mysql-connector-java</artifactId>
             <scope>runtime</scope>
         </dependency>
-        <!-- PostgreSQL 驱动（RAG provider=pgvector 向量库 / 存储 db 后端；版本由 spring-boot-dependencies BOM 管理） -->
-        <dependency>
-            <groupId>org.postgresql</groupId>
-            <artifactId>postgresql</artifactId>
-            <scope>runtime</scope>
-        </dependency>
-        <!-- Redis 分布式会话锁（agent.collaboration.lock.type=redis，多实例部署；infra 中为 optional 需在此显式引入，
-             RedisLockConfiguration 由 @ConditionalOnClass 保护，未配置 type=redis 时不启用） -->
+        <!-- Redis：召回索引（RediSearch）+ 分布式会话锁（agent.collaboration.lock.type=redis）；infra 中为 optional 需在此显式引入，
+             相关配置由 @ConditionalOnClass 保护，未配置 storage.type=db / lock.type=redis 时不启用 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
@@ -69,6 +77,11 @@
             <groupId>org.apache.poi</groupId>
             <artifactId>poi-ooxml</artifactId>
             <version>5.2.5</version>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

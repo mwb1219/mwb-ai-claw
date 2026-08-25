@@ -22,21 +22,50 @@
 
 ## 2. Quick Start
 
+### 2.1 Local run
+
 ```bash
 # 1. Copy .env and fill in the keys (DEFAULT_API_KEY, optional RAG_EMBEDDING_*)
-cp example-commerce/src/main/resources/.env.example example-commerce/.env
+cp src/main/resources/.env.example .env
 
 # 2. Start (web mode by default, port 8080)
-# Do it in two steps: first install the dependency modules to the local repo, then run example-commerce alone.
-# Note: do NOT use a single `mvn -pl example-commerce -am spring-boot:run`.
-#   `-am` pulls the parent POM and dependency modules into the reactor, and `spring-boot:run` applies to
-#   every module — the parent has no main class, so it fails with `Unable to find a suitable main class`.
+# Do it in two steps: first install the dependency modules to the local repo, then run example-commerce alone
+# (it is now an independent project and is not built as part of the repo reactor).
 mvn -pl example-commerce -am install -DskipTests   # 1) compile & install dependency modules
 mvn -pl example-commerce spring-boot:run           # 2) run example-commerce alone
-# or build a jar: mvn -pl example-commerce -am package -DskipTests && java -jar example-commerce/target/example-commerce-*.jar
+# or build a jar: java -jar example-commerce/target/example-commerce-*.jar
 ```
 
+### 2.2 One-click Docker build (recommended)
+
+`docker-compose.yml` and `Dockerfile` live in the `example-commerce` directory; they build and start the
+backend and frontend in one shot:
+
+```bash
+# 1. Copy .env and fill in the keys (DEFAULT_API_KEY, optional RAG_EMBEDDING_*)
+cp src/main/resources/.env.example .env
+
+# 2. Build and start (run inside the example-commerce directory)
+# Prerequisite: run mvn install in the repo root first (framework SNAPSHOT is injected from host ~/.m2 via host-m2)
+docker compose up -d --build
+
+# 3. Verify
+docker compose ps        # example-commerce / example-commerce-frontend both healthy
+
+# 4. Access
+# Frontend console: http://localhost:5174 (API proxied to the backend by Nginx)
+# Backend REST:    http://localhost:8081 (host port; container port is 8080, coexists with example-web's 8080)
+```
+
+> Note: this example has zero middleware dependencies (in-memory H2 + file storage + local RAG), so MySQL / Redis
+> are not needed. The Dockerfile copies `.env` (container-flavored) and `agents.json` / `orchestrations.json`
+> into `/app` in the image; they are loaded with "run-directory-first" priority at startup
+> (ConfigFileLocator / DotenvEnvironmentPostProcessor).
+
 ## 3. Try It (REST / SSE)
+
+> Port note: the examples below use the local port `8080`; under Docker the host port is `8081`
+> (container port is still 8080), just replace it.
 
 Auth is enabled; use store keys to separate tenants (multi-store isolation):
 

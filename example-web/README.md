@@ -2,7 +2,7 @@
 
 > mwb-ai-claw 的「Web 控制台」示例：一个基于 Spring Boot Starter 的前后端分离工程，演示
 > REST / SSE 对话、分层记忆可视化、独立 RAG 知识库管理，并重点展示**生产化能力**——包括
-> 分布式会话锁、向量库知识库（pgvector / 多格式解析 / 访问控制 / 容量配额）与记忆持久化落库。
+> 分布式会话锁、Redis Stack 召回知识库（向量 + 全文 / 多格式解析 / 访问控制 / 容量配额）与记忆持久化落库。
 >
 > 🌐 English version: [README.en.md](README.en.md)
 
@@ -12,61 +12,64 @@
 | --- | --- | --- |
 | 分布式会话锁（多实例共享） | `SessionLockManager` SPI：`LocalSessionLockManager`（JVM 内 ReentrantLock）/ `RedisSessionLockManager`（`SET NX PX` + Lua 原子释放） | `agent.collaboration.lock.type=redis`；[docker-compose.yml](docker-compose.yml) 起 Redis |
 | Redis 作为可选用例 | infra 中 redis 依赖为 `optional`，由 `@ConditionalOnClass` 门控 | [pom.xml](pom.xml) 显式引入 `spring-boot-starter-data-redis` |
-| 向量库适配（可切换） | `RagIndexStore` SPI：`LocalRagIndexStore`（本地文件）/ `PgVectorRagIndexStore`（PostgreSQL+pgvector） | `agent.rag.provider=pgvector`；[docker-compose.yml](docker-compose.yml) 起 pgvector（initdb 自动 `CREATE EXTENSION vector`） |
+| 向量库适配（可切换） | `RagIndexStore` SPI：`LocalRagIndexStore`（本地文件，`auto+file`）/ `RedisRagIndexStore`（MySQL 存文本 + Redis Stack 召回，`auto+db` 或显式 `redis`） | `agent.rag.provider=auto` + `STORAGE_TYPE=db`；[docker-compose.yml](docker-compose.yml) 起 mysql + redis-stack-server（initdb 自动建表） |
 | 多格式文档解析 | `RagDocumentParser` SPI（组合器按 classpath 探测） | [pom.xml](pom.xml) 引入 PDFBox / POI-XWPF；上传支持 `.md/.txt/.pdf/.docx` |
 | 知识库 API 级鉴权 | `RagAccessPolicy` SPI（`agent.rag.access.enabled=true` 时生效） | `rag/ExampleRagAccessPolicy`：READ 全局共享、写/删按 `{tenant}-` 前缀 + `admin` 超级用户 |
 | 容量与配额 | `agent.rag.capacity.*` | [application.yml](src/main/resources/application.yml) 示例值 |
 | 扩展点（替换 / 增强） | `RagChunker` / `RagReranker`（`@ConditionalOnMissingBean`） | `rag/ExampleRagChunker`（装饰默认切分，元数据打标）、`rag/ExampleRagReranker`（重排截取） |
 | 启动即摄入示例文档 | `ApplicationRunner` | `rag/ExampleRagSeedInitializer`：MD / PDF / Word 三格式幂等摄入 |
-| 记忆持久化落库 | `agent.storage.type`：`file`（本地文件）/ `db`（JDBC 存储）切换；`db` 装配 `JdbcMemoryPageStore` / `JdbcSessionGateway` / `JdbcLongTermMemoryGateway` | `STORAGE_TYPE=db`，会话 / 事实 / 记忆页 / 长期记忆四表建在 pgvector 库 |
+| 记忆持久化落库 | `agent.storage.type`：`file`（本地文件，默认）/ `db`（MySQL 权威存储 + Redis Stack 召回）切换；`db` 装配 `JdbcMemoryPageStore`（双写 Redis 索引）/ `RedisMemorySearchable` / `JdbcSessionGateway` / `JdbcLongTermMemoryGateway` | `STORAGE_TYPE=db`，会话 / 事实 / 记忆页 / 长期记忆落 MySQL，关键词与向量召回走 Redis |
 
 ## 2. 依赖中间件（Docker）
 
-本示例的向量知识库（pgvector）与分布式会话锁（Redis）依赖 PostgreSQL 与 Redis，用 Docker 一键拉起：
+本示例的存储 / 召回（MySQL + Redis Stack）与分布式会话锁（Redis）用 Docker 一键拉起：
 
 ```bash
 cd example-web
 docker compose up -d
-docker compose ps   # 两个容器均 healthy 即可
+docker compose ps   # mysql / redis 两个中间件容器均 healthy 即可
 ```
 
-- **pgvector**（`localhost:5432`，库/账号/密码默认 `claw/claw/clawdb`）
-  - 首次初始化通过 [docker/initdb/01-pgvector.sql](docker/initdb/01-pgvector.sql) 自动执行
-    `CREATE EXTENSION IF NOT EXISTS vector`，并创建接入方用户表 `claw_user` 与**记忆存储四表**
-    `claw_session` / `claw_fact` / `claw_memory_page` / `claw_long_term`（PostgreSQL 版，与
-    `example.web` 用户体系及 `agent.storage.type=db` 对应）。
-  - 若已存在数据卷而扩展开启过旧镜像导致 `type "vector" does not exist`，手动执行一次：
-    `docker exec example-web-pgvector psql -U claw -d clawdb -c "CREATE EXTENSION IF NOT EXISTS vector;"`
-- **redis**（`localhost:6379`）用于 `agent.collaboration.lock.type=redis`。
+- **mysql**（`localhost:3306`，库/账号/密码默认 `clawdb/claw/claw`）
+  - 首次初始化自动执行 [db/mysql/framework-schema.sql](db/mysql/framework-schema.sql)（框架表：
+    会话 / 事实 / 记忆页 / 长期记忆、RAG 文档与索引条目文本、可观测性 `claw_trace` / `claw_run_usage`）
+    与 [db/mysql/example-web-schema.sql](db/mysql/example-web-schema.sql)（接入方用户表 `claw_user`）。
+  - `agent.storage.type=db` 时作为**权威存储**（记忆 / 知识库文本落库），召回不查库、只走 Redis 索引。
+- **redis**（`localhost:6379`）使用 `redis/redis-stack-server` 镜像，内置 **RediSearch**：
+  - `agent.storage.type=db` 时承载记忆与 RAG 的**召回索引**（全文倒排 + 向量 KNN），MySQL 写入成功后双写；
+  - 同时用于 `agent.collaboration.lock.type=redis` 分布式会话锁。
 
-> 无 Docker 的最小演示：可将 `RAG_PROVIDER=local`（本地文件向量索引）且 `LOCK_TYPE=local`（JVM 内锁），
-> 此时无需任何中间件；但要体验 pgvector 向量召回 / 分布式会话锁仍需 PostgreSQL + Redis。
+> 无 Docker 的最小演示：默认 `STORAGE_TYPE=file`（本地文件）且 `LOCK_TYPE=local`（JVM 内锁）、
+> `RAG_PROVIDER=auto`（跟随存储 → `local` 本地索引），此时无需任何中间件即可跑通对话与本地 RAG；
+> 要体验 MySQL 持久化 / Redis Stack 召回 / 分布式会话锁再启动 Docker。
 
 ## 3. 快速开始
 
 ```bash
 # 1. 复制 .env 并填入真实密钥（至少 DEFAULT_API_KEY；启用 RAG 写入/检索还需 RAG_EMBEDDING_*）
-cp example-web/src/main/resources/.env.example example-web/.env
+cp src/main/resources/.env.example .env
 
-# 2. 启动（分两步：先编译安装依赖模块到本地仓库，再单独运行 example-web）
-# 不要用 `mvn -pl example-web -am spring-boot:run` 一步到位——
-#   `-am` 会把父 POM 等依赖模块纳入反应堆且 `spring-boot:run` 应用到每个模块，父模块无 main class 会报错。
-mvn -pl example-web -am install -DskipTests   # 1) 编译并安装依赖模块
-mvn -pl example-web spring-boot:run           # 2) 启动 example-web（端口 8080）
+# 2. 构建并启动（example-web 为独立工程，独立版本号，不随仓库 reactor 构建）
+#    框架依赖 mwb-ai-claw-spring-boot-starter:1.0.3-SNAPSHOT：先在仓库根目录 mvn install（保证 ~/.m2 最新）
+mvn clean package -DskipTests   # 1) 本地编译打包（依赖 ~/.m2 中的框架 SNAPSHOT）
+mvn spring-boot:run             # 2) 启动 example-web（端口 8080）
 ```
 
-> 若本机 `~/.mwb-ai-claw/logs` 目录不可写导致启动失败（logback `Operation not permitted`），
-> 可覆盖日志目录：`CLAW_LOG_PATH=<可写目录> mvn -pl example-web spring-boot:run`
+> 容器化一键构建（后端 + 前端 + 中间件）：`docker compose up -d --build`（见 [docker-compose.yml](docker-compose.yml)）。
 
-### 关键环境变量（见 example-web/.env）
+> 若本机 `~/.mwb-ai-claw/logs` 目录不可写导致启动失败（logback `Operation not permitted`），
+> 可覆盖日志目录：`CLAW_LOG_PATH=<可写目录> mvn spring-boot:run`
+
+### 关键环境变量（见本目录 .env）
 
 | 变量 | 默认 | 说明 |
 | --- | --- | --- |
-| `DB_URL` | `jdbc:postgresql://localhost:5432/clawdb` | 数据源：RAG 向量库 + 记忆落库（`STORAGE_TYPE=db`）共用 |
-| `STORAGE_TYPE` | `db` | 记忆存储后端：`db`（会话/事实/记忆页/长期记忆落 PostgreSQL）\| `file`（本地文件，零依赖） |
+| `DB_URL` | `jdbc:mysql://localhost:3306/clawdb` | MySQL 数据源：记忆落库 + RAG 文档/索引条目文本（`STORAGE_TYPE=db` 时生效） |
+| `STORAGE_TYPE` | `file` | 存储形态：`db`（MySQL 权威存储 + Redis Stack 召回）\| `file`（本地文件，零依赖） |
+| `RAG_PROVIDER` | `auto` | RAG 索引实现：`auto`（跟随存储：file→local、db→redis）\| `redis`（显式声明） |
+| `REDIS_INDEX_PREFIX` | `claw` | Redis 召回索引 key 前缀（多环境/多租户共享 Redis 时隔离命名空间） |
 | `LOCK_TYPE` | `redis` | 分布式会话锁渠道；无 Redis 可 `local` |
-| `REDIS_URI` | `redis://localhost:6379` | Redis 地址 |
-| `RAG_PROVIDER` | `pgvector` | 向量索引实现；`local` 零依赖 |
+| `REDIS_URI` | `redis://localhost:6379` | Redis 地址（召回索引 + 分布式锁；`agent.redis` 连接复用 `spring.data.redis.*`，未配置时以本值兜底） |
 | `RAG_EMBEDDING_MODEL/BASE_URL/API_KEY` | 空 | 独立 RAG 的 Embedding（OpenAI 兼容 `/embeddings`） |
 | `BOOTSTRAP_API_KEY` | `sk-admin-bootstrap` | 引导管理员 Key（tenant=admin，超级用户，可管理 `admin-*` 种子库） |
 
@@ -78,7 +81,7 @@ mvn -pl example-web spring-boot:run           # 2) 启动 example-web（端口 8
 [example-web] 种子文档摄入成功: admin-operations-manual / 运营规范.docx
 ```
 
-即表明多格式解析 + pgvector 写入 + 种子库初始化成功。
+即表明多格式解析 + Redis Stack 索引写入 + 种子库初始化成功。
 
 ## 4. 前端控制台
 
@@ -111,7 +114,7 @@ npm run build      # 生产构建 → dist/
 
 ![知识库管理](screenshots/02-rag.jpg)
 
-**③ 检索调试（`#/rag`）**：输入「产品支持哪些部署方式」并检索，返回 PGVector 向量召回命中，带上
+**③ 检索调试（`#/rag`）**：输入「产品支持哪些部署方式」并检索，返回 Redis Stack 向量召回命中，带上
 自定义切分器元数据 `extension=example-web-custom-chunker`，以及 score / 来源文档 / chunk。
 
 ![知识库检索](screenshots/03-rag-search.jpg)
@@ -182,8 +185,9 @@ curl http://localhost:8080/trace/<traceId> -H "X-API-Key: sk-admin-bootstrap"
   体现数据隔离下的 API 层访问控制。
 - RAG 与记忆系统**完全隔离**（独立领域模型 / 存储 / Embedding 配置 / 检索链路），`agent.rag.enabled=false` 时
   RAG Bean 与 `/rag` 接口均不装配，行为与未接入 RAG 前一致。
-- 记忆存储默认 `STORAGE_TYPE=db`：会话 / 长期记忆 / 记忆页 / 事实全部落库到同一 PostgreSQL（pgvector）数据源，
-  `agent.storage.type=file` 时退回本地文件（零依赖）；两者可平滑切换。
-- 表结构：`claw_user` 与记忆四表（`claw_session` / `claw_fact` / `claw_memory_page` / `claw_long_term`）的 MySQL 原版见
-  [schema.sql](src/main/resources/schema.sql)，PostgreSQL 版由 [docker/initdb/01-pgvector.sql](docker/initdb/01-pgvector.sql)
-  首次初始化时一并创建。
+- 记忆存储默认 `STORAGE_TYPE=file`（本地文件，零依赖）；切 `db` 后会话 / 长期记忆 / 记忆页 / 事实全部落
+  MySQL，关键词与向量召回由 Redis Stack（RediSearch）索引承担（MySQL 写成功后双写，索引可重建）；两者可平滑切换。
+- 表结构：`claw_user` 与框架表（`claw_session` / `claw_fact` / `claw_memory_page` / `claw_long_term`、
+  `claw_rag_document` / `rag_index_entries`、`claw_trace` / `claw_run_usage`）的 MySQL 版见
+  [db/mysql/framework-schema.sql](db/mysql/framework-schema.sql) 与 [db/mysql/example-web-schema.sql](db/mysql/example-web-schema.sql)，
+  由 MySQL 容器首次初始化时自动执行。

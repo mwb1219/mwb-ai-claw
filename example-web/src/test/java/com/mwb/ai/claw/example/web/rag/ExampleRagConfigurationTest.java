@@ -23,10 +23,21 @@ import com.mwb.ai.claw.example.web.WebApplication;
  * </ul>
  */
 @SpringBootTest(classes = WebApplication.class, properties = {
+        // RAG 装配验证（本用例只断言 Bean 类型，不依赖 Embedding 服务可用）
         "agent.rag.enabled=true",
         "agent.rag.embedding.model=text-embedding-3-small",
         "agent.rag.embedding.base-url=https://api.openai.com/v1",
-        "agent.rag.embedding.api-key=test"
+        "agent.rag.embedding.api-key=test",
+        // 无中间件可跑：存储用 file（local）形态，数据源兜底 H2（MySQL 兼容模式），锁/观测用本地实现
+        "agent.storage.type=file",
+        "spring.datasource.url=jdbc:h2:mem:clawdb;MODE=MySQL;DB_CLOSE_DELAY=-1",
+        "spring.datasource.driver-class-name=org.h2.Driver",
+        "spring.datasource.username=sa",
+        "spring.datasource.password=",
+        "spring.sql.init.mode=never",
+        "agent.collaboration.lock.type=local",
+        "agent.observability.run-usage-store=local",
+        "agent.observability.trace.store=local"
 })
 class ExampleRagConfigurationTest {
 

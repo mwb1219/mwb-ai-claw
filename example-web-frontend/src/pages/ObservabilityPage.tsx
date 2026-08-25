@@ -252,7 +252,7 @@ export function ObservabilityPage() {
               <code>agent.observability.run-usage-store</code> 切换 <code>local</code>
               （JSONL 文件，零依赖）或 <code>db</code>（落{' '}
               <code>claw_run_usage</code> 表，与会话/记忆/RAG 同库，多实例共享，生产推荐）。
-              本示例默认 <code>db</code>（PostgreSQL）。
+              本示例默认 <code>db</code>（MySQL）。
             </p>
           </div>
           <div className="ext-item">

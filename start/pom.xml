@@ -37,7 +37,7 @@
             <artifactId>logstash-logback-encoder</artifactId>
             <version>7.2</version>
         </dependency>
-        <!-- JDBC 存储（agent.storage.type=jdbc）：嵌入式 H2（联调用，MySQL 兼容模式）+ 生产 MySQL 驱动 -->
+        <!-- 数据库存储（agent.storage.type=db）：嵌入式 H2（联调用，MySQL 兼容模式）+ 生产 MySQL 驱动 -->
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
@@ -48,6 +48,12 @@
             <groupId>mysql</groupId>
             <artifactId>mysql-connector-java</artifactId>
             <scope>runtime</scope>
+        </dependency>
+        <!-- Redis（db 形态召回索引 + Redis 分布式锁）：框架依赖声明为 optional，
+             需使用方显式引入本依赖启用 spring-data-redis 自动装配与 Redis 连接 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

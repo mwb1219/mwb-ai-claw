@@ -1,32 +1,54 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
+
+    <!-- ============================================================
+         example-embed 独立工程：不随 mwb-ai-claw 仓库 reactor 构建，单独管理版本号。
+         框架依赖 mwb-ai-claw-app / mwb-ai-claw-domain 为本地 SNAPSHOT：
+           本地运行：仓库根目录执行 mvn install 后，从宿主机 ~/.m2 解析。
+         运行方式（嵌入式，无 Web 容器 / 端口）：
+           cd example-embed
+           cp .env.example .env   # 填入 DEFAULT_API_KEY
+           mvn exec:java -Dexec.mainClass=com.mwb.ai.claw.example.embed.EmbedDemo
+         ============================================================ -->
     <parent>
-        <groupId>io.github.mwb1219</groupId>
-        <artifactId>mwb-ai-claw-parent</artifactId>
-        <version>${revision}</version>
-        <relativePath>../pom.xml</relativePath>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>2.7.2</version>
+        <relativePath/>
     </parent>
 
+    <groupId>io.github.mwb1219</groupId>
     <artifactId>example-embed</artifactId>
+    <version>1.0.0</version>
     <packaging>jar</packaging>
     <name>example-embed</name>
     <description>客户端嵌入式示例：演示 ClawRuntime 在无 Web 容器的 JVM 应用中直接调用 Agent 能力</description>
 
     <properties>
-        <!-- 示例工程不发布到 Maven 仓库 -->
-        <maven.deploy.skip>true</maven.deploy.skip>
+        <java.version>1.8</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- 框架版本：跟随仓库当前 SNAPSHOT；正式发布后建议固定为已发布版本（如 1.0.1）以便脱离本地仓库独立构建 -->
+        <mwb-ai-claw.version>1.0.3-SNAPSHOT</mwb-ai-claw.version>
     </properties>
 
     <dependencies>
+        <!-- 应用门面：ClawRuntime（同时传递 mwb-ai-claw-client / mwb-ai-claw-infrastructure） -->
         <dependency>
             <groupId>io.github.mwb1219</groupId>
             <artifactId>mwb-ai-claw-app</artifactId>
+            <version>${mwb-ai-claw.version}</version>
         </dependency>
         <!-- 直接使用 domain 的流式回调类型（LlmStreamCallback / LlmResponse），显式声明 -->
         <dependency>
             <groupId>io.github.mwb1219</groupId>
             <artifactId>mwb-ai-claw-domain</artifactId>
+            <version>${mwb-ai-claw.version}</version>
+        </dependency>
+        <!-- EmbedDemo 直接使用 org.springframework.util.StringUtils -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-core</artifactId>
         </dependency>
     </dependencies>
 
@@ -35,6 +57,15 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
+            </plugin>
+            <!-- 嵌入式运行：mvn exec:java -Dexec.mainClass=com.mwb.ai.claw.example.embed.EmbedDemo -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.1.0</version>
+                <configuration>
+                    <mainClass>com.mwb.ai.claw.example.embed.EmbedDemo</mainClass>
+                </configuration>
             </plugin>
         </plugins>
     </build>

@@ -4,19 +4,19 @@
 spring:
   profiles:
     active: web
-  # ================= 数据源（RAG provider=pgvector 向量库 / agent.storage.type=db 时生效） =================
-  # 默认：PostgreSQL + pgvector（docker compose up -d 启动，见 example-web/docker-compose.yml）
-  #   - RAG 向量库：agent.rag.provider=pgvector 时按此数据源建表（需 CREATE EXTENSION IF NOT EXISTS vector;）
-  #   - 记忆存储：默认 STORAGE_TYPE=file（零依赖本地文件），切换 =db 时同样使用此数据源
+  # ================= 数据源（agent.storage.type=db 时生效） =================
+  # 默认：MySQL（docker compose up -d 启动，见 example-web/docker-compose.yml）
+  #   - 存储形态：记忆/会话/RAG 文档与索引条目文本落 MySQL；召回走 Redis Stack（RediSearch）
+  #   - 记忆存储：默认 STORAGE_TYPE=file（零依赖本地文件），切换 =db 时使用此数据源
   # 无 Docker 环境的最小演示：DB_URL=jdbc:h2:mem:clawdb;MODE=MySQL;DB_CLOSE_DELAY=-1 SQL_INIT_MODE=embedded
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/clawdb}
-    username: ${DB_USERNAME:claw}
-    password: ${DB_PASSWORD:claw}
-    driver-class-name: ${DB_DRIVER:org.postgresql.Driver}
+    url: ${DB_URL:jdbc:mysql://localhost:3306/clawdb?useSSL=false&serverTimezone=Asia/Shanghai}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
+    driver-class-name: ${DB_DRIVER:com.mysql.cj.jdbc.Driver}
   sql:
     init:
-      # embedded=仅嵌入式库执行（默认 H2）；never=关闭（PostgreSQL 建表由 pgvector 自动完成）
+      # embedded=仅嵌入式库执行（默认 H2）；never=关闭（MySQL 建表由 docker initdb 完成）
       mode: ${SQL_INIT_MODE:never}
       schema-locations: classpath:schema.sql
   # ================= 文件上传（RAG 知识库文档） =================
@@ -41,10 +41,14 @@ example:
 # ================= Agent 配置（OpenAI 兼容） =================
 # 前缀 agent，对应 AgentProperties
 agent:
-  # 存储后端：file（本地文件，默认，零依赖）| db（JDBC 持久化：会话/长期记忆/记忆页落库）
+  # 存储后端：file（本地文件，默认，零依赖）| db（MySQL 持久化 + Redis Stack 召回：会话/长期记忆/记忆页/知识库落库）
   # 配置 db 时需保证数据源可达（见顶部 spring.datasource 或 .env 中 DB_* 变量），否则启动即连库报错
   storage:
     type: ${STORAGE_TYPE:file}
+  # ===== Redis 检索索引（agent.redis.*，agent.storage.type=db 时使用 RediSearch 召回） =====
+  # 连接复用 spring.data.redis.*（与分布式会话锁同源，见 collaboration.lock.redis-uri 兜底）
+  redis:
+    index-prefix: ${REDIS_INDEX_PREFIX:claw}   # 索引 key 前缀（多环境/多租户共享 Redis 时隔离命名空间）
   # ===== 可观测性 =====
   # run-usage-store=local（默认，JSONL 文件）| db（落 claw_run_usage 表，与会话/记忆/RAG 同库，多实例共享，生产推荐）
   # trace store=local（默认，本地 JSON，零依赖）| db（落 claw_trace 表，生产推荐）
@@ -126,13 +130,11 @@ agent:
   # RAG 依赖 Embedding 接口可用，请配置下面的 RAG_EMBEDDING_* 环境变量（OpenAI 兼容 /embeddings）
   rag:
     enabled: true                  # 总开关（关闭后 RAG Bean 与 /rag 接口不装配，行为与未接入前一致）
-    provider: ${RAG_PROVIDER:pgvector}  # 索引实现：local（本地文件向量索引，零依赖）| pgvector（PostgreSQL 向量库，需 docker compose 启动 pgvector）
-    # ===== PGVector 向量库（provider=pgvector 时生效，T4 生产化能力） =====
-    pgvector:
-      table: rag_index_entries     # 索引表名（仅字母/数字/下划线/点，防注入）
-      schema: public               # 表所在 schema
-      index-type: ivfflat          # 向量索引：ivfflat（创建快）| hnsw（召回更准，写入更重）
-      similarity: vector_cosine_ops # 相似度算子：vector_cosine_ops | vector_l2_ops | vector_ip_ops
+    # 索引实现：auto（默认，跟随 agent.storage.type：file→local 本地索引，db→redis 走 Redis Stack 召回）
+    # 显式声明 redis 与 auto + db 等价；其它值不匹配内置装配，由业务方自定义 RagIndexStore 扩展实现
+    provider: ${RAG_PROVIDER:auto}
+    # ===== Redis Stack 召回（provider=auto + storage=db 时生效）：向量 + 全文倒排索引存 Redis，
+    # MySQL 仅存文本/元数据（见 db/mysql/framework-schema.sql 的 rag_index_entries 表，无向量列） =====
     # ===== 知识库 API 层访问控制（T4 生产化能力；本例演示 ExampleRagAccessPolicy 租户前缀策略） =====
     access:
       enabled: true                # 开启后 /rag 接口按注入的 RagAccessPolicy 鉴权；关闭则全部放行（保持全局共享检索语义）

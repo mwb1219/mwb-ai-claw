@@ -1,29 +1,58 @@
-# example-web 演示依赖的中间件：PostgreSQL(pgvector) + Redis
-# 用法：在 example-web 目录执行 `docker compose up -d` 后启动后端即可。
-#   - pgvector：RAG 向量库（agent.rag.provider=pgvector）
-#   - redis：分布式会话锁（agent.collaboration.lock.type=redis）
+# ============================================================
+# example-web 一键完整构建：后端应用 + 前端控制台 + 中间件
+#   - example-web：后端服务（独立工程，独立版本号），镜像由本目录源码构建（框架依赖
+#     mwb-ai-claw-spring-boot-starter:1.0.3-SNAPSHOT，经 additional_contexts 注入宿主机 ~/.m2 框架制品）
+#   - example-web-frontend：前端控制台（React + Vite），Nginx 静态托管 + API 反代到后端
+#   - mysql：MySQL 8（权威存储：会话/记忆/知识库文档与索引条目文本）
+#   - redis：Redis Stack Server（召回：RediSearch 向量 + 全文索引；分布式会话锁）
+#
+# 用法（在 example-web 目录下执行）：
+#   1. cp src/main/resources/.env.example .env   # 填入 DEFAULT_API_KEY（启用 RAG 另需 RAG_EMBEDDING_*）
+#   2. docker compose up -d --build              # 首次构建应用/前端镜像并启动全部服务
+#   3. docker compose ps                         # mysql / redis / example-web / example-web-frontend 均 healthy
+#   4. 浏览器访问 http://localhost:5173           # 前端控制台（API 经 Nginx 反代到后端 8080）
+#
+# 说明：
+#   - 后端镜像构建上下文 = 本目录（example-web 独立工程）；框架依赖 mwb-ai-claw-spring-boot-starter
+#     为 SNAPSHOT，经 additional_contexts(host-m2) 注入宿主机 ~/.m2 的框架制品（仓库根目录执行
+#     mvn install 后 ~/.m2 中即包含），无需在容器内联编框架
+#   - 前端镜像构建上下文 = ../example-web-frontend：npm ci → vite build → Nginx（静态 + 反代）
+#   - mysql 首次初始化执行 ./db/mysql/*.sql：建框架表（记忆/会话/知识库/索引条目/可观测性）与用户表
+#     同目录 SQL 按字母序执行：framework-schema.sql → example-web-schema.sql
+#   - 应用侧 spring.sql.init 保持 never（MySQL 建表由 initdb 完成，避免应用侧重复执行）
+#   - .env 缺失时容器使用 application.yml 内置默认值（DEFAULT_API_KEY 为空则 LLM 调用不可用，请务必配置）
+#   - env_file 的 required:false 需 Docker Compose v2.24+；老版本可去掉该字段（.env 必需存在）
+# ============================================================
+name: example-web
+
 services:
-  pgvector:
-    image: pgvector/pgvector:pg16
-    container_name: example-web-pgvector
+  # ===== 中间件：MySQL 8（agent.storage.type=db 权威存储 / agent.rag.provider=auto+db 知识库文本） =====
+  mysql:
+    image: mysql:8.0
+    container_name: example-web-mysql
     environment:
-      POSTGRES_USER: ${PG_USER:-claw}
-      POSTGRES_PASSWORD: ${PG_PASSWORD:-claw}
-      POSTGRES_DB: ${PG_DB:-clawdb}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-claw}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-clawdb}
+      MYSQL_USER: ${MYSQL_USER:-claw}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-claw}
+      TZ: Asia/Shanghai
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     ports:
-      - "5432:5432"
+      - "3306:3306"
     volumes:
-      - pgvector_data:/var/lib/postgresql/data
-      # 首次初始化时自动启用 pgvector 扩展（重建数据卷时生效）
-      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
+      - mysql_data:/var/lib/mysql
+      # 首次初始化时自动执行 MySQL 版建表脚本（重建数据卷时生效）
+      - ./db/mysql:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-claw} -d ${PG_DB:-clawdb}"]
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$${MYSQL_USER} -p$${MYSQL_PASSWORD} --silent"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
+    restart: unless-stopped
 
+  # ===== 中间件：Redis Stack Server（RediSearch 召回索引 + agent.collaboration.lock.type=redis 分布式锁） =====
   redis:
-    image: redis:7-alpine
+    image: redis/redis-stack-server:latest
     container_name: example-web-redis
     ports:
       - "6379:6379"
@@ -32,6 +61,75 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
+
+  # ===== 应用：example-web（Dockerfile 多阶段构建，端口 8080） =====
+  example-web:
+    build:
+      # example-web 为独立工程：构建上下文 = 本目录；框架 SNAPSHOT 依赖经 additional_contexts(host-m2)
+      # 注入宿主机 ~/.m2 的框架制品（构建前需在仓库根目录执行 mvn install 保证 SNAPSHOT 最新）
+      # Dockerfile 构建时会复制 src/main/resources 下的 .env（容器版：DB_URL/REDIS_URI 改写为
+      # mysql/redis 服务名）、agents.json、orchestrations.json、mcp-server.json 到镜像 /app，
+      # 实例启动后按「运行目录优先」加载（ConfigFileLocator / DotenvEnvironmentPostProcessor）
+      context: .
+      dockerfile: Dockerfile
+      additional_contexts:
+        host-m2: ${HOME}/.m2
+    image: example-web:latest
+    container_name: example-web
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # 容器内通过服务名访问中间件（覆盖 .env 中的 localhost 地址）
+      DB_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-clawdb}?useSSL=false&serverTimezone=Asia/Shanghai
+      DB_USERNAME: ${MYSQL_USER:-claw}
+      DB_PASSWORD: ${MYSQL_PASSWORD:-claw}
+      DB_DRIVER: com.mysql.cj.jdbc.Driver
+      SQL_INIT_MODE: never
+      # Redis 连接：会话锁走 agent.collaboration.lock.redis-uri（REDIS_URI）；
+      # 检索索引（RedisSearchTemplate）复用 Spring Boot 自动配置的 spring.redis.*，
+      # 必须显式指向容器内 redis 服务，否则默认 localhost:6379 导致召回失败
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      REDIS_URI: redis://redis:6379
+      # 容器化部署默认：记忆 / 运行用量 / trace 全部落库（表由 initdb 创建）
+      STORAGE_TYPE: db
+      RUN_USAGE_STORE: db
+      TRACE_STORE: db
+    ports:
+      - "8080:8080"
+    volumes:
+      - example_web_agent:/app/.agent   # 长期记忆（AGENT.md / MEMORY.md）
+      - example_web_logs:/app/logs      # 运行日志
+    healthcheck:
+      # TCP 探测 8080（eclipse-temurin 镜像无 curl/wget，用 bash /dev/tcp）
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    restart: unless-stopped
+
+  # ===== 前端控制台：example-web-frontend（React + Vite → Nginx，端口 5173） =====
+  example-web-frontend:
+    build:
+      context: ../example-web-frontend
+    image: example-web-frontend:latest
+    container_name: example-web-frontend
+    depends_on:
+      example-web:
+        condition: service_healthy
+    ports:
+      - "5173:80"
+    restart: unless-stopped
 
 volumes:
-  pgvector_data:
+  mysql_data:
+  example_web_agent:
+  example_web_logs:

@@ -21,21 +21,46 @@
 
 ## 2. 快速开始
 
+### 2.1 本地运行
+
 ```bash
 # 1. 复制 .env 并填入密钥（DEFAULT_API_KEY、可选 RAG_EMBEDDING_*）
-cp example-commerce/src/main/resources/.env.example example-commerce/.env
+cp src/main/resources/.env.example .env
 
 # 2. 启动（默认 web 模式，端口 8080）
-# 分两步：先安装依赖模块到本地仓库，再单独运行 example-commerce。
-# 注意：不要用 `mvn -pl example-commerce -am spring-boot:run` 一步到位，
-#   `-am` 会把父 POM 等依赖模块也纳入构建反应堆，而 `spring-boot:run` 会应用到每个模块，
-#   父模块没有 main class，会报 `Unable to find a suitable main class`。
+# 分两步：先安装依赖模块到本地仓库，再单独运行 example-commerce（独立工程，不随仓库 reactor 构建）。
 mvn -pl example-commerce -am install -DskipTests   # 1) 编译并安装依赖模块
 mvn -pl example-commerce spring-boot:run           # 2) 单独启动 example-commerce
-# 或打包后 mvn -pl example-commerce -am package -DskipTests && java -jar example-commerce/target/example-commerce-*.jar
+# 或打包后 java -jar example-commerce/target/example-commerce-*.jar
 ```
 
+### 2.2 Docker 一键构建（推荐）
+
+`docker-compose.yml` 与 `Dockerfile` 统一位于 `example-commerce` 目录，可一键构建并启动后端 + 前端：
+
+```bash
+# 1. 复制 .env 并填入密钥（DEFAULT_API_KEY、可选 RAG_EMBEDDING_*）
+cp src/main/resources/.env.example .env
+
+# 2. 构建并启动（在 example-commerce 目录下执行）
+# 前提：仓库根目录已执行 mvn install（框架 SNAPSHOT 经 host-m2 注入宿主机 ~/.m2）
+docker compose up -d --build
+
+# 3. 验证
+docker compose ps        # example-commerce / example-commerce-frontend 均 healthy
+
+# 4. 访问
+# 前端控制台：http://localhost:5174（API 经 Nginx 反代到后端）
+# 后端 REST：   http://localhost:8081（宿主端口，容器内 8080；与 example-web 的 8080 并存不冲突）
+```
+
+> 说明：本示例零中间件依赖（H2 内存库 + file 存储 + RAG local），无需 MySQL / Redis。
+> Dockerfile 构建时会复制 `.env`（容器版）与 `agents.json`、`orchestrations.json` 到镜像 `/app`，
+> 实例启动后按「运行目录优先」加载（ConfigFileLocator / DotenvEnvironmentPostProcessor）。
+
 ## 3. 体验（REST / SSE）
+
+> 端口说明：以下示例使用本地运行端口 `8080`；Docker 部署时宿主端口为 `8081`（容器内仍 8080），替换即可。
 
 鉴权已开启，使用店铺 Key 区分租户（多店铺隔离）：
 

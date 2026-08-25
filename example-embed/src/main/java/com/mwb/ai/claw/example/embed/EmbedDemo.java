@@ -18,10 +18,12 @@ import com.mwb.ai.claw.runtime.ClawRuntime;
  * <p>
  * 配置加载顺序（与框架 {@link ConfigFileLocator} 一致）：
  * {@code .env}（运行目录 → 安装目录 ~/.mwb-ai-claw）→ 系统环境变量 → 内置默认值。
- * 复制根目录 .env 为 example-embed/.env 并填入密钥后直接运行：
+ * example-embed 为独立工程（不随 mwb-ai-claw 仓库 reactor 构建），复制 .env.example 为 .env
+ * 并填入密钥后直接运行（pom.xml 已配置 exec 插件主类）：
  * <pre>{@code
- * cp example-embed/.env.example example-embed/.env   # 填入 DEFAULT_API_KEY 等
- * mvn -pl example-embed exec:java -Dexec.mainClass=com.mwb.ai.claw.example.embed.EmbedDemo
+ * cd example-embed
+ * cp .env.example .env   # 填入 DEFAULT_API_KEY 等
+ * mvn exec:java
  * }</pre>
  */
 public class EmbedDemo {

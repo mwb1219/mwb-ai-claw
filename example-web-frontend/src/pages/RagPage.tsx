@@ -251,7 +251,7 @@ export function RagPage() {
                 </span>
               ) : (
                 <span className="text-faint">
-                  支持 Markdown / 纯文本 / PDF / Word(.docx)，提交后自动解析 → 切分 → 向量化 → 写入 PGVector，无大小限制
+                  支持 Markdown / 纯文本 / PDF / Word(.docx)，提交后自动解析 → 切分 → 向量化 → 写入 Redis Stack 召回索引，无大小限制
                 </span>
               )}
             </label>

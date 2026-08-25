@@ -2,8 +2,8 @@
 
 > mwb-ai-claw "Web Console" example: a frontend/backend split project built on the Spring Boot Starter,
 > demonstrating REST / SSE chat, layered-memory visualization, and standalone RAG knowledge base management,
-> with a focus on **production-grade capabilities** — distributed session lock, vector knowledge base
-> (pgvector / multi-format parsing / access control / capacity quotas) and memory persistence to database.
+> with a focus on **production-grade capabilities** — distributed session lock, Redis Stack retrieval knowledge
+> base (vector + full-text / multi-format parsing / access control / capacity quotas) and memory persistence to database.
 >
 > 中文说明：[README.md](README.md)
 
@@ -13,59 +13,64 @@
 | --- | --- | --- |
 | Distributed session lock (multi-instance) | `SessionLockManager` SPI: `LocalSessionLockManager` (JVM `ReentrantLock`) / `RedisSessionLockManager` (`SET NX PX` + atomic Lua release) | `agent.collaboration.lock.type=redis`; Redis service in [docker-compose.yml](docker-compose.yml) |
 | Redis as an optional dependency | redis dependency is `optional` in infra, gated by `@ConditionalOnClass` | [pom.xml](pom.xml) explicitly adds `spring-boot-starter-data-redis` |
-| Pluggable vector store | `RagIndexStore` SPI: `LocalRagIndexStore` (files) / `PgVectorRagIndexStore` (PostgreSQL+pgvector) | `agent.rag.provider=pgvector`; pgvector in [docker-compose.yml](docker-compose.yml) (initdb runs `CREATE EXTENSION vector`) |
+| Pluggable vector store | `RagIndexStore` SPI: `LocalRagIndexStore` (files, `auto+file`) / `RedisRagIndexStore` (text in MySQL + retrieval via Redis Stack, `auto+db` or explicit `redis`) | `agent.rag.provider=auto` + `STORAGE_TYPE=db`; mysql + redis-stack-server in [docker-compose.yml](docker-compose.yml) (initdb creates tables) |
 | Multi-format document parsing | `RagDocumentParser` SPI (composite detects by classpath) | PDFBox / POI-XWPF in [pom.xml](pom.xml); uploads support `.md/.txt/.pdf/.docx` |
 | Knowledge-base API authorization | `RagAccessPolicy` SPI (active when `agent.rag.access.enabled=true`) | `rag/ExampleRagAccessPolicy`: READ globally shared; write/delete by `{tenant}-` prefix + `admin` superuser |
 | Capacity & quotas | `agent.rag.capacity.*` | sample values in [application.yml](src/main/resources/application.yml) |
 | Extension points (replace / enhance) | `RagChunker` / `RagReranker` (`@ConditionalOnMissingBean`) | `rag/ExampleRagChunker` (decorates default chunker, tags metadata), `rag/ExampleRagReranker` (re-rank & truncate) |
 | Seed docs on startup | `ApplicationRunner` | `rag/ExampleRagSeedInitializer`: idempotent ingestion of MD/PDF/Word |
-| Memory persistence to DB | `agent.storage.type`: `file` (local files) / `db` (JDBC store); `db` assembles `JdbcMemoryPageStore` / `JdbcSessionGateway` / `JdbcLongTermMemoryGateway` | `STORAGE_TYPE=db`; session/fact/memory-page/long-term four tables live in the pgvector database |
+| Memory persistence to DB | `agent.storage.type`: `file` (local files, default) / `db` (MySQL authoritative storage + Redis Stack retrieval); `db` assembles `JdbcMemoryPageStore` (dual-writes Redis index) / `RedisMemorySearchable` / `JdbcSessionGateway` / `JdbcLongTermMemoryGateway` | `STORAGE_TYPE=db`; session/fact/memory-page/long-term persisted to MySQL, keyword & vector retrieval via Redis |
 
 ## 2. Middleware (Docker)
 
-The vector knowledge base (pgvector) and the distributed session lock (Redis) depend on PostgreSQL and Redis. Bring both up with Docker:
+Storage / retrieval (MySQL + Redis Stack) and the distributed session lock (Redis) are brought up with Docker:
 
 ```bash
 cd example-web
 docker compose up -d
-docker compose ps   # both containers should be healthy
+docker compose ps   # mysql / redis middleware containers should both be healthy
 ```
 
-- **pgvector** (`localhost:5432`, default db/user/password `claw/claw/clawdb`)
-  - On first init, [docker/initdb/01-pgvector.sql](docker/initdb/01-pgvector.sql) automatically runs
-    `CREATE EXTENSION IF NOT EXISTS vector` and creates the app user table `claw_user` plus the **four memory
-    tables** `claw_session` / `claw_fact` / `claw_memory_page` / `claw_long_term` (PostgreSQL flavor, backing
-    the `example.web` user system and `agent.storage.type=db`).
-  - If the data volume predates the extension and you hit `type "vector" does not exist`, run once manually:
-    `docker exec example-web-pgvector psql -U claw -d clawdb -c "CREATE EXTENSION IF NOT EXISTS vector;"`
-- **redis** (`localhost:6379`) used by `agent.collaboration.lock.type=redis`.
+- **mysql** (`localhost:3306`, default db/user/password `clawdb/claw/claw`)
+  - On first init, [db/mysql/framework-schema.sql](db/mysql/framework-schema.sql) (framework tables:
+    session / fact / memory-page / long-term, RAG documents & index-entry text, observability
+    `claw_trace` / `claw_run_usage`) and [db/mysql/example-web-schema.sql](db/mysql/example-web-schema.sql)
+    (app user table `claw_user`) run automatically.
+  - Acts as the **authoritative store** for `agent.storage.type=db` (memory / knowledge-base text); retrieval
+    never queries MySQL, it goes through the Redis index.
+- **redis** (`localhost:6379`) runs the `redis/redis-stack-server` image with built-in **RediSearch**:
+  - For `agent.storage.type=db`, hosts the **retrieval index** for memory and RAG (full-text inverted index +
+    vector KNN), dual-written after a successful MySQL write;
+  - Also backs the `agent.collaboration.lock.type=redis` distributed session lock.
 
-> Minimal zero-middleware demo: set `RAG_PROVIDER=local` (file-based vector index) and `LOCK_TYPE=local`
-> (JVM lock). To experience the pgvector retrieval / distributed session lock you still need PostgreSQL + Redis.
+> Minimal zero-middleware demo: default `STORAGE_TYPE=file` (local files) with `LOCK_TYPE=local` (JVM lock) and
+> `RAG_PROVIDER=auto` (follows storage → `local` index); no middleware is needed for chat and local RAG. Start
+> Docker only when you want MySQL persistence / Redis Stack retrieval / distributed session lock.
 
 ## 3. Quick Start
 
 ```bash
 # 1. Copy .env and fill in real keys (at least DEFAULT_API_KEY; for RAG write/search also RAG_EMBEDDING_*)
-cp example-web/src/main/resources/.env.example example-web/.env
+cp src/main/resources/.env.example .env
 
-# 2. Build & run (two steps: install dependency modules, then run example-web alone)
-# Do NOT use `mvn -pl example-web -am spring-boot:run` in one shot:
-#   `-am` pulls the parent POM & dependency modules into the reactor and applies `spring-boot:run` to each,
-#   and the parent has no main class — this fails with "Unable to find a suitable main class".
-mvn -pl example-web -am install -DskipTests   # 1) compile & install dependency modules
-mvn -pl example-web spring-boot:run           # 2) start example-web (port 8080)
+# 2. Build & run (example-web is a standalone project with its own version, not part of the repo reactor)
+#    Framework dep mwb-ai-claw-spring-boot-starter:1.0.3-SNAPSHOT: run `mvn install` at the repo root first
+mvn clean package -DskipTests   # 1) compile & package locally (uses the framework SNAPSHOT in ~/.m2)
+mvn spring-boot:run             # 2) start example-web (port 8080)
 ```
 
-### Key environment variables (see example-web/.env)
+> One-shot containerized build (backend + frontend + middleware): `docker compose up -d --build` (see [docker-compose.yml](docker-compose.yml)).
+
+### Key environment variables (see .env in this directory)
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `DB_URL` | `jdbc:postgresql://localhost:5432/clawdb` | datasource: shared by RAG vector store and memory persistence (`STORAGE_TYPE=db`) |
-| `STORAGE_TYPE` | `db` | memory storage backend: `db` (session/fact/memory-page/long-term in PostgreSQL) \| `file` (local files, zero dependency) |
+| `DB_URL` | `jdbc:mysql://localhost:3306/clawdb` | MySQL datasource: memory persistence + RAG document/index-entry text (active with `STORAGE_TYPE=db`) |
+| `STORAGE_TYPE` | `file` | storage form: `db` (MySQL authoritative storage + Redis Stack retrieval) \| `file` (local files, zero dependency) |
+| `RAG_PROVIDER` | `auto` | RAG index implementation: `auto` (follows storage: file→local, db→redis) \| `redis` (explicit) |
+| `REDIS_INDEX_PREFIX` | `claw` | Redis retrieval-index key prefix (namespace isolation when sharing Redis across environments/tenants) |
 | `LOCK_TYPE` | `redis` | distributed session lock channel; use `local` without Redis |
-| `REDIS_URI` | `redis://localhost:6379` | Redis address |
-| `RAG_PROVIDER` | `pgvector` | vector index implementation; `local` is dependency-free |
+| `REDIS_URI` | `redis://localhost:6379` | Redis address (retrieval index + distributed lock; `agent.redis` reuses `spring.data.redis.*`, falls back to this when unset) |
 | `RAG_EMBEDDING_MODEL/BASE_URL/API_KEY` | empty | standalone RAG embedding (OpenAI-compatible `/embeddings`) |
 | `BOOTSTRAP_API_KEY` | `sk-admin-bootstrap` | bootstrap admin key (tenant=admin, superuser, can manage `admin-*` seed KBs) |
 
@@ -77,7 +82,7 @@ A successful startup prints:
 [example-web] 种子文档摄入成功: admin-operations-manual / 运营规范.docx
 ```
 
-i.e. multi-format parsing + pgvector write + seed ingestion is successful.
+i.e. multi-format parsing + Redis Stack index write + seed ingestion is successful.
 
 ## 4. Frontend Console
 
@@ -112,9 +117,9 @@ Screenshots below are actual operations on `http://localhost:5173` (backend + do
 
 ![Knowledge base management](screenshots/02-rag.jpg)
 
-**③ Retrieval debug (`#/rag`)**: query "产品支持哪些部署方式" and search; returns PGVector hits carrying the custom
-chunker metadata `extension=example-web-custom-chunker` (demonstrating the RagChunker replacement extension point),
-along with score / source document / chunk.
+**③ Retrieval debug (`#/rag`)**: query "产品支持哪些部署方式" and search; returns Redis Stack vector hits
+carrying the custom chunker metadata `extension=example-web-custom-chunker` (demonstrating the RagChunker
+replacement extension point), along with score / source document / chunk.
 
 ![Knowledge base search](screenshots/03-rag-search.jpg)
 
@@ -190,9 +195,12 @@ curl http://localhost:8080/trace/<traceId> -H "X-API-Key: sk-admin-bootstrap"
   «production-grade data isolation».
 - RAG is **fully isolated** from the memory system (own domain model / store / embedding config / retrieval chain).
   When `agent.rag.enabled=false`, no RAG bean or `/rag` endpoint is assembled — behavior is identical to before RAG.
-- Memory storage defaults to `STORAGE_TYPE=db`: sessions / long-term memory / memory pages / facts are all
-  persisted to the same PostgreSQL (pgvector) datasource. Set `agent.storage.type=file` to fall back to local files
-  (zero dependency); the two are switchable at any time.
-- Table schemas: MySQL flavors of `claw_user` and the four memory tables (`claw_session` / `claw_fact` /
-  `claw_memory_page` / `claw_long_term`) are in [schema.sql](src/main/resources/schema.sql); the PostgreSQL flavors
-  are created together at first init by [docker/initdb/01-pgvector.sql](docker/initdb/01-pgvector.sql).
+- Memory storage defaults to `STORAGE_TYPE=file` (local files, zero dependency). Switching to `db` persists
+  sessions / long-term memory / memory pages / facts to MySQL, with keyword & vector retrieval served by the
+  Redis Stack (RediSearch) index (dual-written after a successful MySQL write; the index can be rebuilt).
+  The two forms are switchable at any time.
+- Table schemas: MySQL flavors of `claw_user` and the framework tables (`claw_session` / `claw_fact` /
+  `claw_memory_page` / `claw_long_term`, `claw_rag_document` / `rag_index_entries`, `claw_trace` /
+  `claw_run_usage`) are in [db/mysql/framework-schema.sql](db/mysql/framework-schema.sql) and
+  [db/mysql/example-web-schema.sql](db/mysql/example-web-schema.sql), executed automatically on the MySQL
+  container's first init.

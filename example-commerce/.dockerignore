@@ -1,0 +1,23 @@
+# ============================================================
+# .dockerignore（example-commerce 目录）：独立镜像构建上下文过滤
+# 构建上下文 = example-commerce 目录（docker compose build context: .）
+# ============================================================
+
+# 构建产物
+target/
+**/target/
+
+# 日志与运行数据
+logs/
+**/*.log
+
+# 文档 / 截图 / 数据库初始化脚本（镜像不需要）
+**/*.md
+screenshots/
+db/
+
+# IDE
+.idea
+.vscode
+*.iml
+.DS_Store
