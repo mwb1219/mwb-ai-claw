@@ -138,7 +138,10 @@ consolidation). This is the most intuitive "dialog box" interaction: send a ques
 **⑥ Observability (`#/observability`)**: every agent execution persists a run-usage summary (into the
 `claw_run_usage` table, controlled by `agent.observability.run-usage-store=db`). The top aggregates today's
 run count / success / failure / average duration, while the list below shows each run's traceId, session, agent,
-orchestration, model, step count and duration.
+orchestration, model, step count and duration. Run records and traces are isolated by the current login identity
+(`X-API-Key` → tenantId/userId): the `claw_run_usage` / `claw_trace` tables carry `tenant_id` / `user_id` columns
+with composite indexes, records outside the logged-in account are never returned — switching accounts shows
+each account's own run data.
 
 ![Observability - run records](screenshots/06-observability-runs.jpg)
 

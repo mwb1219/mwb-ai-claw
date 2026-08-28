@@ -34,6 +34,8 @@ function formatDuration(ms?: number): string {
  * - 运行记录：按日期列出每次 Agent 执行的用量摘要（运行用量 store：local JSONL | db 落 claw_run_usage 表）
  * - 全链路 trace：运行记录携带 traceId，点击即可还原该次执行的 Thought / Action / Observation 逐步明细；
  *   也支持直接输入 traceId 查询（trace store：local | db 落 claw_trace 表）
+ * - 租户隔离：/runs 与 /trace/{traceId} 均按当前登录身份（X-API-Key → tenantId/userId）过滤，
+ *   非本人记录不返回；切换登录账号后看到的是各自的运行数据
  */
 export function ObservabilityPage() {
   const [date, setDate] = useState('');
@@ -94,7 +96,9 @@ export function ObservabilityPage() {
       <div className="page-head">
         <h2>可观测性</h2>
         <div className="page-head-actions">
-          <span className="text-secondary">运行记录 · 全链路 trace（逐次还原 Thought / Action / Observation）</span>
+          <span className="text-secondary">
+            运行记录 · 全链路 trace（逐次还原 Thought / Action / Observation · 按当前登录身份隔离）
+          </span>
           <Button size="sm" icon={RefreshCw} onClick={() => void loadRuns(date || undefined)}>
             刷新
           </Button>
@@ -163,6 +167,7 @@ export function ObservabilityPage() {
                 <div className="run-meta text-faint">
                   session {r.sessionId || '-'} · agent {r.agentId || '-'} · {r.model || '-'} ·{' '}
                   {r.steps ?? 0} steps · {formatDuration(r.durationMs)}
+                  {r.userId ? ` · user ${r.userId}` : ''}
                   {r.errorCode ? ` · ${r.errorCode}` : ''}
                 </div>
                 <div className="run-actions">
@@ -266,6 +271,18 @@ export function ObservabilityPage() {
               <code>claw_trace</code> 表，生产推荐）。运行记录与 trace 通过{' '}
               <code>traceId</code> 关联：<code>/runs</code> 列表 →{' '}
               <code>/trace/&#123;traceId&#125;</code> 逐步还原。
+            </p>
+          </div>
+          <div className="ext-item">
+            <div className="ext-head">
+              <Activity size={16} />
+              <span>按租户/用户隔离</span>
+            </div>
+            <p className="ext-desc">
+              <code>/runs</code> 与 <code>/trace/&#123;traceId&#125;</code> 均按请求身份
+              （<code>X-API-Key</code> → tenantId / userId）过滤：<code>claw_run_usage</code> 与{' '}
+              <code>claw_trace</code> 表带 <code>tenant_id</code> / <code>user_id</code> 列及复合索引，
+              非本登录账号的记录永不返回（多实例共享数据，接口级租户隔离）。
             </p>
           </div>
         </div>

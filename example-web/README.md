@@ -132,6 +132,8 @@ npm run build      # 生产构建 → dist/
 **⑥ 可观测性（`#/observability`）**：每次 Agent 执行结束都会沉淀一条运行用量摘要（落 `claw_run_usage` 表，
 由 `agent.observability.run-usage-store=db` 控制），页面顶部聚合今日运行数 / 成功数 / 失败数 / 平均耗时，
 下方列出每条运行记录的 traceId、会话、Agent、编排、模型、步骤数与耗时。
+运行记录与 trace 均按当前登录身份（`X-API-Key` → tenantId/userId）隔离：`claw_run_usage` / `claw_trace`
+表带 `tenant_id` / `user_id` 列及复合索引，非本登录账号的记录永不返回，切换账号后看到的是各自的运行数据。
 
 ![可观测性-运行记录](screenshots/06-observability-runs.jpg)
 
