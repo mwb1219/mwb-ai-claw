@@ -21,6 +21,17 @@ nav_order: 2
 - [ ] `ToolGateway`: tool execution + security sandbox
 - [ ] `ProgressCallback` / `LlmStreamCallback`: progress and incremental-output callbacks
 
+### 2.1 Sync and streaming share one loop (`run` delegates to `streamRun`)
+
+`run` and `streamRun` share the same ReAct loop logic, avoiding drift between two implementations:
+
+- `run(session, agent, callback)` directly delegates to `streamRun(session, agent, callback, null)`;
+- Inside `streamRun`, the invocation switches by whether `streamCallback` is null:
+  - `streamCallback == null` → `LlmGateway.chat` (sync, gets real usage); on error terminal state, partial content is not retained and the loop aborts directly;
+  - `streamCallback != null` → `LlmGateway.streamChat` (real-time token push); on error terminal state, if partial content has been output it is retained as a partial result.
+
+> Thus the behavioral difference between the sync and streaming entry points is concentrated on only two points: "LLM invocation method" and "whether to retain partial content on error"; the loop body, step budget, error classification, and afterTurn hooks are fully identical.
+
 ## 3. Step Budget and Extension
 
 - [ ] `max-steps` initial budget; `max-steps-extension` coefficient extension (hard cap = budget × coefficient)

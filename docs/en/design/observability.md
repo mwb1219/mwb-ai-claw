@@ -27,8 +27,9 @@ nav_order: 7
 After each agent execution, a run-usage summary is recorded (as JSONL or DB):
 
 ```json
-{"ts":"2026-08-21T10:00:00","sessionId":"...","agentId":"default","orchestration":"routing",
- "model":"deepseek-chat","durationMs":5210,"success":true,"steps":3,"errorCode":null}
+{"ts":"2026-08-21T10:00:00","tenantId":"tenant-a","userId":"user-1","traceId":"...","sessionId":"...",
+ "agentId":"default","orchestration":"routing","model":"deepseek-chat","durationMs":5210,
+ "success":true,"steps":3,"errorCode":null}
 ```
 
 - Storage is switched by `agent.observability.run-usage-store`: `local` (default, append to
@@ -36,6 +37,17 @@ After each agent execution, a run-usage summary is recorded (as JSONL or DB):
   shared across instances, **recommended for production**);
 - Shell `/runs [date]` queries the summary and details (reading/writing the same backend);
   set `agent.observability.run-usage-log=false` to disable
+
+### 2.1 Multi-tenant isolation (aligned with `/trace/{traceId}`)
+
+`/runs` and `/trace/{traceId}` enforce tenant/user isolation at the same level: records outside the current scope are never returned, eliminating cross-tenant data leakage.
+
+- **Model**: `RunUsage` carries `tenantId` / `userId` (empty string = default space, aligned with `AgentScope` semantics);
+- **SPI**: `RunUsageStore.findByDate(AgentScope scope, String date)` read interface requires a scope parameter;
+- **Write**: `RunUsageRecorder.record()` injects tenant/user from `AgentScopeContext` (ThreadLocal);
+- **DB impl**: `JdbcRunUsageStore` writes `tenant_id` / `user_id` columns, queries with `WHERE tenant_id = ? AND user_id = ?`, table has composite index `idx_run_scope_create (tenant_id, user_id, create_time)`;
+- **Local impl**: `LocalRunUsageStore` does exact match on both `tenantId` / `userId` when reading JSONL, skipping non-matching entries;
+- **Entry**: `GET /runs` passes the current request scope through `RunUsageController → RunUsageRecorder.readRuns()` for filtering, with the same isolation strength as `GET /trace/{traceId}` (admin bootstrap Key cannot read across tenants either).
 
 ## 3. Step-level Trace (full chain)
 

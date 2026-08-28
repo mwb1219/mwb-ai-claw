@@ -36,17 +36,23 @@ nav_order: 1
 │  领域服务：ReActLoopService                   │
 │  Gateway 接口：Llm / Tool / Memory / Agent    │
 │  collaboration：编排 SPI + ExecutionUnit      │
+│       + AgentRouter（意图路由 SPI）            │
+│  context：ContextAssembler（上下文装配 SPI）   │
 │  回调：ProgressCallback / LlmStreamCallback   │
 └──────────────────────┬──────────────────────┘
                        ▼
 ┌─────────────────────────────────────────────┐
 │  infrastructure（基础设施）                   │
 │  LlmGatewayImpl / ToolGatewayImpl / MCP      │
-│  记忆实现 / 编排实现 / Agent 配置加载           │
+│  记忆实现 / 编排实现（routing/conversational/ │
+│       delegate）+ 路由实现（AgentRouter 三实现）│
+│  DefaultContextAssembler / Agent 配置加载      │
 └─────────────────────────────────────────────┘
 ```
 
 **依赖方向**：`adapter / app / infrastructure` → `client + domain`；`domain` 不依赖任何下层。
+
+> **分层约定**：SPI 接口落 domain 层（`AgentOrchestrator` / `AgentRouter` / `ContextAssembler`），实现落 infrastructure 层（`RoutingOrchestrator` 等编排实现、`RuleBasedAgentRouter` 等路由实现、`DefaultContextAssembler`）。新增一种路由策略只需实现 `AgentRouter` 并注册为 Spring Bean。
 
 ## 2. 模块结构（Maven 多模块）
 
@@ -79,6 +85,8 @@ nav_order: 1
 | 记忆 | `MemoryGateway` / `LongTermMemoryGateway` | 文件 / JDBC 双实现 | 条件装配切换 |
 | Agent 配置 | `AgentGateway` | `AgentGatewayImpl` | agents.json 配置 |
 | 编排 | `AgentOrchestrator`（SPI） | routing / conversational / delegate | 注册 `type` 插件 |
+| 意图路由 | `AgentRouter`（SPI） | `CompositeAgentRouter`（=规则 + LLM） | 新增 `@Component` 路由实现 |
+| 上下文装配 | `ContextAssembler`（SPI） | `DefaultContextAssembler`（分层记忆组装上下文） | `@Bean` 覆盖 |
 
 ## 5. 双模式与嵌入式
 

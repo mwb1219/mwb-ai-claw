@@ -40,6 +40,7 @@ AgentScope.defaultScope();             // same as the line above
 - `AgentScopeContext` (ThreadLocal): temporarily holds the current scope during the request chain; set at the entry point and cleared in `finally`
 - Asynchronous tasks (SSE / WebSocket execution threads): ThreadLocal does not cross threads, so the scope must be explicitly captured and set via `AgentScopeContext.set(scope)`
 - Session concurrency locks default to `LocalSessionLockManager` (in-JVM ReentrantLock, isolated by the `scope.keyPrefix()` dimension); for multi-instance deployments, switch to the Redis distributed lock via `agent.collaboration.lock.type=redis` (see [horizontal scaling](horizontal-scaling.md))
+- Observability data is also isolated by scope: the `claw_run_usage` / `claw_trace` tables both carry `tenant_id` / `user_id` columns; `GET /runs` and `GET /trace/{traceId}` read interfaces enforce filtering by the current scope (see [Observability & Resilience](observability.md) §2.1); `claw_run_usage` has a composite index `idx_run_scope_create (tenant_id, user_id, create_time)`
 
 ## 3. How Each Entry Point Determines the Scope
 

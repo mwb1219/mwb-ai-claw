@@ -64,6 +64,18 @@ The interfaces below are defined in the domain layer, with default implementatio
 | Eviction policy | `PageEvictionPolicy` | token / importance | implement the interface (`agent.memory.eviction-policy`) |
 | Retrieval | `MemoryRetriever` | keyword / vector / hybrid | implement the interface (`agent.memory.retriever`) |
 | Fact synthesis | `MemorySynthesizer` | LLM-based (small-model optional) | implement the interface |
+| Synthesis task queue | `SynthesisTaskQueue` | `LockSynthesisTaskQueue` (Phase 1, distributed lock) / `LocalSynthesisTaskQueue` (local fallback) | Implement interface (`agent.memory.synthesis-queue-type`, see [Layered Memory Model](memory-model.md) §5) |
+| Synthesis cache | `SynthesisCache` | `LocalSynthesisCache` / `RedisSynthesisCache` (switched by storage form) | Conditional assembly (`agent.memory.synthesis-cache-type`) |
+
+### 3.3.1 Distributed lock (infrastructure extension point)
+
+`DistributedLock` is an infrastructure-layer technical extension point (not a domain SPI), wrapping "acquire → renew → release" for reuse by all distributed mutual exclusion (session lock, synthesis lock, etc.):
+
+| Interface | Default impl | Override |
+| --- | --- | --- |
+| `DistributedLock` | `RedisDistributedLock` (Hash reentrant by default + watchdog renew) | `@Bean` override (e.g. ZK / etcd impl) |
+
+> Paired with `LockOptions` (tryLock / tryLockWithRenew / wait — three acquire strategies) + `LockResult` (with acquire elapsed and failure reason). See [Horizontal Scaling](horizontal-scaling.md) §4.1.
 
 ### 3.4 Multi-Agent Orchestration
 

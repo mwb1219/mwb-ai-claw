@@ -27,13 +27,27 @@ Shell 内 `/metrics` 实时查看快照；引入 actuator 后可经 `/actuator/m
 每次 Agent 执行结束记录一条运行用量摘要（可存 JSONL 或 DB）：
 
 ```json
-{"ts":"2026-08-21T10:00:00","sessionId":"...","agentId":"default","orchestration":"routing",
- "model":"deepseek-chat","durationMs":5210,"success":true,"steps":3,"errorCode":null}
+{"ts":"2026-08-21T10:00:00","tenantId":"tenant-a","userId":"user-1","traceId":"...","sessionId":"...",
+ "agentId":"default","orchestration":"routing","model":"deepseek-chat","durationMs":5210,
+ "success":true,"steps":3,"errorCode":null}
 ```
 
 - 存储由 `agent.observability.run-usage-store` 切换：`local`（默认，`{memory-dir}/runs/{date}.jsonl` 逐行追加）
   或 `db`（落 `claw_run_usage` 表，与会话/记忆/RAG 同库，多实例共享，**生产推荐**）；
 - Shell `/runs [日期]` 查询汇总与明细（读写同一存储后端）；`agent.observability.run-usage-log=false` 关闭
+
+### 2.1 多租户隔离（与 `/trace/{traceId}` 对齐）
+
+`/runs` 与 `/trace/{traceId}` 同级强制租户/用户隔离，非本 scope 记录永不返回，杜绝跨租户数据泄漏：
+
+- **模型**：`RunUsage` 内含 `tenantId` / `userId`（空串=默认空间，对齐 `AgentScope` 语义）；
+- **SPI**：`RunUsageStore.findByDate(AgentScope scope, String date)` 读取接口强制带 scope 参数；
+- **写入**：`RunUsageRecorder.record()` 从 `AgentScopeContext`（ThreadLocal）注入 tenant/user；
+- **DB 实现**：`JdbcRunUsageStore` 写入 `tenant_id` / `user_id` 列，查询 `WHERE tenant_id = ? AND user_id = ?`，
+  表含复合索引 `idx_run_scope_create (tenant_id, user_id, create_time)`；
+- **本地实现**：`LocalRunUsageStore` 读 JSONL 时对 `tenantId` / `userId` 做精确匹配，不匹配直接跳过；
+- **入口**：`GET /runs` 经 `RunUsageController → RunUsageRecorder.readRuns()` 透传当前请求 scope 过滤，
+  与 `GET /trace/{traceId}` 隔离强度一致（管理员 bootstrap Key 亦不可跨租户读取）。
 
 ## 3. 步骤级 trace（全链路）
 

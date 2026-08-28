@@ -43,6 +43,7 @@ nav_order: 6
 - 校验失败：401（`B_AGENT_AUTH_FAILED`）
 - 工具级静态授权：`agent.auth.tool-permissions`（userId → 工具列表，缺省全部允许），无权调用返回 `ToolResult.error` 不中断 ReAct
 - 接入方可实现 `TenantGateway` 对接自有租户存储，未实现时回退静态 `agent.auth.api-keys`
+- **数据隔离强制点**：会话 / 记忆 / RAG / 可观测性（`GET /runs`、`GET /trace/{traceId}`）读写均按当前 scope 过滤，非本租户/用户的记录永不返回；管理员 bootstrap Key 亦不可跨租户读取（见 [可观测性](observability.md) §2.1 / [存储与多租户](storage-multitenancy.md) §2.2）
 
 ## 5. 防注入与脱敏
 

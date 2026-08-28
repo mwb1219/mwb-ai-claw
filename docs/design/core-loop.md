@@ -21,6 +21,17 @@ nav_order: 2
 - [ ] `ToolGateway`：工具执行 + 安全沙箱
 - [ ] `ProgressCallback` / `LlmStreamCallback`：进度与增量输出回调
 
+### 2.1 同步与流式共用一套循环（`run` 委托 `streamRun`）
+
+`run` 与 `streamRun` 共用同一套 ReAct 循环逻辑，避免双份实现漂移：
+
+- `run(session, agent, callback)` 直接委托 `streamRun(session, agent, callback, null)`；
+- `streamRun` 内按 `streamCallback` 是否为 null 切换调用方式：
+  - `streamCallback == null` → `LlmGateway.chat`（同步，取真实 usage），error 终态不保留部分内容直接中止；
+  - `streamCallback != null` → `LlmGateway.streamChat`（token 实时推送），error 终态已输出部分内容则保留为部分结果返回。
+
+> 这样同步入口与流式入口行为差异只集中在「LLM 调用方式」与「error 时是否保留部分内容」两点，循环主体、步数预算、错误分类、afterTurn 钩子等完全一致。
+
 ## 3. 步数预算与扩展
 
 - [ ] `max-steps` 初始预算；`max-steps-extension` 系数扩展（硬上限 = 预算 × 系数）

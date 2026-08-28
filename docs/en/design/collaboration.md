@@ -63,6 +63,8 @@ explicit agentId? ──yes──> use that Agent directly
    fall back to the default Agent
 ```
 
+> The `AgentRouter` SPI is defined in the domain layer `collaboration/spi`; its three implementations live in the infrastructure layer `collaboration/strategy/routing`: `RuleBasedAgentRouter` (keyword rules) / `LlmBasedAgentRouter` (LLM intent classification) / `CompositeAgentRouter` (composite, default). They share the `strategy` package with `RoutingOrchestrator`, following the "SPI in domain, impl in infrastructure" layering convention.
+
 Flow: session-granularity locking by sessionId (serialize "get session → append message → ReAct → save → memory distillation" per session) → append user message (multimodal parts supported) → run ReAct → merge trace steps → persist the session → layered-memory distillation (failure only warns, never blocks the response).
 
 ### 2.2 conversational (discussion)
