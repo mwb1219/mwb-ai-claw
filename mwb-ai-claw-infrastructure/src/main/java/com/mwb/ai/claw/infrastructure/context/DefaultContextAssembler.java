@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.domain.context;
+package com.mwb.ai.claw.infrastructure.context;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -8,6 +8,8 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.mwb.ai.claw.domain.context.ContextAssembler;
+import com.mwb.ai.claw.domain.context.LlmRequestOptions;
 import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.Message;
 import com.mwb.ai.claw.domain.core.Session;

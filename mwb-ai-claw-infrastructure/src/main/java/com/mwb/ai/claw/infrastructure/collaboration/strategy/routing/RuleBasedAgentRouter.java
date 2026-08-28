@@ -1,8 +1,8 @@
-package com.mwb.ai.claw.domain.core.strategy;
+package com.mwb.ai.claw.infrastructure.collaboration.strategy.routing;
 
+import com.mwb.ai.claw.domain.collaboration.spi.AgentRouter;
 import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.AgentGateway;
-import com.mwb.ai.claw.domain.core.AgentRouter;
 
 import java.util.List;
 
@@ -12,7 +12,7 @@ import java.util.List;
  * 遍历所有 Agent，若消息命中某 Agent 的关键词（忽略大小写），则返回其 agentId；
  * 全部未命中时返回 null（由调用方回退默认 Agent）。
  * <p>
- * 纯领域类，不依赖 Spring，通过构造函数注入 {@link AgentGateway}（依赖倒置）。
+ * 纯 POJO，不依赖 Spring，通过构造函数注入 {@link AgentGateway}（依赖倒置），由 {@code AgentConfiguration} 的 @Bean 装配。
  */
 public class RuleBasedAgentRouter implements AgentRouter {
 

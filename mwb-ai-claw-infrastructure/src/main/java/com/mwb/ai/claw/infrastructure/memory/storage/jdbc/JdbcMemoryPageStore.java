@@ -3,6 +3,8 @@ package com.mwb.ai.claw.infrastructure.memory.storage.jdbc;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.mwb.ai.claw.domain.memory.model.MemoryPage;
@@ -24,6 +26,8 @@ import com.mwb.ai.claw.infrastructure.memory.storage.redis.RedisMemoryIndexer;
  *   召回策略层回退为全量加载 + 应用层打分。
  */
 public class JdbcMemoryPageStore implements MemoryPageStore, MemorySearchable {
+
+    private static final Logger log = LoggerFactory.getLogger(JdbcMemoryPageStore.class);
 
     private final JdbcTemplate jdbc;
     private final RedisMemoryIndexer indexer;
@@ -153,6 +157,31 @@ public class JdbcMemoryPageStore implements MemoryPageStore, MemorySearchable {
     }
 
     @Override
+    public void upsertFactAtomic(AgentScope scope, MemoryPage fact) {
+        // Phase 1：原生 UPSERT，消除"读 existing → delete → append"的 RMW 竞态。
+        // 利用 uk_fact(tenant,user,fact_key) 唯一键，冲突时 importance 取 GREATEST 不回退。
+        String sql = "INSERT INTO claw_fact (tenant_id, user_id, fact_key, content, importance, "
+                + "session_id, version, token_count, create_time, update_time) "
+                + "VALUES (?,?,?,?,?,?,1,?,?,?) "
+                + "ON DUPLICATE KEY UPDATE content=VALUES(content), "
+                + "importance=GREATEST(importance, VALUES(importance)), "
+                + "session_id=VALUES(session_id), version=version+1, "
+                + "token_count=VALUES(token_count), update_time=VALUES(update_time)";
+        try {
+            long now = System.currentTimeMillis();
+            jdbc.update(sql, tid(scope), uid(scope), fact.getKey(), fact.getContent(),
+                    fact.getImportance(), fact.getSessionId(),
+                    fact.getTokenCount(), fact.getCreateTime() > 0 ? fact.getCreateTime() : now, now);
+        } catch (org.springframework.dao.DuplicateKeyException e) {
+            // 极端并发兜底
+            log.warn("事实 UPSERT 命中唯一键冲突（已被其他实例写入）: key={}", fact.getKey());
+        }
+        if (indexer != null) {
+            indexer.upsertFact(scope, fact);
+        }
+    }
+
+    @Override
     public void deleteSessionPages(AgentScope scope, String sessionId) {
         ScopeClause where = scopeWhere(scope);
         String sql = "DELETE FROM claw_memory_page WHERE page_type='SUMMARY' AND session_id = ? AND " + where.sql;
@@ -215,33 +244,22 @@ public class JdbcMemoryPageStore implements MemoryPageStore, MemorySearchable {
     }
 
     private void upsertPage(AgentScope scope, MemoryPage page) {
-        ScopeClause where = scopeWhere(scope);
-        String countSql = "SELECT COUNT(*) FROM claw_memory_page WHERE page_id = ? AND " + where.sql;
-        List<Object> countArgs = new ArrayList<>();
-        countArgs.add(page.getPageId());
-        countArgs.addAll(where.args);
-        Integer cnt = jdbc.queryForObject(countSql, Integer.class, countArgs.toArray());
-        if (cnt != null && cnt > 0) {
-            String sql = "UPDATE claw_memory_page SET page_type=?, session_id=?, block_start=?, block_end=?, "
-                    + "content=?, token_count=?, create_time=? WHERE page_id = ? AND " + where.sql;
-            List<Object> args = new ArrayList<>();
-            args.add(page.getType() == null ? null : page.getType().name());
-            args.add(page.getSessionId());
-            args.add(page.getBlockStart());
-            args.add(page.getBlockEnd());
-            args.add(page.getContent());
-            args.add(page.getTokenCount());
-            args.add(page.getCreateTime());
-            args.add(page.getPageId());
-            args.addAll(where.args);
-            jdbc.update(sql, args.toArray());
-        } else {
-            String sql = "INSERT INTO claw_memory_page (tenant_id, user_id, page_id, page_type, session_id, "
-                    + "block_start, block_end, content, token_count, create_time) VALUES (?,?,?,?,?,?,?,?,?,?)";
+        // Phase 1：原生 UPSERT，消除 COUNT→UPDATE/INSERT 的 RMW 竞态窗口。
+        // 利用 uk_scope_session_type_start(tenant,user,session,page_type,block_start) 和
+        // uk_page(tenant,user,page_id) 双重唯一键，冲突时更新内容但不回退创建时间。
+        String sql = "INSERT INTO claw_memory_page (tenant_id, user_id, page_id, page_type, session_id, "
+                + "block_start, block_end, content, token_count, create_time) VALUES (?,?,?,?,?,?,?,?,?,?) "
+                + "ON DUPLICATE KEY UPDATE page_id=VALUES(page_id), content=VALUES(content), "
+                + "token_count=VALUES(token_count), create_time=LEAST(create_time, VALUES(create_time))";
+        try {
             jdbc.update(sql, tid(scope), uid(scope), page.getPageId(),
                     page.getType() == null ? null : page.getType().name(),
                     page.getSessionId(), page.getBlockStart(), page.getBlockEnd(),
                     page.getContent(), page.getTokenCount(), page.getCreateTime());
+        } catch (org.springframework.dao.DuplicateKeyException e) {
+            // 极端并发：锁失效后 UNIQUE 键兜底，正确性不回退
+            log.warn("记忆页 UPSERT 命中唯一键冲突（已被其他实例写入，跳过）: pageId={}, type={}",
+                    page.getPageId(), page.getType());
         }
         // MySQL 权威写入成功后同步双写 Redis 派生索引（失败不阻断主事务）
         if (indexer != null) {

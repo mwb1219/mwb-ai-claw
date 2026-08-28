@@ -91,6 +91,33 @@ public class MetricsRecorder {
                 .tag("type", type).tag("status", status).register(registry).increment();
     }
 
+    // ==================== 提炼任务队列（Phase 1） ====================
+
+    public void synthLockAcquireFail(String kind, String reason) {
+        Counter.builder("claw.synth.lock.acquire.fail")
+                .tag("kind", kind).tag("reason", reason).register(registry).increment();
+    }
+
+    public void synthLockWait(String kind, String result, long ms) {
+        Timer.builder("claw.synth.lock.wait").tag("kind", kind).tag("result", result)
+                .register(registry).record(Duration.ofMillis(ms));
+    }
+
+    public void synthDuplicateWrite(String pageType) {
+        Counter.builder("claw.synth.duplicate.write")
+                .tag("page_type", pageType).register(registry).increment();
+    }
+
+    public void synthLlmSkip(String kind, String reason) {
+        Counter.builder("claw.synth.llm.skip")
+                .tag("kind", kind).tag("reason", reason).register(registry).increment();
+    }
+
+    public void synthPendingGauge(int pending, String queueType) {
+        Gauge.builder("claw.synth.task.pending", () -> pending)
+                .tag("queue_type", queueType).register(registry);
+    }
+
     // ==================== 查询 ====================
 
     /**

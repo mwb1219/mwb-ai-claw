@@ -9,13 +9,13 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestTemplate;
 
 import com.mwb.ai.claw.domain.context.ContextAssembler;
-import com.mwb.ai.claw.domain.context.DefaultContextAssembler;
+import com.mwb.ai.claw.infrastructure.context.DefaultContextAssembler;
+import com.mwb.ai.claw.domain.collaboration.spi.AgentRouter;
+import com.mwb.ai.claw.infrastructure.collaboration.strategy.routing.CompositeAgentRouter;
+import com.mwb.ai.claw.infrastructure.collaboration.strategy.routing.LlmBasedAgentRouter;
+import com.mwb.ai.claw.infrastructure.collaboration.strategy.routing.RuleBasedAgentRouter;
 import com.mwb.ai.claw.domain.core.AgentGateway;
-import com.mwb.ai.claw.domain.core.AgentRouter;
 import com.mwb.ai.claw.domain.core.ReActLoopService;
-import com.mwb.ai.claw.domain.core.strategy.CompositeAgentRouter;
-import com.mwb.ai.claw.domain.core.strategy.LlmBasedAgentRouter;
-import com.mwb.ai.claw.domain.core.strategy.RuleBasedAgentRouter;
 import com.mwb.ai.claw.domain.llm.LlmGateway;
 import com.mwb.ai.claw.domain.memory.gateway.LayeredMemoryGateway;
 import com.mwb.ai.claw.domain.memory.gateway.LongTermMemoryGateway;

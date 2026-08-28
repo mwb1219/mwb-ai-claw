@@ -5,7 +5,7 @@ import com.mwb.ai.claw.domain.collaboration.model.OrchestrationContext;
 import com.mwb.ai.claw.domain.collaboration.spi.AgentOrchestrator;
 import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.AgentGateway;
-import com.mwb.ai.claw.domain.core.AgentRouter;
+import com.mwb.ai.claw.domain.collaboration.spi.AgentRouter;
 import com.mwb.ai.claw.domain.core.ReActResult;
 import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.memory.gateway.LayeredMemoryGateway;

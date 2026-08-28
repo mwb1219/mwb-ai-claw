@@ -1,5 +1,7 @@
 package com.mwb.ai.claw.api;
 
+import com.mwb.ai.claw.domain.core.ProgressCallback;
+import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
 import com.mwb.ai.claw.dto.SingleResponse;
 import com.mwb.ai.claw.dto.ChatCmd;
 import com.mwb.ai.claw.dto.CreateSessionCmd;
@@ -16,8 +18,17 @@ public interface AgentServiceI {
 
     /**
      * 与 Agent 对话：执行 ReAct 推理循环并返回最终回复
+     * @param cmd 对话命令
      */
     SingleResponse<ChatResponseDTO> chat(ChatCmd cmd);
+
+    /**
+     * 与Agent对话：执行ReAct推理，进行流式返回，包含进度和LLM流式回调
+     * @param cmd 对话命令
+     * @param progressCallback 进度回调
+     * @param llmStreamCallback LLM流式回调
+     */
+    SingleResponse<ChatResponseDTO> chat(ChatCmd cmd, ProgressCallback progressCallback, LlmStreamCallback llmStreamCallback);
 
     /**
      * 创建新会话

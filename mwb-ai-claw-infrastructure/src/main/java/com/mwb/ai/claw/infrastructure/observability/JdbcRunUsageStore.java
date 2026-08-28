@@ -16,6 +16,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.mwb.ai.claw.domain.observability.RunUsage;
 import com.mwb.ai.claw.domain.observability.RunUsageStore;
+import com.mwb.ai.claw.domain.scope.AgentScope;
 
 /**
  * JDBC 版运行用量存储（{@code agent.observability.run-usage-store=db}）：落库到 {@code claw_run_usage} 表。
@@ -40,8 +41,9 @@ public class JdbcRunUsageStore implements RunUsageStore {
         }
         try {
             jdbc.update("INSERT INTO claw_run_usage "
-                            + "(trace_id, session_id, agent_id, orchestration, model, duration_ms, success, steps, "
-                            + "error_code, create_time) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                            + "(tenant_id, user_id, trace_id, session_id, agent_id, orchestration, model, duration_ms, success, steps, "
+                            + "error_code, create_time) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    nullToEmpty(usage.getTenantId()), nullToEmpty(usage.getUserId()),
                     usage.getTraceId(), usage.getSessionId(), usage.getAgentId(), usage.getOrchestration(),
                     usage.getModel(), usage.getDurationMs(), usage.isSuccess(), usage.getSteps(),
                     usage.getErrorCode(), usage.getCreateTime());
@@ -51,14 +53,18 @@ public class JdbcRunUsageStore implements RunUsageStore {
     }
 
     @Override
-    public List<Map<String, Object>> findByDate(String date) {
+    public List<Map<String, Object>> findByDate(AgentScope scope, String date) {
+        AgentScope s = scope != null ? scope : AgentScope.defaultScope();
+        String tenant = nullToEmpty(s.getTenantId());
+        String user = nullToEmpty(s.getUserId());
         try {
             long[] window = dayWindow(date);
+            Object[] args = new Object[] { tenant, user, window[0], window[1] };
             List<Map<String, Object>> rows = jdbc.queryForList(
                     "SELECT trace_id, session_id, agent_id, orchestration, model, duration_ms, success, steps, "
                             + "error_code, create_time FROM claw_run_usage "
-                            + "WHERE create_time >= ? AND create_time < ? ORDER BY create_time ASC",
-                    window[0], window[1]);
+                            + "WHERE tenant_id = ? AND user_id = ? AND create_time >= ? AND create_time < ? ORDER BY create_time ASC",
+                    args);
             List<Map<String, Object>> runs = new ArrayList<>();
             for (Map<String, Object> row : rows) {
                 runs.add(toEntry(row));
@@ -68,6 +74,10 @@ public class JdbcRunUsageStore implements RunUsageStore {
             log.warn("读取运行用量失败: {}", e.getMessage());
             return new ArrayList<>();
         }
+    }
+
+    private static String nullToEmpty(String s) {
+        return s == null ? "" : s;
     }
 
     /** 将查询行转为与 JSONL 定义一致的展示字段 Map（含 ts） */

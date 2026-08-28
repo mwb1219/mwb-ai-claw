@@ -11,6 +11,12 @@ import lombok.Data;
 @Data
 public class RunUsage {
 
+    /** 租户 id（空串=默认空间；对齐 AgentScope 隔离语义） */
+    private String tenantId = "";
+
+    /** 用户 id（空串=默认空间；对齐 AgentScope 隔离语义） */
+    private String userId = "";
+
     /** 关联的全链路 trace id（可经 GET /trace/{traceId} 还原本次执行的逐步明细） */
     private String traceId;
 

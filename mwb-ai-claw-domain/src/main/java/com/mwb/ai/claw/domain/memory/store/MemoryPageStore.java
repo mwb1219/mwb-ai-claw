@@ -44,4 +44,27 @@ public interface MemoryPageStore {
 
     /** 删除某会话的归档 */
     void deleteSessionArchive(AgentScope scope, String sessionId);
+
+    // ==================== Phase 1：分布式幂等写入扩展 ====================
+
+    /**
+     * 原子 UPSERT 事实：不存在则 INSERT；存在则 UPDATE content / importance（GREATEST 不回退）/ version++ / update_time。
+     * <p>
+     * 消除"读 existing → delete → append"的 RMW 竞态窗口。Phase 1+ 的 JDBC 实现使用
+     * 数据库原生 UPSERT（MySQL ON DUPLICATE KEY UPDATE / H2 MERGE INTO）。
+     * <p>
+     * 默认回退到旧语义（delete + append），file 存储等老实现可保持不变。
+     *
+     * @param scope 作用域
+     * @param fact  事实页（key 已确定）
+     */
+    default void upsertFactAtomic(AgentScope scope, MemoryPage fact) {
+        MemoryPage existing = loadFacts(scope).stream()
+                .filter(f -> fact.getKey().equals(f.getKey()))
+                .findFirst().orElse(null);
+        if (existing != null) {
+            deleteFact(scope, existing.getKey());
+        }
+        appendFact(scope, fact);
+    }
 }

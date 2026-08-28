@@ -76,7 +76,9 @@ CREATE TABLE IF NOT EXISTS claw_memory_page (
     token_count INT          DEFAULT NULL COMMENT '估算 token 数（预算控制）',
     create_time BIGINT       DEFAULT NULL COMMENT '创建时间戳（epoch 毫秒）',
     PRIMARY KEY (id),
-    UNIQUE KEY uk_page (tenant_id, user_id, page_id)
+    UNIQUE KEY uk_page (tenant_id, user_id, page_id),
+    -- Phase 1：防摘要/归档块重叠硬防线（同租户+用户+会话+页类型+块起点唯一）
+    UNIQUE KEY uk_scope_session_type_start (tenant_id, user_id, session_id, page_type, block_start)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='记忆页表：摘要页与会话归档';
 
 -- ==================== 长期记忆表 ====================
@@ -156,6 +158,8 @@ CREATE TABLE IF NOT EXISTS claw_trace (
 -- 每次运行一条摘要，供 shell /runs 统计（agent.observability.run-usage-store=db 时使用）
 CREATE TABLE IF NOT EXISTS claw_run_usage (
     id            BIGINT       NOT NULL AUTO_INCREMENT COMMENT '自增主键（聚簇索引，非业务字段）',
+    tenant_id     VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '租户 id（空串=默认空间，对齐 AgentScope）',
+    user_id       VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '用户 id（空串=默认空间，对齐 AgentScope）',
     trace_id      VARCHAR(64)  DEFAULT NULL COMMENT '关联 trace 链路 id',
     session_id    VARCHAR(64)  DEFAULT NULL COMMENT '会话 id',
     agent_id      VARCHAR(64)  DEFAULT NULL COMMENT 'Agent id',
@@ -167,5 +171,19 @@ CREATE TABLE IF NOT EXISTS claw_run_usage (
     error_code    VARCHAR(32)  DEFAULT NULL COMMENT '错误码',
     create_time   BIGINT       DEFAULT NULL COMMENT '写入时间戳（epoch 毫秒）',
     PRIMARY KEY (id),
-    KEY idx_run_create (create_time)
+    KEY idx_run_scope_create (tenant_id, user_id, create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='运行用量摘要表（agent.observability.run-usage-store=db）';
+
+-- ==================== 记忆提炼边界游标表（Phase 1 行锁兜底 / Phase 2 CAS claim） ====================
+-- 无 Redis 时的 DB 行锁互斥（SELECT ... FOR UPDATE）+ Phase 2 CAS 预占区间的基础设施。
+-- 每个会话一行，记录摘要/归档的已推进边界。
+CREATE TABLE IF NOT EXISTS claw_memory_boundary (
+    tenant_id   VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '租户 id（空串=默认空间）',
+    user_id     VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '用户 id（空串=默认空间）',
+    session_id  VARCHAR(64)  NOT NULL COMMENT '会话 id',
+    summary_end INT          NOT NULL DEFAULT 0 COMMENT '下一段 summary 的 block_start',
+    archive_end INT          NOT NULL DEFAULT 0 COMMENT '下一段 archive 的 block_start',
+    version     INT          NOT NULL DEFAULT 1 COMMENT '乐观锁版本号',
+    update_time BIGINT       NOT NULL COMMENT '最近更新时间戳（epoch 毫秒）',
+    PRIMARY KEY (tenant_id, user_id, session_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会话记忆提炼边界游标';

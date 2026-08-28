@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.domain.core;
+package com.mwb.ai.claw.domain.collaboration.spi;
 
 /**
  * Agent 路由接口：根据用户消息决定由哪个 Agent 处理。

@@ -12,7 +12,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import org.junit.Test;
 
-import com.mwb.ai.claw.domain.context.DefaultContextAssembler;
+import com.mwb.ai.claw.infrastructure.context.DefaultContextAssembler;
 import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.ModelConfig;
 import com.mwb.ai.claw.domain.core.Session;

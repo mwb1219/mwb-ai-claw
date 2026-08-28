@@ -1,25 +1,22 @@
 package com.mwb.ai.claw.infrastructure.collaboration.lock;
 
 import java.time.Duration;
-import java.util.Collections;
-import java.util.UUID;
 import java.util.function.Supplier;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.script.DefaultRedisScript;
 
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.dto.data.AgentErrorCode;
 import com.mwb.ai.claw.exception.BizException;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
+import com.mwb.ai.claw.infrastructure.lock.DistributedLock;
+import com.mwb.ai.claw.infrastructure.lock.LockOptions;
+import com.mwb.ai.claw.infrastructure.lock.LockResult;
 
 /**
- * 分布式会话锁实现（多实例部署）：
- * 基于 Redis「SET NX PX」原子加锁，value 携带唯一持有者 token；释放时以 Lua 脚本校验
- * token 后删除，避免误删他人锁。锁 key = {keyPrefix} + scope.keyPrefix() + ":" + sessionId。
- * 获取锁采用带超时的轮询，超时抛「获取会话锁超时」。
+ * 分布式会话锁实现（多实例部署）：保证同一会话（scope + sessionId）的
+ * 「读 → 追加 → 推理 → 保存」全程串行化，不同会话 / 不同用户完全并行。
+ * <p>
+ * 加锁 / 释放 / 续期原语统一委托 {@link DistributedLock}（Redis SET NX PX + Lua 脚本）；
+ * 本类仅负责会话维度 key 构造、轮询等待策略与失败语义（获取超时抛 BizException）。
  * <p>
  * 由 {@code ClawCoreAutoConfiguration.RedisLockConfiguration} 在
  * {@code agent.collaboration.lock.type=redis} 且 classpath 含 spring-data-redis 时装配；
@@ -27,90 +24,44 @@ import com.mwb.ai.claw.infrastructure.config.AgentProperties;
  */
 public class RedisSessionLockManager implements SessionLockManager {
 
-    private static final Logger log = LoggerFactory.getLogger(RedisSessionLockManager.class);
-
-    /** 释放锁 Lua 脚本：仅当持有者为当前 token 时才删除，保证原子性与安全性 */
-    private static final DefaultRedisScript<Long> UNLOCK_SCRIPT = new DefaultRedisScript<>(
-            "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
-            Long.class);
-
-    private final StringRedisTemplate redisTemplate;
+    private final DistributedLock distributedLock;
     private final String keyPrefix;
-    private final long leaseMs;
-    private final long timeoutMs;
-    private final long retryIntervalMs;
+    private final Duration lease;
+    private final Duration timeout;
+    private final Duration retryInterval;
 
-    public RedisSessionLockManager(StringRedisTemplate redisTemplate, AgentProperties.LockConfig config) {
-        this.redisTemplate = redisTemplate;
+    public RedisSessionLockManager(DistributedLock distributedLock, AgentProperties.LockConfig config) {
+        this.distributedLock = distributedLock;
         this.keyPrefix = config.getKeyPrefix() == null || config.getKeyPrefix().isEmpty()
                 ? "claw:lock:" : config.getKeyPrefix();
-        this.leaseMs = config.getLeaseMs() > 0 ? config.getLeaseMs() : 30000;
-        this.timeoutMs = config.getTimeoutMs() > 0 ? config.getTimeoutMs() : 30000;
-        this.retryIntervalMs = config.getRetryIntervalMs() > 0 ? config.getRetryIntervalMs() : 100;
+        this.lease = Duration.ofMillis(config.getLeaseMs() > 0 ? config.getLeaseMs() : 30000);
+        this.timeout = Duration.ofMillis(config.getTimeoutMs() > 0 ? config.getTimeoutMs() : 30000);
+        this.retryInterval = Duration.ofMillis(config.getRetryIntervalMs() > 0 ? config.getRetryIntervalMs() : 100);
     }
 
     @Override
     public <T> T executeWithLock(AgentScope scope, String sessionId, Supplier<T> task) {
         String key = lockKey(scope, sessionId);
-        String token = UUID.randomUUID().toString();
-        boolean acquired = acquire(key, token);
-        try {
-            if (!acquired) {
-                throw new BizException(AgentErrorCode.B_AGENT_LOCK_TIMEOUT.getErrCode(),
-                        "获取会话锁超时: " + key);
-            }
-            return task.get();
-        } finally {
-            if (acquired) {
-                release(key, token);
-            }
+        LockOptions opts = LockOptions.wait(lease, timeout, retryInterval);
+        LockResult<T> result = distributedLock.execute(key, opts, task);
+        if (!result.isAcquired()) {
+            throw new BizException(AgentErrorCode.B_AGENT_LOCK_TIMEOUT.getErrCode(),
+                    "获取会话锁超时: " + key);
         }
+        return result.getValue();
     }
 
     @Override
     public void executeWithLock(AgentScope scope, String sessionId, Runnable task) {
         String key = lockKey(scope, sessionId);
-        String token = UUID.randomUUID().toString();
-        boolean acquired = acquire(key, token);
-        try {
-            if (!acquired) {
-                throw new BizException(AgentErrorCode.B_AGENT_LOCK_TIMEOUT.getErrCode(),
-                        "获取会话锁超时: " + key);
-            }
+        LockOptions opts = LockOptions.wait(lease, timeout, retryInterval);
+        LockResult<Void> result = distributedLock.execute(key, opts, () -> {
             task.run();
-        } finally {
-            if (acquired) {
-                release(key, token);
-            }
-        }
-    }
-
-    /** 轮询获取锁，直至成功或超时（SET NX PX，返回 true=获得锁） */
-    private boolean acquire(String key, String token) {
-        long deadline = System.currentTimeMillis() + timeoutMs;
-        do {
-            Boolean ok = redisTemplate.opsForValue().setIfAbsent(key, token, Duration.ofMillis(leaseMs));
-            if (Boolean.TRUE.equals(ok)) {
-                return true;
-            }
-            if (System.currentTimeMillis() >= deadline) {
-                return false;
-            }
-            try {
-                Thread.sleep(retryIntervalMs);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return false;
-            }
-        } while (true);
-    }
-
-    /** 释放锁：Lua 校验 token 后删除（返回 1 表示释放成功） */
-    private void release(String key, String token) {
-        try {
-            redisTemplate.execute(UNLOCK_SCRIPT, Collections.singletonList(key), token);
-        } catch (Exception e) {
-            log.warn("释放会话锁失败（锁将依赖过期自动释放）: key={}, err={}", key, e.getMessage());
+            return null;
+        });
+        if (!result.isAcquired()) {
+            throw new BizException(AgentErrorCode.B_AGENT_LOCK_TIMEOUT.getErrCode(),
+                    "获取会话锁超时: " + key);
         }
     }
 

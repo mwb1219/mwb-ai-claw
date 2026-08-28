@@ -79,6 +79,32 @@ public class LayeredMemoryConfig {
     /** 提炼缓存容量：按输入内容哈希缓存 summarize/extract 结果，避免重复调 LLM（<=0 关闭缓存） */
     private int synthesisCacheSize = 50;
 
+    /** 提炼缓存实现：auto（跟随 agent.storage.type：file→local，db→redis）| local（JVM 内存 LRU）| redis（分布式，生产多实例推荐） */
+    private String synthesisCacheType = "auto";
+
+    /** 提炼缓存 Redis TTL（秒）：仅在 type=redis 时生效，默认 1 小时；LLM 提炼结果相对稳定，TTL 到期后自然重建即可 */
+    private int synthesisCacheTtlSeconds = 3600;
+
+    /** 提炼缓存 Redis 连接串（type=redis/auto+db 且未全局配置 spring.data.redis 时使用，默认复用会话锁 redisUri 兜底）；留空则复用 spring.data.redis 或 lock redisUri */
+    private String synthesisCacheRedisUri = "";
+
+    /** 提炼缓存 Redis key 前缀（type=redis 时生效，默认 claw:syn:；多租户/多环境共享 Redis 时可前缀隔离命名空间） */
+    private String synthesisCacheRedisKeyPrefix = "claw:syn:";
+
+    // ==================== Phase 1：提炼任务队列 ====================
+
+    /** 提炼任务队列类型：auto（默认，跟随 synthesis-cache-type 推断）| local | redis | jdbc */
+    private String synthesisQueueType = "auto";
+
+    /** 合成锁 TTL（秒）：仅在 queue-type=redis 时生效，默认 10min；LLM 长上下文时可放大 */
+    private int synthesisLockTtlSeconds = 600;
+
+    /** 合成锁 watchdog 续期间隔（秒）：默认 1/3 TTL */
+    private int synthesisLockWatchdogIntervalSeconds = 200;
+
+    /** 是否启用"保留最新提交、丢弃旧等待"的去重策略（默认 true） */
+    private boolean synthesisDropOldPending = true;
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -269,5 +295,69 @@ public class LayeredMemoryConfig {
 
     public void setSynthesisCacheSize(int synthesisCacheSize) {
         this.synthesisCacheSize = synthesisCacheSize;
+    }
+
+    public String getSynthesisCacheType() {
+        return synthesisCacheType;
+    }
+
+    public void setSynthesisCacheType(String synthesisCacheType) {
+        this.synthesisCacheType = synthesisCacheType;
+    }
+
+    public int getSynthesisCacheTtlSeconds() {
+        return synthesisCacheTtlSeconds;
+    }
+
+    public void setSynthesisCacheTtlSeconds(int synthesisCacheTtlSeconds) {
+        this.synthesisCacheTtlSeconds = synthesisCacheTtlSeconds;
+    }
+
+    public String getSynthesisCacheRedisUri() {
+        return synthesisCacheRedisUri;
+    }
+
+    public void setSynthesisCacheRedisUri(String synthesisCacheRedisUri) {
+        this.synthesisCacheRedisUri = synthesisCacheRedisUri;
+    }
+
+    public String getSynthesisCacheRedisKeyPrefix() {
+        return synthesisCacheRedisKeyPrefix;
+    }
+
+    public void setSynthesisCacheRedisKeyPrefix(String synthesisCacheRedisKeyPrefix) {
+        this.synthesisCacheRedisKeyPrefix = synthesisCacheRedisKeyPrefix;
+    }
+
+    public String getSynthesisQueueType() {
+        return synthesisQueueType;
+    }
+
+    public void setSynthesisQueueType(String synthesisQueueType) {
+        this.synthesisQueueType = synthesisQueueType;
+    }
+
+    public int getSynthesisLockTtlSeconds() {
+        return synthesisLockTtlSeconds;
+    }
+
+    public void setSynthesisLockTtlSeconds(int synthesisLockTtlSeconds) {
+        this.synthesisLockTtlSeconds = synthesisLockTtlSeconds;
+    }
+
+    public int getSynthesisLockWatchdogIntervalSeconds() {
+        return synthesisLockWatchdogIntervalSeconds;
+    }
+
+    public void setSynthesisLockWatchdogIntervalSeconds(int synthesisLockWatchdogIntervalSeconds) {
+        this.synthesisLockWatchdogIntervalSeconds = synthesisLockWatchdogIntervalSeconds;
+    }
+
+    public boolean isSynthesisDropOldPending() {
+        return synthesisDropOldPending;
+    }
+
+    public void setSynthesisDropOldPending(boolean synthesisDropOldPending) {
+        this.synthesisDropOldPending = synthesisDropOldPending;
     }
 }

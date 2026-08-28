@@ -1,6 +1,6 @@
-package com.mwb.ai.claw.domain.core.strategy;
+package com.mwb.ai.claw.infrastructure.collaboration.strategy.routing;
 
-import com.mwb.ai.claw.domain.core.AgentRouter;
+import com.mwb.ai.claw.domain.collaboration.spi.AgentRouter;
 
 import java.util.List;
 
