@@ -1,5 +1,6 @@
 package com.mwb.ai.claw.domain.llm;
 
+import com.mwb.ai.claw.domain.core.MessageRole;
 import lombok.Data;
 
 import java.util.List;
@@ -27,21 +28,21 @@ public class LlmMessage {
 
     public static LlmMessage system(String content) {
         LlmMessage m = new LlmMessage();
-        m.role = "system";
+        m.role = MessageRole.SYSTEM.getValue();
         m.content = content;
         return m;
     }
 
     public static LlmMessage user(String content) {
         LlmMessage m = new LlmMessage();
-        m.role = "user";
+        m.role = MessageRole.USER.getValue();
         m.content = content;
         return m;
     }
 
     public static LlmMessage assistant(String content, List<ToolCall> toolCalls) {
         LlmMessage m = new LlmMessage();
-        m.role = "assistant";
+        m.role = MessageRole.ASSISTANT.getValue();
         m.content = content;
         m.toolCalls = toolCalls;
         return m;
@@ -49,7 +50,7 @@ public class LlmMessage {
 
     public static LlmMessage tool(String toolCallId, String content) {
         LlmMessage m = new LlmMessage();
-        m.role = "tool";
+        m.role = MessageRole.TOOL.getValue();
         m.toolCallId = toolCallId;
         m.content = content;
         return m;

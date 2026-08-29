@@ -151,6 +151,8 @@ CREATE TABLE IF NOT EXISTS claw_trace (
 -- 与会话/记忆/trace 同库，多实例共享供 shell /runs 统计。
 CREATE TABLE IF NOT EXISTS claw_run_usage (
     id            BIGINT       NOT NULL AUTO_INCREMENT COMMENT '自增主键（聚簇索引，非业务字段）',
+    tenant_id     VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '租户 id（空串=默认空间，对齐 AgentScope）',
+    user_id       VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '用户 id（空串=默认空间，对齐 AgentScope）',
     trace_id      VARCHAR(64)  DEFAULT NULL COMMENT '关联的全链路 trace id（GET /trace/{traceId} 可还原步骤明细）',
     session_id    VARCHAR(64)  DEFAULT NULL COMMENT '会话 id',
     agent_id      VARCHAR(64)  DEFAULT NULL COMMENT '主导 Agent id',
@@ -162,5 +164,5 @@ CREATE TABLE IF NOT EXISTS claw_run_usage (
     error_code    VARCHAR(32)  DEFAULT NULL COMMENT '失败错误码（成功为空）',
     create_time   BIGINT       DEFAULT NULL COMMENT '写入时间戳（epoch 毫秒）',
     PRIMARY KEY (id),
-    KEY idx_run_create (create_time)
+    KEY idx_run_scope_create (tenant_id, user_id, create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='运行用量摘要表：每次运行一条';

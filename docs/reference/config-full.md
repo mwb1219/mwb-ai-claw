@@ -34,6 +34,9 @@ nav_order: 3
 | `REDIS_INDEX_PREFIX` | `claw` | Redis 召回索引 key 前缀（多环境隔离） |
 | `LOCK_TYPE` | `local` | 会话锁：`local`（JVM 内锁）\| `redis`（分布式锁） |
 | `REDIS_URI` | `redis://localhost:6379` | Redis 连接串（召回索引 + 分布式锁兜底） |
+| `SYNTHESIS_QUEUE_TYPE` | `auto` | 提炼任务队列：`auto`（跟随 `STORAGE_TYPE`：file→local、db→redis）\| `local`（进程内单线程）\| `redis`（分布式锁，多实例推荐） |
+| `SYNTHESIS_LOCK_TTL_SECONDS` | `600` | 合成锁 TTL（秒，仅 queue-type=redis 生效；LLM 长上下文时可放大） |
+| `SYNTHESIS_LOCK_WATCHDOG_INTERVAL` | `200` | 合成锁 watchdog 续期间隔（秒，默认 1/3 TTL） |
 | `RUN_USAGE_STORE` | `local` | 运行用量存储：`local`（JSONL）\| `db`（表） |
 | `TRACE_ENABLED` / `TRACE_STORE` | `true` / `local` | 步骤级 trace 开关 / 存储：`local` \| `db` |
 
@@ -88,6 +91,15 @@ nav_order: 3
 | `shared-retrieve` | `true` | 多 Agent 共享检索 |
 | `synthesizer-model` / `-base-url` / `-api-key` | 继承默认 | 提炼专用小模型 |
 | `synthesis-cache-size` | `50` | 提炼缓存容量（≤0 关闭） |
+| `synthesis-cache-type` | `auto` | 提炼缓存实现：`auto`（跟随 `storage.type`：file→local、db→redis）\| `local`（JVM LRU）\| `redis`（分布式，多实例推荐） |
+| `synthesis-cache-ttl-seconds` | `3600` | 提炼缓存 Redis TTL（秒，仅 type=redis 生效） |
+| `synthesis-cache-redis-uri` | （空=复用） | 提炼缓存 Redis 连接串（留空复用 `spring.data.redis` 或会话锁 `redis-uri`） |
+| `synthesis-cache-redis-key-prefix` | `claw:syn:` | 提炼缓存 Redis key 前缀（多租户/多环境隔离） |
+| `synthesis-queue-type` | `auto` | 提炼任务队列：`auto`（跟随 cache-type 推断）\| `local`（进程内单线程）\| `redis`（分布式锁，多实例推荐）\| `lockfree`（CAS，Phase 2）\| `rocketmq`（生产级 MQ，Phase 3） |
+| `synthesis-lock-ttl-seconds` | `600` | 合成锁 TTL（秒，仅 queue-type=redis 生效；LLM 长上下文时可放大） |
+| `synthesis-lock-watchdog-interval-seconds` | `200` | 合成锁 watchdog 续期间隔（秒，默认 1/3 TTL） |
+| `synthesis-drop-old-pending` | `true` | 是否「保留最新提交、丢弃旧等待」去重（同会话同类型多次提交） |
+| `synthesis-claim-max-retries` | `3` | Phase 2 CAS claim 最大重试次数（仅 queue-type=lockfree 生效） |
 
 ## 5. RAG 检索增强（agent.rag.*）
 

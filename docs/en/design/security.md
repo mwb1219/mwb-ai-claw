@@ -43,6 +43,7 @@ Disabled by default; enable it for server-side multi-tenant deployments:
 - On failure: 401 (`B_AGENT_AUTH_FAILED`)
 - Tool-level static authorization: `agent.auth.tool-permissions` (userId → tool list; everything is allowed by default), unauthorized calls return `ToolResult.error` without interrupting ReAct
 - Integrators can implement `TenantGateway` to connect their own tenant store; when not implemented, it falls back to the static `agent.auth.api-keys`
+- **Data isolation enforcement points**: session / memory / RAG / observability (`GET /runs`, `GET /trace/{traceId}`) reads and writes are all filtered by the current scope; records outside the tenant/user are never returned; the admin bootstrap Key also cannot read across tenants (see [Observability](observability.md) §2.1 / [Storage & Multi-tenancy](storage-multitenancy.md) §2.2)
 
 ## 5. Injection Defense and Redaction
 

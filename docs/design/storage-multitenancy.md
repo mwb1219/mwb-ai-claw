@@ -40,6 +40,9 @@ AgentScope.defaultScope();             // 同上一行
 - `AgentScopeContext`（ThreadLocal）：请求链路中临时持有当前 scope，入口设置、finally 清理
 - 异步任务（SSE / WebSocket 执行线程）：ThreadLocal 不跨线程，需显式捕获并 `AgentScopeContext.set(scope)`
 - 会话并发锁默认 `LocalSessionLockManager`（JVM 内 ReentrantLock，按 `scope.keyPrefix()` 维度隔离）；多实例部署可切换 Redis 分布式锁（`agent.collaboration.lock.type=redis`，见 [横向扩展部署](horizontal-scaling.md)）
+- 可观测性数据同样按 scope 隔离：`claw_run_usage` / `claw_trace` 表均带 `tenant_id` / `user_id` 列，
+  `GET /runs` 与 `GET /trace/{traceId}` 读接口强制按当前 scope 过滤（见 [可观测性与韧性](observability.md) §2.1），
+  `claw_run_usage` 含复合索引 `idx_run_scope_create (tenant_id, user_id, create_time)`
 
 ## 3. 各入口如何确定 scope
 

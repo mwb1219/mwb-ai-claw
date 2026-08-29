@@ -41,6 +41,9 @@ nav_order: 1
 │  Memory / Agent                              │
 │  collaboration: orchestration SPI +          │
 │  ExecutionUnit                               │
+│  + AgentRouter (intent routing SPI)         │
+│  context: ContextAssembler (context          │
+│  assembly SPI)                               │
 │  Callbacks: ProgressCallback /               │
 │  LlmStreamCallback                           │
 └──────────────────────┬──────────────────────┘
@@ -49,11 +52,16 @@ nav_order: 1
 │  infrastructure (infrastructure layer)       │
 │  LlmGatewayImpl / ToolGatewayImpl / MCP      │
 │  Memory implementations / orchestration      │
-│  implementations / agent config loading      │
+│  implementations (routing/conversational/    │
+│  delegate) + AgentRouter routing impls (3)  │
+│  DefaultContextAssembler / agent config      │
+│  loading                                     │
 └─────────────────────────────────────────────┘
 ```
 
 **Dependency direction**: `adapter / app / infrastructure` → `client + domain`; `domain` depends on no lower layer.
+
+> **Layering convention**: SPI interfaces live in the domain layer (`AgentOrchestrator` / `AgentRouter` / `ContextAssembler`); implementations live in the infrastructure layer (`RoutingOrchestrator` and other orchestration impls, `RuleBasedAgentRouter` and other routing impls, `DefaultContextAssembler`). Adding a new routing strategy only requires implementing `AgentRouter` and registering it as a Spring Bean.
 
 ## 2. Module Structure (Maven multi-module)
 
@@ -86,6 +94,8 @@ nav_order: 1
 | Memory | `MemoryGateway` / `LongTermMemoryGateway` | File / JDBC dual implementations | Conditional assembly switch |
 | Agent config | `AgentGateway` | `AgentGatewayImpl` | agents.json configuration |
 | Orchestration | `AgentOrchestrator` (SPI) | routing / conversational / delegate | Register a `type` plugin |
+| Intent routing | `AgentRouter` (SPI) | `CompositeAgentRouter` (= rule + LLM) | New `@Component` routing impl |
+| Context assembly | `ContextAssembler` (SPI) | `DefaultContextAssembler` (layered memory context assembly) | `@Bean` override |
 
 ## 5. Dual Mode and Embedded
 

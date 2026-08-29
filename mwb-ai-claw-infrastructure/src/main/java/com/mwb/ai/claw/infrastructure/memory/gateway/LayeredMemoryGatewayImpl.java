@@ -27,9 +27,10 @@ import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesizer;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
+import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher.SynthesisEvent;
+import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher;
 import com.mwb.ai.claw.infrastructure.memory.strategy.ImportanceEvictionPolicy;
 import com.mwb.ai.claw.infrastructure.memory.strategy.TokenBudgetEvictionPolicy;
-import com.mwb.ai.claw.infrastructure.memory.synthesis.MemorySynthesisExecutor;
 import com.mwb.ai.claw.infrastructure.util.TokenEstimator;
 
 /**
@@ -44,13 +45,13 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
     private final MemorySynthesizer synthesizer;
     private final MemoryRetriever retriever;
     private final PageEvictionPolicy evictionPolicy;
-    private final MemorySynthesisExecutor synthesisExecutor;
+    private final MemorySynthesisDispatcher taskQueue;
 
     public LayeredMemoryGatewayImpl(AgentProperties properties,
                                     MemoryPageStore pageStore,
                                     MemorySynthesizer synthesizer,
                                     MemoryRetriever retriever,
-                                    MemorySynthesisExecutor synthesisExecutor) {
+                                    MemorySynthesisDispatcher taskQueue) {
         this.config = properties.getMemory();
         this.pageStore = pageStore;
         this.synthesizer = synthesizer;
@@ -58,7 +59,7 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
         // 换页策略可插拔：importance | token（默认）
         this.evictionPolicy = "importance".equalsIgnoreCase(config.getEvictionPolicy())
                 ? new ImportanceEvictionPolicy() : new TokenBudgetEvictionPolicy();
-        this.synthesisExecutor = synthesisExecutor;
+        this.taskQueue = taskQueue;
         log.warn("分层记忆配置: enabled={}, window={}, budgetRatio={}, hotWindow={}, blockSize={}, threshold={}, topK={}, policy={}, async={}, retriever={}, vector={}, archive={}, sharedRetrieve={}, model={}",
                 config.isEnabled(), config.getContextWindowTokens(), config.getContextBudgetRatio(),
                 config.getHotWindowSize(), config.getSummaryBlockSize(),
@@ -128,16 +129,18 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
         if (!isEnabled()) {
             return;
         }
-        // 提炼（摘要生成）是 LLM 调用，异步执行不阻塞主对话链路；快照消息避免执行期数据漂移
-        // 异步任务不依赖 ThreadLocal，scope 显式透传
+        // 提炼（摘要生成）是 LLM 调用，异步执行不阻塞主对话链路。
+        // 通过 MemorySynthesisDispatcher.produce 投递：快照延迟获取（锁/claim 内才取），
+        // 执行回调 doAfterTurn 在 consume 阶段被调用。
         final String sessionId = session.getSessionId();
         final AgentScope scope = session.getScope();
-        final List<Message> snapshot = new ArrayList<>(session.getMessages());
-        Runnable task = () -> doAfterTurn(scope, sessionId, snapshot);
         if (config.isSynthesisAsync()) {
-            synthesisExecutor.submit(scope, "afterTurn-" + sessionId, task);
+            taskQueue.produce(new MemorySynthesisDispatcher.SynthesisEvent(
+                    scope, sessionId, MemorySynthesisDispatcher.Kind.AFTER_TURN,
+                    () -> new ArrayList<>(session.getMessages()),
+                    ctx -> doAfterTurn(ctx.scope, ctx.sessionId, ctx.getSnapshot())));
         } else {
-            task.run();
+            doAfterTurn(scope, sessionId, new ArrayList<>(session.getMessages()));
         }
     }
 
@@ -167,15 +170,17 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
         if (!isEnabled()) {
             return;
         }
-        // 事实提炼（LLM 调用）异步执行；摘要换页由 afterTurn 负责，此处只提炼事实
+        // 事实提炼（LLM 调用）异步执行；摘要换页由 afterTurn 负责，此处只提炼事实。
+        // 通过 MemorySynthesisDispatcher.produce 投递，快照延迟获取。
         final String sessionId = session.getSessionId();
         final AgentScope scope = session.getScope();
-        final List<Message> snapshot = new ArrayList<>(session.getMessages());
-        Runnable task = () -> doAfterSession(scope, sessionId, snapshot);
         if (config.isSynthesisAsync()) {
-            synthesisExecutor.submit(scope, "afterSession-" + sessionId, task);
+            taskQueue.produce(new MemorySynthesisDispatcher.SynthesisEvent(
+                    scope, sessionId, MemorySynthesisDispatcher.Kind.AFTER_SESSION,
+                    () -> new ArrayList<>(session.getMessages()),
+                    ctx -> doAfterSession(ctx.scope, ctx.sessionId, ctx.getSnapshot())));
         } else {
-            task.run();
+            doAfterSession(scope, sessionId, new ArrayList<>(session.getMessages()));
         }
     }
 
@@ -185,7 +190,7 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
         if (config.isArchiveEnabled() && !all.isEmpty()) {
             archiveMessages(scope, sessionId, all);
         }
-        // 2. 事实提炼 + merge
+        // 2. 事实提炼 + merge（Phase 1：原子 UPSERT，消除 delete+append RMW 竞态）
         List<MemoryPage> freshFacts = synthesizer.extractFacts(scope, all);
         int saved = 0;
         for (MemoryPage fresh : freshFacts) {
@@ -194,11 +199,8 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
             }
             MemoryPage existing = findFact(scope, fresh.getKey());
             MemoryPage merged = synthesizer.mergeFact(existing, fresh);
-            if (existing != null) {
-                pageStore.deleteFact(scope, existing.getKey());
-            }
             merged.setTokenCount(TokenEstimator.estimate(merged));
-            pageStore.appendFact(scope, merged);
+            pageStore.upsertFactAtomic(scope, merged);
             saved++;
         }
         log.warn("分层记忆: 会话 {} 提炼结束，新增/更新事实 {} 条", sessionId, saved);
@@ -259,10 +261,7 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
         fresh.setTokenCount(TokenEstimator.estimate(fresh));
         MemoryPage existing = findFact(scope, topic);
         MemoryPage merged = synthesizer.mergeFact(existing, fresh);
-        if (existing != null) {
-            pageStore.deleteFact(scope, existing.getKey());
-        }
-        pageStore.appendFact(scope, merged);
+        pageStore.upsertFactAtomic(scope, merged);
         log.warn("分层记忆: 保存事实 '{}'（重要度 {}）", topic, merged.getImportance());
     }
 

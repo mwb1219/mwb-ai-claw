@@ -63,6 +63,10 @@ nav_order: 3
    回退默认 Agent
 ```
 
+> `AgentRouter` SPI 定义在 domain 层 `collaboration/spi`，三套实现落 infrastructure 层 `collaboration/strategy/routing`：
+> `RuleBasedAgentRouter`（关键词规则）/ `LlmBasedAgentRouter`（LLM 意图分类）/ `CompositeAgentRouter`（组合，默认）。
+> 与 `RoutingOrchestrator` 同处 strategy 包，符合「SPI 在 domain、实现在 infrastructure」分层约定。
+
 执行流程：按 sessionId 会话粒度加锁（同会话「取会话 → 追加消息 → ReAct → 保存 → 记忆提炼」串行化）→ 追加用户消息（可含多模态片段）→ 执行 ReAct → 回填推理轨迹 → 持久化会话 → 分层记忆提炼（失败仅告警，不阻塞响应）。
 
 ### 2.2 conversational（对话式讨论）

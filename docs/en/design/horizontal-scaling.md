@@ -41,7 +41,7 @@ Key point: **the application is stateless** (it never owns session/memory/approv
 
 | Component | Current implementation | Shared? | Notes |
 | --- | --- | --- | --- |
-| Session lock | `LocalSessionLockManager` (in-JVM ReentrantLock) | ❌ Not shared | **Already migrated**: extracted `SessionLockManager` SPI and added `RedisSessionLockManager` (Redis SET NX PX + Lua atomic release). Set `agent.collaboration.lock.type=redis` for cross-instance sharing; default `local` is fully backward compatible. |
+| Session lock | `LocalSessionLockManager` (in-JVM ReentrantLock) | ❌ Not shared | **Done**: abstracted `SessionLockManager` SPI, added `RedisSessionLockManager` (reuses the unified `DistributedLock`, poll-wait + finally release). Set `agent.collaboration.lock.type=redis` for cross-instance sharing; default `local` is fully backward compatible. |
 
 ### 3.2 State that must be shared across instances (required for multi-instance)
 
@@ -61,12 +61,33 @@ Key point: **the application is stateless** (it never owns session/memory/approv
 
 > Conclusion: **shared across instances** = session lock, approval todos, session/memory/RAG storage; **single-instance OK** = memory synthesis, RAG writes (idempotent, can degrade).
 
-## 4. Distributed Session Lock (implemented)
+## 4. Distributed lock (implemented)
 
-`SessionLockManager` is now an SPI (`infrastructure/collaboration/lock`) with two implementations:
+### 4.1 Unified distributed lock SPI (`DistributedLock`)
 
-- `LocalSessionLockManager`: in-JVM ReentrantLock isolated by `scope.keyPrefix()` — **default**;
-- `RedisSessionLockManager`: Redis `SET NX PX` atomic lock; the value carries a unique holder token; release uses a Lua script that verifies the token before deleting (prevents deleting another holder's lock); acquisition polls with a timeout and throws "session lock acquisition timeout" on expiry.
+All distributed mutual-exclusion primitives — session lock, synthesis lock, etc. — are uniformly encapsulated in the `DistributedLock` SPI (`infrastructure/lock`), wrapping "acquire → (optional) watchdog renew → execute task → finally release" so callers only care about `LockOptions` + the task:
+
+```java
+// Session lock: poll-wait, no renew
+LockResult<T> r = lock.execute(key, LockOptions.wait(ttl, timeout, retry), task);
+
+// Synthesis lock: tryLock no-wait + watchdog renew
+LockResult<Void> r = lock.execute(key, LockOptions.tryLockWithRenew(ttl, renew), task);
+```
+
+- **Implementation**: `RedisDistributedLock` (based on Redis Hash structure, **reentrant by default**):
+  - Lock structure `HSET claw:lock:xxx owner {token} count {N} EXPIRE {ttl}`; `owner` identifies the holder, `count` records the reentrant depth;
+  - Three Lua scripts execute atomically: ACQUIRE (0=held by other / 1=newly acquired / 2=reentrant) / RELEASE (-1=not owner / ≥0=remaining depth) / RENEW (only owner renews);
+  - **Reentrancy**: `ThreadLocal<Map<lockKey, ownerToken>>` caches the token of locks already held by the current thread; nested `execute` on the same key reuses the same token, making ACQUIRE recognize it as owner and increment count; the key is only truly DEL'd when count reaches zero;
+  - **Watchdog starts only at the outermost layer**: avoids redundant renewal tasks on inner layers; the outer renewer spans all reentrant levels and is cancelled in finally when the outer lock is released; ThreadLocal is cleared only when the outermost release succeeds (count=0), avoiding memory leaks.
+- Assembled by `ClawCoreAutoConfiguration` when a distributed lock is needed (either session lock or synthesis lock in Redis form), reused by `RedisSessionLockManager` and `LockMemorySynthesisDispatcher`.
+
+### 4.2 Session lock (`SessionLockManager`)
+
+The `SessionLockManager` is abstracted as an SPI (`infrastructure/collaboration/lock`) with two implementations:
+
+- `LocalSessionLockManager`: JVM-internal ReentrantLock, isolated by `scope.keyPrefix()`, **default**;
+- `RedisSessionLockManager`: reuses `DistributedLock`, acquires the session lock via `LockOptions.wait` poll-wait, throws "session lock acquire timeout" on timeout; release delegates to the unified lock's finally semantics.
 
 Configuration (`agent.collaboration.lock.*`):
 
@@ -142,7 +163,7 @@ Unit tests: `infrastructure/.../collaboration/lock/SessionLockManagerTest` (same
 | Limitation | Evolution |
 | --- | --- |
 | Approval todos are in-JVM state; cross-instance visibility depends on sticky routing | Externalize approval state to Redis/DB (pending-approval table + decision events) so any instance can decide (later iteration) |
-| Memory synthesis is a per-instance single-thread queue; multi-instance causes duplicate scheduling | Externalize synthesis tasks to a distributed queue (Redis Stream), deduped by scope + task name |
+| Memory synthesis is a per-instance single-thread queue; multi-instance causes duplicate scheduling | **Implemented**: `MemorySynthesisDispatcher` SPI (see [Layered Memory Model](memory-model.md) §5); Phase 1 `LockMemorySynthesisDispatcher` uses the unified `DistributedLock`; Phase 2 `LockFreeMemorySynthesisDispatcher` uses boundary-cursor CAS (no Redis); Phase 3 `RocketMqMemorySynthesisDispatcher` (example-web extension) uses RocketMQ CLUSTERING + sessionId-hash partitioning for production-grade multi-instance serialization. DB-layer UNIQUE + UPSERT always serves as the final correctness guard |
 | RAG/memory retrieval index is an in-memory scan in `file` mode, one copy per instance | Already replaced by the Redis Stack retrieval index in `db` mode (shared across instances, rebuildable from MySQL); serialize `file`-mode writes with a distributed lock |
 | Run logs land in local files | Full trace + aggregation to logging/OTel (TODO T5) |
 

@@ -33,6 +33,9 @@ nav_order: 3
 | `REDIS_INDEX_PREFIX` | `claw` | Redis retrieval-index key prefix (multi-environment isolation) |
 | `LOCK_TYPE` | `local` | Session lock: `local` (JVM lock) \| `redis` (distributed lock) |
 | `REDIS_URI` | `redis://localhost:6379` | Redis URI (retrieval index + distributed-lock fallback) |
+| `SYNTHESIS_QUEUE_TYPE` | `auto` | Synthesis task queue: `auto` (follows `STORAGE_TYPE`: file→local, db→redis) \| `local` (in-process single-thread) \| `redis` (distributed lock, recommended for multi-instance) |
+| `SYNTHESIS_LOCK_TTL_SECONDS` | `600` | Synthesis lock TTL (seconds, only for queue-type=redis; enlarge for long-context LLM) |
+| `SYNTHESIS_LOCK_WATCHDOG_INTERVAL` | `200` | Synthesis lock watchdog renew interval (seconds, default 1/3 TTL) |
 | `RUN_USAGE_STORE` | `local` | Run-usage storage: `local` (JSONL) \| `db` (table) |
 | `TRACE_ENABLED` / `TRACE_STORE` | `true` / `local` | Step-level trace switch / storage: `local` \| `db` |
 
@@ -86,6 +89,15 @@ nav_order: 3
 | `shared-retrieve` | `true` | Shared retrieval across multiple Agents |
 | `synthesizer-model` / `-base-url` / `-api-key` | Inherits default | Dedicated small model for synthesis |
 | `synthesis-cache-size` | `50` | Synthesis cache capacity (≤0 disables it) |
+| `synthesis-cache-type` | `auto` | Synthesis cache impl: `auto` (follows `storage.type`: file→local, db→redis) \| `local` (JVM LRU) \| `redis` (distributed, recommended for multi-instance) |
+| `synthesis-cache-ttl-seconds` | `3600` | Synthesis cache Redis TTL (seconds, only for type=redis) |
+| `synthesis-cache-redis-uri` | (empty=reuse) | Synthesis cache Redis connection string (empty reuses `spring.data.redis` or session lock `redis-uri`) |
+| `synthesis-cache-redis-key-prefix` | `claw:syn:` | Synthesis cache Redis key prefix (multi-tenant/multi-env isolation) |
+| `synthesis-queue-type` | `auto` | Synthesis task queue: `auto` (follows cache-type) \| `local` (in-process single-thread) \| `redis` (distributed lock, recommended for multi-instance) \| `lockfree` (CAS, Phase 2) \| `rocketmq` (production MQ, Phase 3) |
+| `synthesis-lock-ttl-seconds` | `600` | Synthesis lock TTL (seconds, only for queue-type=redis; enlarge for long-context LLM) |
+| `synthesis-lock-watchdog-interval-seconds` | `200` | Synthesis lock watchdog renew interval (seconds, default 1/3 TTL) |
+| `synthesis-drop-old-pending` | `true` | Whether to "keep latest submission, drop older waits" dedup (same session+type repeated submissions) |
+| `synthesis-claim-max-retries` | `3` | Phase 2 CAS claim max retries (only for queue-type=lockfree) |
 
 ## 5. RAG Retrieval (agent.rag.*)
 

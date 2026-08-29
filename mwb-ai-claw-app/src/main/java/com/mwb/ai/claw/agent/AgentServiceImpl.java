@@ -1,5 +1,7 @@
 package com.mwb.ai.claw.agent;
 
+import com.mwb.ai.claw.domain.core.ProgressCallback;
+import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
 import com.mwb.ai.claw.dto.SingleResponse;
 import com.mwb.ai.claw.api.AgentServiceI;
 import com.mwb.ai.claw.agent.executor.ChatCmdExe;
@@ -49,6 +51,11 @@ public class AgentServiceImpl implements AgentServiceI {
     @Override
     public SingleResponse<ChatResponseDTO> chat(ChatCmd cmd) {
         return chatCmdExe.execute(cmd);
+    }
+
+    @Override
+    public SingleResponse<ChatResponseDTO> chat(ChatCmd cmd, ProgressCallback progressCallback, LlmStreamCallback llmStreamCallback) {
+        return chatCmdExe.execute(cmd, progressCallback, llmStreamCallback);
     }
 
     @Override

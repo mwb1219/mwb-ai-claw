@@ -59,11 +59,23 @@ nav_order: 8
 
 | 扩展点 | 接口 | 默认实现 | 覆盖方式 |
 | --- | --- | --- | --- |
-| 记忆读写 | `MemoryGateway` / `LongTermMemoryGateway` / `LayeredMemoryGateway` | 文件 / JDBC 双实现 | 条件装配切换 / `@Bean` 覆盖 |
+| 记忆读写 | `MemoryGateway` / `LongTermMemoryGateway` / `LayeredMemory Gateway` | 文件 / JDBC 双实现 | 条件装配切换 / `@Bean` 覆盖 |
 | 页面存储 | `MemoryPageStore` | 文件 / JDBC | 条件装配 |
 | 换页策略 | `PageEvictionPolicy` | token / importance | 实现接口（`agent.memory.eviction-policy`） |
 | 检索召回 | `MemoryRetriever` | 关键词 / 向量 / 混合 | 实现接口（`agent.memory.retriever`） |
 | 事实提炼 | `MemorySynthesizer` | LLM 提炼（可配小模型） | 实现接口 |
+| 提炼任务队列 | `MemorySynthesisDispatcher` | `LockMemorySynthesisDispatcher`（Phase 1，分布式锁）/ `LockFreeMemorySynthesisDispatcher`（Phase 2，无锁 CAS）/ `LocalMemorySynthesisDispatcher`（本地兜底）/ `RocketMqMemorySynthesisDispatcher`（Phase 3，example-web 扩展，RocketMQ 生产级） | 实现接口（`agent.memory.synthesis-queue-type`，见 [分层记忆模型](memory-model.md) §5） |
+| 提炼缓存 | `SynthesisCache` | `LocalSynthesisCache` / `RedisSynthesisCache`（按存储形态切换） | 条件装配（`agent.memory.synthesis-cache-type`） |
+
+### 3.3.1 分布式锁（infrastructure 扩展点）
+
+`DistributedLock` 是 infrastructure 层技术关注点的扩展点（非 domain SPI），封装「加锁 → 续期 → 释放」全流程，供会话锁、合成锁等所有分布式互斥复用：
+
+| 接口 | 默认实现 | 覆盖方式 |
+| --- | --- | --- |
+| `DistributedLock` | `RedisDistributedLock`（Hash 结构默认可重入 + watchdog 续期） | `@Bean` 覆盖（如换 ZK / etcd 实现） |
+
+> 配套 `LockOptions`（tryLock / tryLockWithRenew / wait 三种获取策略）+ `LockResult`（含获取耗时与失败原因）。详见 [横向扩展部署](horizontal-scaling.md) §4.1。
 
 ### 3.4 多 Agent 编排
 

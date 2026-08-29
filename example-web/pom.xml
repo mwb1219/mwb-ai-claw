@@ -25,8 +25,8 @@
     <properties>
         <java.version>1.8</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <!-- 框架版本：Maven Central 正式版，脱离本地仓库即可独立构建 -->
-        <mwb-ai-claw.version>1.0.3</mwb-ai-claw.version>
+        <!-- 框架版本：本地开发用 1.0.4-SNAPSHOT（Phase 1/2 已集成）；正式发布切回 Maven Central 版本 -->
+        <mwb-ai-claw.version>1.0.4-SNAPSHOT</mwb-ai-claw.version>
         <!-- 覆盖 Lombok 版本以兼容 JDK 21 及新版语言服务器编译器（1.18.30 会触发 lombok.javac.Javac 初始化失败） -->
         <lombok.version>1.18.46</lombok.version>
     </properties>
@@ -77,6 +77,13 @@
             <groupId>org.apache.poi</groupId>
             <artifactId>poi-ooxml</artifactId>
             <version>5.2.5</version>
+        </dependency>
+        <!-- Phase 3：RocketMQ 提炼任务队列（生产级 MQ 异步提炼；不启用时不引入，不会报错） -->
+        <dependency>
+            <groupId>org.apache.rocketmq</groupId>
+            <artifactId>rocketmq-spring-boot-starter</artifactId>
+            <version>2.2.3</version>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>

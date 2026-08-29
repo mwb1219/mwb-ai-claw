@@ -220,9 +220,11 @@ export interface RagSearchResult {
 // ==================== 可观测性（运行记录 + 全链路 trace） ====================
 // 后端来源：mwb-ai-claw-domain（observability/*）、mwb-ai-claw-adapter（RunUsageController /runs、TraceController /trace）
 
-/** 一次 Agent 运行的用量摘要（运行记录列表项） */
+/** 一次 Agent 运行的用量摘要（运行记录列表项；按当前登录身份 tenantId/userId 隔离返回） */
 export interface RunUsage {
   ts?: string;
+  tenantId?: string;
+  userId?: string;
   traceId?: string;
   sessionId?: string;
   agentId?: string;

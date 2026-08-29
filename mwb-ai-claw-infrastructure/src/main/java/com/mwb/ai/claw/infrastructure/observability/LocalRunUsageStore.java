@@ -21,6 +21,7 @@ import org.slf4j.LoggerFactory;
 
 import com.mwb.ai.claw.domain.observability.RunUsage;
 import com.mwb.ai.claw.domain.observability.RunUsageStore;
+import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.util.JsonUtils;
 
@@ -64,7 +65,10 @@ public class LocalRunUsageStore implements RunUsageStore {
     }
 
     @Override
-    public List<Map<String, Object>> findByDate(String date) {
+    public List<Map<String, Object>> findByDate(AgentScope scope, String date) {
+        AgentScope s = scope != null ? scope : AgentScope.defaultScope();
+        String tenant = nullToEmpty(s.getTenantId());
+        String user = nullToEmpty(s.getUserId());
         String day = (date == null || date.trim().isEmpty()) ? LocalDate.now().toString() : date.trim();
         Path file = usageDir.resolve(day + ".jsonl");
         if (!Files.isRegularFile(file)) {
@@ -79,9 +83,16 @@ public class LocalRunUsageStore implements RunUsageStore {
                 try {
                     @SuppressWarnings("unchecked")
                     Map<String, Object> entry = JsonUtils.fromJson(line, Map.class);
-                    if (entry != null) {
-                        runs.add(entry);
+                    if (entry == null) {
+                        continue;
                     }
+                    // 强制租户/用户隔离：与 scope 不匹配直接跳过
+                    String t = nullToEmpty((String) entry.get("tenantId"));
+                    String u = nullToEmpty((String) entry.get("userId"));
+                    if (!tenant.equals(t) || !user.equals(u)) {
+                        continue;
+                    }
+                    runs.add(entry);
                 } catch (Exception ignore) {
                     // 单行解析失败跳过，不中断整体读取
                 }
@@ -98,6 +109,9 @@ public class LocalRunUsageStore implements RunUsageStore {
         entry.put("ts", LocalDateTime.ofInstant(
                 Instant.ofEpochMilli(u.getCreateTime()), ZoneId.systemDefault())
                 .format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+        // 身份维度：写入 JSONL 便于 findByDate 按 tenant/user 过滤
+        entry.put("tenantId", nullToEmpty(u.getTenantId()));
+        entry.put("userId", nullToEmpty(u.getUserId()));
         entry.put("traceId", u.getTraceId());
         entry.put("sessionId", u.getSessionId());
         entry.put("agentId", u.getAgentId());
@@ -108,5 +122,9 @@ public class LocalRunUsageStore implements RunUsageStore {
         entry.put("steps", u.getSteps());
         entry.put("errorCode", u.getErrorCode());
         return entry;
+    }
+
+    private static String nullToEmpty(String s) {
+        return s == null ? "" : s;
     }
 }

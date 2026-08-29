@@ -51,6 +51,8 @@ import com.mwb.ai.claw.infrastructure.auth.ConfigToolPermissionChecker;
 import com.mwb.ai.claw.infrastructure.collaboration.lock.LocalSessionLockManager;
 import com.mwb.ai.claw.infrastructure.collaboration.lock.RedisSessionLockManager;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
+import com.mwb.ai.claw.infrastructure.lock.DistributedLock;
+import com.mwb.ai.claw.infrastructure.lock.RedisDistributedLock;
 import com.mwb.ai.claw.infrastructure.config.AgentRegistryLoader;
 import com.mwb.ai.claw.infrastructure.config.AuthProperties;
 import com.mwb.ai.claw.infrastructure.core.AgentGatewayImpl;
@@ -70,7 +72,9 @@ import com.mwb.ai.claw.infrastructure.memory.storage.jdbc.JdbcSessionGateway;
 import com.mwb.ai.claw.infrastructure.memory.storage.redis.RedisMemoryIndexer;
 import com.mwb.ai.claw.infrastructure.memory.storage.redis.RedisMemorySearchable;
 import com.mwb.ai.claw.infrastructure.memory.strategy.LlmMemorySynthesizer;
+import com.mwb.ai.claw.infrastructure.memory.synthesis.LocalSynthesisCache;
 import com.mwb.ai.claw.infrastructure.memory.synthesis.MemorySynthesisExecutor;
+import com.mwb.ai.claw.infrastructure.memory.synthesis.RedisSynthesisCache;
 import com.mwb.ai.claw.infrastructure.memory.synthesis.SynthesisCache;
 import com.mwb.ai.claw.infrastructure.observability.JdbcRunUsageStore;
 import com.mwb.ai.claw.infrastructure.observability.JdbcTraceStore;
@@ -217,14 +221,168 @@ public class ClawCoreAutoConfiguration {
         return new LlmMemorySynthesizer(llmGateway, properties, cache);
     }
 
+    // ==================== 提炼缓存（本地 JVM LRU，默认兜底，单实例 / storage=file 形态） ====================
+
+    @Configuration
+    public static class LocalSynthesisCacheConfiguration {
+        @Bean
+        @ConditionalOnMissingBean(SynthesisCache.class)
+        public LocalSynthesisCache localSynthesisCache(AgentProperties properties) {
+            return new LocalSynthesisCache(properties);
+        }
+    }
+
+    // ==================== 提炼缓存（Redis 分布式，storage=db 多实例生产形态） ====================
+    // 启用条件：
+    //   1) agent.memory.synthesis-cache-type = redis，或
+    //   2) agent.memory.synthesis-cache-type = auto && agent.storage.type = db；
+    //   且 classpath 含 spring-data-redis（starter-data-redis 为 optional 依赖，
+    //   需使用方自行引入后自动启用。无 Redis 时仍保留本地兜底，不报错）。
+
+    @Configuration
+    @ConditionalOnClass(RedisConnectionFactory.class)
+    @Conditional(SynthesisCacheRedisEffectiveCondition.class)
+    public static class RedisSynthesisCacheConfiguration {
+
+        @Bean
+        @ConditionalOnMissingBean(SynthesisCache.class)
+        public RedisSynthesisCache redisSynthesisCache(
+                ObjectProvider<RedisConnectionFactory> factoryProvider, AgentProperties properties) {
+            RedisConnectionFactory factory = factoryProvider.getIfAvailable(() -> synthesisRedisFactory(properties));
+            StringRedisTemplate template = new StringRedisTemplate(factory);
+            template.afterPropertiesSet();
+            return new RedisSynthesisCache(template, properties);
+        }
+
+        /** 未显式声明 spring-data-redis 连接工厂时：优先使用 synthesis 独立 redisUri，否则复用 lock redisUri 兜底 */
+        private RedisConnectionFactory synthesisRedisFactory(AgentProperties properties) {
+            String uriStr = properties.getMemory().getSynthesisCacheRedisUri();
+            if (uriStr == null || uriStr.trim().isEmpty()) {
+                uriStr = properties.getCollaboration().getLock().getRedisUri();
+            }
+            RedisStandaloneConfiguration standalone = new RedisStandaloneConfiguration();
+            RedisURI uri = RedisURI.create(uriStr);
+            standalone.setHostName(uri.getHost());
+            standalone.setPort(uri.getPort());
+            if (uri.getPassword() != null) {
+                standalone.setPassword(uri.getPassword());
+            }
+            if (uri.getDatabase() != 0) {
+                standalone.setDatabase(uri.getDatabase());
+            }
+            LettuceConnectionFactory factory = new LettuceConnectionFactory(standalone);
+            factory.afterPropertiesSet();
+            return factory;
+        }
+    }
+
+    /** 自定义 Condition：解析 synthesis-cache-type 生效值。*/
+    public static class SynthesisCacheRedisEffectiveCondition implements Condition {
+        @Override
+        public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
+            Environment env = context.getEnvironment();
+            String type = env.getProperty("agent.memory.synthesis-cache-type", "auto");
+            String storage = env.getProperty("agent.storage.type", "file");
+            String effective = "auto".equalsIgnoreCase(type)
+                    ? ("db".equalsIgnoreCase(storage) ? "redis" : "local")
+                    : type;
+            return "redis".equalsIgnoreCase(effective);
+        }
+    }
+
     @Bean
     @ConditionalOnMissingBean(LayeredMemoryGateway.class)
     public LayeredMemoryGatewayImpl layeredMemoryGateway(AgentProperties properties,
                                                          MemoryPageStore pageStore,
                                                          MemorySynthesizer synthesizer,
                                                          MemoryRetriever retriever,
-                                                         MemorySynthesisExecutor synthesisExecutor) {
-        return new LayeredMemoryGatewayImpl(properties, pageStore, synthesizer, retriever, synthesisExecutor);
+                                                         com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher taskQueue) {
+        return new LayeredMemoryGatewayImpl(properties, pageStore, synthesizer, retriever, taskQueue);
+    }
+
+    // ==================== 提炼任务队列（Phase 1：本地兜底，单实例 / storage=file） ====================
+
+    @Configuration
+    public static class LocalMemorySynthesisDispatcherConfiguration {
+
+        @Bean
+        @ConditionalOnMissingBean(com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher.class)
+        public com.mwb.ai.claw.infrastructure.memory.synthesis.LocalMemorySynthesisDispatcher localMemorySynthesisDispatcher(
+                MemorySynthesisExecutor executor) {
+            return new com.mwb.ai.claw.infrastructure.memory.synthesis.LocalMemorySynthesisDispatcher(executor);
+        }
+    }
+
+    // ==================== 提炼任务队列（Phase 1：Redis 分布式锁，storage=db 多实例） ====================
+    // 启用条件：
+    //   1) agent.memory.synthesis-queue-type = redis，或
+    //   2) agent.memory.synthesis-queue-type = auto && agent.storage.type = db；
+    //   且 classpath 含 spring-data-redis（starter-data-redis 为 optional 依赖，需使用方自行引入）。
+
+    @Configuration
+    @ConditionalOnClass(RedisConnectionFactory.class)
+    @Conditional(SynthesisQueueRedisEffectiveCondition.class)
+    public static class LockMemorySynthesisDispatcherConfiguration {
+
+        @Bean
+        @ConditionalOnMissingBean(com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher.class)
+        public com.mwb.ai.claw.infrastructure.memory.synthesis.LockMemorySynthesisDispatcher lockMemorySynthesisDispatcher(
+                DistributedLock distributedLock,
+                AgentProperties properties,
+                MetricsRecorder metrics,
+                MemorySynthesisExecutor executor) {
+            return new com.mwb.ai.claw.infrastructure.memory.synthesis.LockMemorySynthesisDispatcher(
+                    distributedLock, properties.getMemory(), metrics, executor);
+        }
+    }
+
+    /** 自定义 Condition：解析 synthesis-queue-type 生效值。*/
+    public static class SynthesisQueueRedisEffectiveCondition implements Condition {
+        @Override
+        public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
+            Environment env = context.getEnvironment();
+            String type = env.getProperty("agent.memory.synthesis-queue-type", "auto");
+            String storage = env.getProperty("agent.storage.type", "file");
+            String effective = "auto".equalsIgnoreCase(type)
+                    ? ("db".equalsIgnoreCase(storage) ? "redis" : "local")
+                    : type;
+            return "redis".equalsIgnoreCase(effective);
+        }
+    }
+
+    // ==================== 提炼任务队列（Phase 2：无锁 CAS，显式 lockfree） ====================
+    // 启用条件：
+    //   agent.memory.synthesis-queue-type = lockfree
+    //   且 agent.storage.type = db
+    //   且 classpath 含 JdbcTemplate（CAS claim 操作 claw_memory_boundary 表）
+
+    @Configuration
+    @ConditionalOnClass(JdbcTemplate.class)
+    @Conditional(Phase2LockFreeEffectiveCondition.class)
+    public static class LockFreeMemorySynthesisDispatcherConfiguration {
+
+        @Bean
+        @ConditionalOnMissingBean(com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher.class)
+        public com.mwb.ai.claw.infrastructure.memory.synthesis.LockFreeMemorySynthesisDispatcher lockFreeMemorySynthesisDispatcher(
+                AgentProperties properties,
+                MetricsRecorder metrics,
+                MemorySynthesisExecutor executor,
+                MemoryPageStore pageStore,
+                MemorySynthesizer synthesizer) {
+            return new com.mwb.ai.claw.infrastructure.memory.synthesis.LockFreeMemorySynthesisDispatcher(
+                    properties.getMemory(), metrics, executor, pageStore, synthesizer);
+        }
+    }
+
+    /** 自定义 Condition：Phase 2 lockfree 生效条件（synthesis-queue-type=lockfree 且 storage=db）。*/
+    public static class Phase2LockFreeEffectiveCondition implements Condition {
+        @Override
+        public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
+            Environment env = context.getEnvironment();
+            String queueType = env.getProperty("agent.memory.synthesis-queue-type", "auto");
+            String storage = env.getProperty("agent.storage.type", "file");
+            return "lockfree".equalsIgnoreCase(queueType) && "db".equalsIgnoreCase(storage);
+        }
     }
 
     // ==================== 独立 RAG ====================
@@ -538,27 +696,34 @@ public class ClawCoreAutoConfiguration {
         }
     }
 
-    // ==================== 分布式会话锁（Redis 实现，多实例部署） ====================
-    // 启用条件：agent.collaboration.lock.type=redis 且 classpath 含 spring-data-redis
-    // （starter-data-redis 为 optional 依赖，需使用方自行引入后自动启用）
+    // ==================== 分布式锁基础设施（Redis 实现，会话锁 / 合成锁共用） ====================
+    // 装配条件：classpath 含 spring-data-redis，且会话锁或合成锁任一启用 Redis 形态。
+    // 单独抽取为公共 bean，供 RedisSessionLockManager 与 LockMemorySynthesisDispatcher 复用，
+    // 统一 Lua 脚本释放/续期、token 管理与 watchdog 续期调度，消除两处重复实现。
 
     @Configuration
-    @ConditionalOnProperty(prefix = "agent.collaboration.lock", name = "type", havingValue = "redis")
     @ConditionalOnClass(RedisConnectionFactory.class)
-    public static class RedisLockConfiguration {
+    @Conditional(RedisLockNeededCondition.class)
+    public static class RedisDistributedLockConfiguration {
 
         @Bean
-        @ConditionalOnMissingBean(com.mwb.ai.claw.infrastructure.collaboration.lock.SessionLockManager.class)
-        public RedisSessionLockManager redisSessionLockManager(AgentProperties properties) {
-            AgentProperties.LockConfig cfg = properties.getCollaboration().getLock();
-            StringRedisTemplate template = new StringRedisTemplate(redisConnectionFactory(cfg));
+        @ConditionalOnMissingBean(DistributedLock.class)
+        public RedisDistributedLock redisDistributedLock(
+                ObjectProvider<RedisConnectionFactory> factoryProvider, AgentProperties properties) {
+            RedisConnectionFactory factory = factoryProvider.getIfAvailable(() -> distributedLockRedisFactory(properties));
+            StringRedisTemplate template = new StringRedisTemplate(factory);
             template.afterPropertiesSet();
-            return new RedisSessionLockManager(template, cfg);
+            return new RedisDistributedLock(template);
         }
 
-        private RedisConnectionFactory redisConnectionFactory(AgentProperties.LockConfig cfg) {
+        /** 未显式声明 spring-data-redis 连接工厂时：优先使用 synthesis cache redisUri，否则复用 lock redisUri 兜底 */
+        private RedisConnectionFactory distributedLockRedisFactory(AgentProperties properties) {
+            String uriStr = properties.getMemory().getSynthesisCacheRedisUri();
+            if (uriStr == null || uriStr.trim().isEmpty()) {
+                uriStr = properties.getCollaboration().getLock().getRedisUri();
+            }
             RedisStandaloneConfiguration standalone = new RedisStandaloneConfiguration();
-            RedisURI uri = RedisURI.create(cfg.getRedisUri());
+            RedisURI uri = RedisURI.create(uriStr);
             standalone.setHostName(uri.getHost());
             standalone.setPort(uri.getPort());
             if (uri.getPassword() != null) {
@@ -570,6 +735,43 @@ public class ClawCoreAutoConfiguration {
             LettuceConnectionFactory factory = new LettuceConnectionFactory(standalone);
             factory.afterPropertiesSet();
             return factory;
+        }
+    }
+
+    /** 自定义 Condition：会话锁或合成锁任一启用 Redis 形态时，才装配分布式锁基础设施。 */
+    public static class RedisLockNeededCondition implements Condition {
+        @Override
+        public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
+            Environment env = context.getEnvironment();
+            // 会话锁：agent.collaboration.lock.type=redis
+            String lockType = env.getProperty("agent.collaboration.lock.type", "local");
+            if ("redis".equalsIgnoreCase(lockType)) {
+                return true;
+            }
+            // 合成锁：synthesis-queue-type 生效为 redis
+            String queueType = env.getProperty("agent.memory.synthesis-queue-type", "auto");
+            String storage = env.getProperty("agent.storage.type", "file");
+            String effectiveQueue = "auto".equalsIgnoreCase(queueType)
+                    ? ("db".equalsIgnoreCase(storage) ? "redis" : "local") : queueType;
+            return "redis".equalsIgnoreCase(effectiveQueue);
+        }
+    }
+
+    // ==================== 分布式会话锁（Redis 实现，多实例部署） ====================
+    // 启用条件：agent.collaboration.lock.type=redis 且 classpath 含 spring-data-redis
+    // （starter-data-redis 为 optional 依赖，需使用方自行引入后自动启用）
+
+    @Configuration
+    @ConditionalOnProperty(prefix = "agent.collaboration.lock", name = "type", havingValue = "redis")
+    @ConditionalOnClass(RedisConnectionFactory.class)
+    public static class RedisLockConfiguration {
+
+        @Bean
+        @ConditionalOnMissingBean(com.mwb.ai.claw.infrastructure.collaboration.lock.SessionLockManager.class)
+        public RedisSessionLockManager redisSessionLockManager(
+                DistributedLock distributedLock, AgentProperties properties) {
+            return new RedisSessionLockManager(distributedLock,
+                    properties.getCollaboration().getLock());
         }
     }
 }

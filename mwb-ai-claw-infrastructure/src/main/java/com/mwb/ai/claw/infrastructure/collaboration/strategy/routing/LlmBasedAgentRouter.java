@@ -1,8 +1,8 @@
-package com.mwb.ai.claw.domain.core.strategy;
+package com.mwb.ai.claw.infrastructure.collaboration.strategy.routing;
 
+import com.mwb.ai.claw.domain.collaboration.spi.AgentRouter;
 import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.AgentGateway;
-import com.mwb.ai.claw.domain.core.AgentRouter;
 import com.mwb.ai.claw.domain.core.ModelConfig;
 import com.mwb.ai.claw.domain.llm.LlmGateway;
 import com.mwb.ai.claw.domain.llm.LlmMessage;
@@ -20,7 +20,7 @@ import java.util.regex.Pattern;
  * 相比规则路由（关键词匹配），LLM 路由能理解语义，适合规则无法覆盖的场景；
  * 但会额外消耗一次 LLM 调用，因此通常作为规则路由的兜底。
  * <p>
- * 纯领域类，不依赖 Spring，通过构造函数注入 {@link LlmGateway} 与 {@link AgentGateway}（依赖倒置）。
+ * 纯 POJO，不依赖 Spring，通过构造函数注入 {@link LlmGateway} 与 {@link AgentGateway}（依赖倒置），由 {@code AgentConfiguration} 的 @Bean 装配。
  *
  * @author mawenbin
  */
