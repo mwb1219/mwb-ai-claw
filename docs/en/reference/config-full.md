@@ -97,6 +97,7 @@ nav_order: 3
 | `synthesis-lock-ttl-seconds` | `600` | Synthesis lock TTL (seconds, only for queue-type=redis; enlarge for long-context LLM) |
 | `synthesis-lock-watchdog-interval-seconds` | `200` | Synthesis lock watchdog renew interval (seconds, default 1/3 TTL) |
 | `synthesis-drop-old-pending` | `true` | Whether to "keep latest submission, drop older waits" dedup (same session+type repeated submissions) |
+| `synthesis-claim-max-retries` | `3` | Phase 2 CAS claim max retries (only for queue-type=lockfree) |
 
 ## 5. RAG Retrieval (agent.rag.*)
 

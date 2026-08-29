@@ -112,6 +112,10 @@ agent:
     top-k: 5                       # 关键词检索召回条数
     eviction-policy: importance         # 换页策略：token（预算驱动）| importance（重要度驱动）
     synthesis-async: true          # 提炼是否异步执行（线程池串行，不阻塞主对话链路）
+    # 提炼任务队列实现：local（进程内）| redis（Phase 1 分布式锁）| lockfree（Phase 2 CAS 无锁）| rocketmq（Phase 3 生产级 MQ，需配 RocketMQ）
+    # 默认 auto，跟随 storage.type：file→local、db→lockfree；显式指定可覆盖
+    synthesis-queue-type: ${SYNTHESIS_QUEUE_TYPE:lockfree}
+    synthesis-claim-max-retries: 3  # Phase 2/3：CAS claim 最大重试次数
     # ===== Phase 3：向量检索 + 跨会话档案 RAG + 多 Agent 共享记忆 =====
     retriever: hybrid              # 检索器：keyword（关键词）| vector（向量）| hybrid（RRF 融合，默认）
     vector-enabled: true           # 是否启用向量索引（embedding 不可用时自动降级为空结果，由 hybrid 回退关键词）
@@ -377,3 +381,16 @@ agent:
 # ================= MCP Server 配置 =================
 # 已独立到 mcp-server.json 文件（与 Cursor / Claude 的 mcp.json 格式一致）。
 # 编辑 example-web/src/main/resources/mcp-server.json，或在运行目录放置外部 mcp-server.json 覆盖。
+
+# ================= Phase 3：RocketMQ 提炼队列（SYNTHESIS_QUEUE_TYPE=rocketmq 时启用） =================
+# RocketMQ Server 必须可达；rocketmq-spring-boot-starter 自动装配 DefaultMQProducer / DefaultMQPushConsumer。
+# RocketMQ 不在线时整个配置块注释掉（rocketmq-spring-boot-starter 2.2.3 会在 name-server 未配置时跳过自动装配）。
+# rocketmq:
+#   name-server: ${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}
+#   producer:
+#     group: ${ROCKETMQ_PRODUCER_GROUP:claw-synth-producer}
+#     send-message-timeout: 10000
+#     retry-times-when-send-failed: 2
+#   consumer:
+#     group: claw-synth-consumer
+#     consume-message-batch-max-size: 1

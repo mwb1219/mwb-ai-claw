@@ -42,21 +42,37 @@ nav_order: 4
 
 Under a single instance, the "read existing → delete → append" fact merge, in-memory LRU cache, and in-process async synthesis all work fine; under multi-instance deployment (`storage=db`), all three introduce races and redundant cost. The framework solves this with SPI abstractions + database-native idempotency:
 
-### 5.1 Synthesis task queue SPI (`SynthesisTaskQueue`)
+### 5.1 Synthesis task queue SPI (`MemorySynthesisDispatcher`)
 
 Unifies async scheduling of afterTurn / afterSession with only two core methods; the three phases just replace internal strategy without changing the SPI:
 
-| Phase | Implementation | Scheduling strategy |
-| --- | --- | --- |
-| Phase 1 (default) | `LockSynthesisTaskQueue` | Submit to in-process single-thread executor + acquire synthesis lock via `DistributedLock` tryLock; re-fetch snapshot inside lock → consume → release |
-| Phase 2 | `LockFreeSynthesisTaskQueue` | CAS pre-claim interval on the boundary table (`version` optimistic lock) |
-| Phase 3 | Production-grade MQ (RocketMQ, example-web extension) | MQ consumer callback executes |
+| Phase | Implementation | Scheduling strategy | Status |
+| --- | --- | --- | --- |
+| Phase 1 (default) | `LockMemorySynthesisDispatcher` | Submit to in-process single-thread executor + acquire synthesis lock via `DistributedLock` tryLock; re-fetch snapshot inside lock → consume → release | ✅ Implemented |
+| **Phase 2** | **`LockFreeMemorySynthesisDispatcher`** | **Lock-free direct submit; consume stage performs CAS claim on `claw_memory_boundary` table (`version` optimistic lock), LLM only executes on success, skip after retry exhaustion** | **✅ Implemented** |
+| Phase 3 | `RocketMqMemorySynthesisDispatcher` (example-web extension) | RocketMQ CLUSTERING consumer + sessionId hash partitioning for per-session serialization; produce stages snapshot to `claw_memory_snapshot` table, MQ message carries only metadata | ✅ Implemented |
+
+**Phase 3 RocketMQ MQ Implementation Highlights** (implemented, example-web extension):
+- **Framework core stays lightweight**: Phase 3 is implemented as an example-web extension, not in the framework core; the core only retains the SPI + Phase 1/2 implementations;
+- **Snapshot staging layer**: `SnapshotStaging` SPI + `JdbcSnapshotStaging` implementation using the `claw_memory_snapshot` table (unique key `(tenant_id, user_id, session_id, task_kind, version)`), avoiding oversized MQ messages;
+- **Produce flow**: snapshot → staging.save() → construct `SynthTaskMessage` (only scope/sessionId/kind/version) → RocketMQ sendOneway with `MessageQueueSelector` hashing by sessionId;
+- **Consume flow**: `@RocketMQMessageListener` CLUSTERING mode → staging.load() to fetch snapshot → refine() to execute synthesis (reuses Phase 2 CAS claim + LLM + DB idempotent write logic) → staging.delete() cleanup;
+- **Dual-layer correctness guarantee**: MQ partition serialization (no concurrency on normal path) + DB idempotent UPSERT (rebalance edge cases cannot corrupt data);
+- **Auto-configuration**: Conditional on `synthesis-queue-type=rocketmq` + RocketMQ producer + JdbcTemplate, `@Primary` overrides the framework default `MemorySynthesisDispatcher`;
+- **Optional dependency**: `rocketmq-spring-boot-starter` is optional — Phase 3 classes are never scanned when RocketMQ is not present, zero intrusion.
+
+**Phase 2 Lock-free CAS Implementation Highlights** (implemmented):
+- **SPI Extension**: `MemoryPageStore` adds default methods `claimSummaryBlock(scope, sessionId, desiredStart, blockSize, snapshotSize)` / `claimArchiveBlock(...)`; JDBC implementation atomically advances cursor via `UPDATE claw_memory_boundary SET summary_end=?, version=version+1 WHERE tenant_id=? AND session_id=? AND version=? AND summary_end=?`;
+- **Multi-block Loop**: when session messages exceed `blockSize × N`, CAS claim runs in a loop — claiming one block at a time until snapshot is exhausted, avoiding the "idle run" problem of claiming too many intervals in a single CAS;
+- **Retry Strategy**: on CAS failure (concurrent pre-emption), retry up to `synthesis-claim-max-retries` times (default 3); if exhausted, skip LLM and record `synthClaimFail` metric;
+- **No Redis Dependency**: Phase 2 works with MySQL only — CAS on boundary table guarantees cross-instance mutual exclusion; enabled automatically with `agent.memory.synthesis-queue-type=lockfree` and `agent.storage.type=db`;
+- **Metrics**: `synthClaimCasRetry` (retry count), `synthClaimFail` (final failure count), `synthClaimSuccess` (success count) — isomorphic with Phase 1 metrics.
 
 - **Failure semantics**: lock busy = a newer task is already running → the current older task is dropped (keep latest, drop old), recording `synthLockAcquireFail` / `synthLlmSkip` metrics;
 - **Independent lock key**: `claw:synth:{scope.keyPrefix}:{sessionId}:{kind}`, not mutually exclusive with the main session lock;
 - **Delayed snapshot**: `snapshotSupplier` is called only after lock/claim success, guaranteeing snapshot ≥ lock acquisition time, avoiding the race where the snapshot is older than already-written pages;
 - **Task dedup**: multiple submissions of the same session+type keep the latest task and drop older ones within the in-process executor;
-- **Local fallback**: `LocalSynthesisTaskQueue` degrades to single-thread local execution when Redis is unavailable / `storage=file`.
+- **Local fallback**: `LocalMemorySynthesisDispatcher` degrades to single-thread local execution when Redis is unavailable / `storage=file`.
 
 ### 5.2 Synthesis cache SPI (`SynthesisCache`)
 

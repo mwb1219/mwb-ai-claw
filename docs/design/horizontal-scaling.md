@@ -58,7 +58,7 @@ parent: 设计概要
 
 | 组件 | 当前实现 | 多实例策略 |
 | --- | --- | --- |
-| 记忆提炼队列 | `MemorySynthesisExecutor`（单线程线程池 + 内存队列，同会话任务去重） | 提炼是**幂等补写**：边界（lastSummarized）执行时从存储读取，任务在任一实例执行都不会丢失/重复内容。多实例时由会话锁保证同会话串行即可；如多个实例同时跑同会话提炼，可接受少量重复 LLM 调用。 |
+| 记忆提炼队列 | `MemorySynthesisExecutor`（单线程线程池 + 内存队列，同会话任务去重） | 提炼是**幂等补写**：边界（lastSummarized）执行时从存储读取，任务在任一实例执行都不会丢失/重复内容。多实例时由 Phase 1 `LockMemorySynthesisDispatcher` 用统一 `DistributedLock` 跨实例串行，或 Phase 2 `LockFreeMemorySynthesisDispatcher` 用边界游标 CAS 无锁抢占（不依赖 Redis，仅需 MySQL），两者配合 DB 层 UNIQUE + UPSERT 兜底，保证块区间不重叠不重复。**推荐 Phase 2（无 Redis 依赖）或 Phase 1（需要 Redis）**。 |
 | RAG 写入 | `DefaultRagIngestionService`（JVM ConcurrentHashMap 写锁） | 内存锁仅单实例有效。多实例对同一知识库并发写入需**共享写锁**（复用 Redis 分布式锁或 RAG 写接口串行化）。默认单实例语义不受影响。 |
 
 > 结论：**跨实例共享**= 会话锁、审批待办、会话/记忆/RAG 存储；**单实例可执行**= 记忆提炼、RAG 写入（幂等，可退化）。
@@ -83,7 +83,7 @@ LockResult<Void> r = lock.execute(key, LockOptions.tryLockWithRenew(ttl, renew),
   - 三条 Lua 脚本原子执行 ACQUIRE（0=被他人持有/1=新获得/2=重入）/ RELEASE（-1=非持有者/≥0=剩余层数）/ RENEW（仅 owner 续期）；
   - **可重入**：`ThreadLocal<Map<lockKey, ownerToken>>` 缓存当前线程已持锁的 token，同一线程对同一 key 的嵌套 `execute` 复用同一 token，使 ACQUIRE 识别为 owner 并递增 count；归零才真正 DEL key；
   - **watchdog 仅最外层启动**：避免内层重复启续期任务，外层 renewer 贯穿全部重入层级，finally 在外层释放时 cancel；ThreadLocal 仅在最外层释放成功（count=0）时清除，避免内存泄漏。
-- 由 `ClawCoreAutoConfiguration` 在需要分布式锁（会话锁 / 合成锁任一启用 Redis 形态）时装配，供 `RedisSessionLockManager`、`LockSynthesisTaskQueue` 复用。
+- 由 `ClawCoreAutoConfiguration` 在需要分布式锁（会话锁 / 合成锁任一启用 Redis 形态）时装配，供 `RedisSessionLockManager`、`LockMemorySynthesisDispatcher` 复用。
 
 ### 4.2 会话锁（`SessionLockManager`）
 
@@ -166,7 +166,7 @@ upstream claw_cluster {
 | 限制 | 演进方向 |
 | --- | --- |
 | 审批待办为 JVM 内状态，跨实例可见依赖粘性路由 | 审批状态外置 Redis/DB（待审批表 + 决策事件），任意实例可决策（TODO 后续迭代） |
-| 记忆提炼为每实例单线程队列，多实例重复调度 | **已落地**：`SynthesisTaskQueue` SPI（见 [分层记忆模型](memory-model.md) §5），Phase 1 `LockSynthesisTaskQueue` 用统一 `DistributedLock` 跨实例串行 + 任务去重 + UPSERT 幂等写，多实例不再重复调度 |
+| 记忆提炼为每实例单线程队列，多实例重复调度 | **已落地**：`MemorySynthesisDispatcher` SPI（见 [分层记忆模型](memory-model.md) §5），Phase 1 `LockMemorySynthesisDispatcher` 用统一 `DistributedLock` 跨实例串行 + 任务去重 + UPSERT 幂等写；Phase 2 `LockFreeMemorySynthesisDispatcher` 用边界游标 CAS 无锁抢占（不依赖 Redis）；Phase 3 `RocketMqMemorySynthesisDispatcher`（example-web 扩展）用 RocketMQ CLUSTERING + sessionId hash 分区实现生产级多实例串行。DB 层 UNIQUE + UPSERT 兜底，多实例不再重复调度 |
 | RAG/记忆召回索引在 `file` 形态下为内存扫描，多实例各自一份 | `db` 形态已由 Redis Stack 召回索引替代（多实例共享、可从 MySQL 重灌），`file` 形态写入用分布式锁串行 |
 | 运行记录落本地文件 | 全量 trace + 汇聚日志/OTel（TODO T5） |
 

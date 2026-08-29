@@ -80,7 +80,7 @@ LockResult<Void> r = lock.execute(key, LockOptions.tryLockWithRenew(ttl, renew),
   - Three Lua scripts execute atomically: ACQUIRE (0=held by other / 1=newly acquired / 2=reentrant) / RELEASE (-1=not owner / ≥0=remaining depth) / RENEW (only owner renews);
   - **Reentrancy**: `ThreadLocal<Map<lockKey, ownerToken>>` caches the token of locks already held by the current thread; nested `execute` on the same key reuses the same token, making ACQUIRE recognize it as owner and increment count; the key is only truly DEL'd when count reaches zero;
   - **Watchdog starts only at the outermost layer**: avoids redundant renewal tasks on inner layers; the outer renewer spans all reentrant levels and is cancelled in finally when the outer lock is released; ThreadLocal is cleared only when the outermost release succeeds (count=0), avoiding memory leaks.
-- Assembled by `ClawCoreAutoConfiguration` when a distributed lock is needed (either session lock or synthesis lock in Redis form), reused by `RedisSessionLockManager` and `LockSynthesisTaskQueue`.
+- Assembled by `ClawCoreAutoConfiguration` when a distributed lock is needed (either session lock or synthesis lock in Redis form), reused by `RedisSessionLockManager` and `LockMemorySynthesisDispatcher`.
 
 ### 4.2 Session lock (`SessionLockManager`)
 
@@ -163,7 +163,7 @@ Unit tests: `infrastructure/.../collaboration/lock/SessionLockManagerTest` (same
 | Limitation | Evolution |
 | --- | --- |
 | Approval todos are in-JVM state; cross-instance visibility depends on sticky routing | Externalize approval state to Redis/DB (pending-approval table + decision events) so any instance can decide (later iteration) |
-| Memory synthesis is a per-instance single-thread queue; multi-instance causes duplicate scheduling | **Implemented**: `SynthesisTaskQueue` SPI (see [Layered Memory Model](memory-model.md) §5); Phase 1 `LockSynthesisTaskQueue` uses the unified `DistributedLock` for cross-instance serialization + task dedup + UPSERT idempotent writes, so multi-instance no longer duplicates scheduling |
+| Memory synthesis is a per-instance single-thread queue; multi-instance causes duplicate scheduling | **Implemented**: `MemorySynthesisDispatcher` SPI (see [Layered Memory Model](memory-model.md) §5); Phase 1 `LockMemorySynthesisDispatcher` uses the unified `DistributedLock`; Phase 2 `LockFreeMemorySynthesisDispatcher` uses boundary-cursor CAS (no Redis); Phase 3 `RocketMqMemorySynthesisDispatcher` (example-web extension) uses RocketMQ CLUSTERING + sessionId-hash partitioning for production-grade multi-instance serialization. DB-layer UNIQUE + UPSERT always serves as the final correctness guard |
 | RAG/memory retrieval index is an in-memory scan in `file` mode, one copy per instance | Already replaced by the Redis Stack retrieval index in `db` mode (shared across instances, rebuildable from MySQL); serialize `file`-mode writes with a distributed lock |
 | Run logs land in local files | Full trace + aggregation to logging/OTel (TODO T5) |
 

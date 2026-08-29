@@ -184,3 +184,23 @@ CREATE TABLE IF NOT EXISTS claw_memory_boundary (
     update_time BIGINT       NOT NULL COMMENT '最近更新时间戳（epoch 毫秒）',
     PRIMARY KEY (tenant_id, user_id, session_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会话记忆提炼边界游标';
+
+-- ==================== 提炼任务快照暂存表（Phase 3 MQ staging） ====================
+-- Phase 3 RocketMqSynthesisTaskQueue 在 produce 时将快照暂存于此表（避免 MQ 消息体过大），
+-- consume 时从 staging 读取快照后执行提炼，完成后清理。
+-- 若 MQ 消息丢失，staging 中快照在 TTL 清理前可被手动回放；
+-- 配合 claw_memory_boundary 的 CAS / 行锁 + DB 幂等 UPSERT 形成「MQ 串行 + DB 兜底」双层正确性。
+CREATE TABLE IF NOT EXISTS claw_memory_snapshot (
+    id            BIGINT       NOT NULL AUTO_INCREMENT,
+    tenant_id     VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '租户 id',
+    user_id       VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '用户 id',
+    session_id    VARCHAR(128) NOT NULL COMMENT '会话 id',
+    task_kind     VARCHAR(32)  NOT NULL COMMENT 'AFTER_TURN / AFTER_SESSION',
+    snapshot_data TEXT         NOT NULL COMMENT 'JSON 序列化的消息快照',
+    version       BIGINT       NOT NULL COMMENT '快照版本号（epoch 毫秒时间戳，用于去重）',
+    create_time   BIGINT       NOT NULL COMMENT '写入时间戳（epoch 毫秒）',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_scope_session_kind_version (tenant_id, user_id, session_id, task_kind, version),
+    KEY idx_scope_session_kind (tenant_id, user_id, session_id, task_kind),
+    KEY idx_create_time (create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='提炼任务快照暂存（Phase 3 RocketMQ staging）';

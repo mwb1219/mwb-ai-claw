@@ -64,7 +64,7 @@ The interfaces below are defined in the domain layer, with default implementatio
 | Eviction policy | `PageEvictionPolicy` | token / importance | implement the interface (`agent.memory.eviction-policy`) |
 | Retrieval | `MemoryRetriever` | keyword / vector / hybrid | implement the interface (`agent.memory.retriever`) |
 | Fact synthesis | `MemorySynthesizer` | LLM-based (small-model optional) | implement the interface |
-| Synthesis task queue | `SynthesisTaskQueue` | `LockSynthesisTaskQueue` (Phase 1, distributed lock) / `LocalSynthesisTaskQueue` (local fallback) | Implement interface (`agent.memory.synthesis-queue-type`, see [Layered Memory Model](memory-model.md) §5) |
+| Synthesis task queue | `MemorySynthesisDispatcher` | `LockMemorySynthesisDispatcher` (Phase 1, distributed lock) / `LockFreeMemorySynthesisDispatcher` (Phase 2, lock-free CAS) / `LocalMemorySynthesisDispatcher` (local fallback) / `RocketMqMemorySynthesisDispatcher` (Phase 3, example-web extension, RocketMQ production) | Implement interface (`agent.memory.synthesis-queue-type`, see [Layered Memory Model](memory-model.md) §5) |
 | Synthesis cache | `SynthesisCache` | `LocalSynthesisCache` / `RedisSynthesisCache` (switched by storage form) | Conditional assembly (`agent.memory.synthesis-cache-type`) |
 
 ### 3.3.1 Distributed lock (infrastructure extension point)

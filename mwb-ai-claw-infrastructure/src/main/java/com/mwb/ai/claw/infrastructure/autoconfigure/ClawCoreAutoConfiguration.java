@@ -296,20 +296,20 @@ public class ClawCoreAutoConfiguration {
                                                          MemoryPageStore pageStore,
                                                          MemorySynthesizer synthesizer,
                                                          MemoryRetriever retriever,
-                                                         com.mwb.ai.claw.domain.memory.synthesize.SynthesisTaskQueue taskQueue) {
+                                                         com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher taskQueue) {
         return new LayeredMemoryGatewayImpl(properties, pageStore, synthesizer, retriever, taskQueue);
     }
 
     // ==================== 提炼任务队列（Phase 1：本地兜底，单实例 / storage=file） ====================
 
     @Configuration
-    public static class LocalSynthesisTaskQueueConfiguration {
+    public static class LocalMemorySynthesisDispatcherConfiguration {
 
         @Bean
-        @ConditionalOnMissingBean(com.mwb.ai.claw.domain.memory.synthesize.SynthesisTaskQueue.class)
-        public com.mwb.ai.claw.infrastructure.memory.synthesis.LocalSynthesisTaskQueue localSynthesisTaskQueue(
+        @ConditionalOnMissingBean(com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher.class)
+        public com.mwb.ai.claw.infrastructure.memory.synthesis.LocalMemorySynthesisDispatcher localMemorySynthesisDispatcher(
                 MemorySynthesisExecutor executor) {
-            return new com.mwb.ai.claw.infrastructure.memory.synthesis.LocalSynthesisTaskQueue(executor);
+            return new com.mwb.ai.claw.infrastructure.memory.synthesis.LocalMemorySynthesisDispatcher(executor);
         }
     }
 
@@ -322,16 +322,16 @@ public class ClawCoreAutoConfiguration {
     @Configuration
     @ConditionalOnClass(RedisConnectionFactory.class)
     @Conditional(SynthesisQueueRedisEffectiveCondition.class)
-    public static class LockSynthesisTaskQueueConfiguration {
+    public static class LockMemorySynthesisDispatcherConfiguration {
 
         @Bean
-        @ConditionalOnMissingBean(com.mwb.ai.claw.domain.memory.synthesize.SynthesisTaskQueue.class)
-        public com.mwb.ai.claw.infrastructure.memory.synthesis.LockSynthesisTaskQueue lockSynthesisTaskQueue(
+        @ConditionalOnMissingBean(com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher.class)
+        public com.mwb.ai.claw.infrastructure.memory.synthesis.LockMemorySynthesisDispatcher lockMemorySynthesisDispatcher(
                 DistributedLock distributedLock,
                 AgentProperties properties,
                 MetricsRecorder metrics,
                 MemorySynthesisExecutor executor) {
-            return new com.mwb.ai.claw.infrastructure.memory.synthesis.LockSynthesisTaskQueue(
+            return new com.mwb.ai.claw.infrastructure.memory.synthesis.LockMemorySynthesisDispatcher(
                     distributedLock, properties.getMemory(), metrics, executor);
         }
     }
@@ -347,6 +347,41 @@ public class ClawCoreAutoConfiguration {
                     ? ("db".equalsIgnoreCase(storage) ? "redis" : "local")
                     : type;
             return "redis".equalsIgnoreCase(effective);
+        }
+    }
+
+    // ==================== 提炼任务队列（Phase 2：无锁 CAS，显式 lockfree） ====================
+    // 启用条件：
+    //   agent.memory.synthesis-queue-type = lockfree
+    //   且 agent.storage.type = db
+    //   且 classpath 含 JdbcTemplate（CAS claim 操作 claw_memory_boundary 表）
+
+    @Configuration
+    @ConditionalOnClass(JdbcTemplate.class)
+    @Conditional(Phase2LockFreeEffectiveCondition.class)
+    public static class LockFreeMemorySynthesisDispatcherConfiguration {
+
+        @Bean
+        @ConditionalOnMissingBean(com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher.class)
+        public com.mwb.ai.claw.infrastructure.memory.synthesis.LockFreeMemorySynthesisDispatcher lockFreeMemorySynthesisDispatcher(
+                AgentProperties properties,
+                MetricsRecorder metrics,
+                MemorySynthesisExecutor executor,
+                MemoryPageStore pageStore,
+                MemorySynthesizer synthesizer) {
+            return new com.mwb.ai.claw.infrastructure.memory.synthesis.LockFreeMemorySynthesisDispatcher(
+                    properties.getMemory(), metrics, executor, pageStore, synthesizer);
+        }
+    }
+
+    /** 自定义 Condition：Phase 2 lockfree 生效条件（synthesis-queue-type=lockfree 且 storage=db）。*/
+    public static class Phase2LockFreeEffectiveCondition implements Condition {
+        @Override
+        public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
+            Environment env = context.getEnvironment();
+            String queueType = env.getProperty("agent.memory.synthesis-queue-type", "auto");
+            String storage = env.getProperty("agent.storage.type", "file");
+            return "lockfree".equalsIgnoreCase(queueType) && "db".equalsIgnoreCase(storage);
         }
     }
 
@@ -663,7 +698,7 @@ public class ClawCoreAutoConfiguration {
 
     // ==================== 分布式锁基础设施（Redis 实现，会话锁 / 合成锁共用） ====================
     // 装配条件：classpath 含 spring-data-redis，且会话锁或合成锁任一启用 Redis 形态。
-    // 单独抽取为公共 bean，供 RedisSessionLockManager 与 LockSynthesisTaskQueue 复用，
+    // 单独抽取为公共 bean，供 RedisSessionLockManager 与 LockMemorySynthesisDispatcher 复用，
     // 统一 Lua 脚本释放/续期、token 管理与 watchdog 续期调度，消除两处重复实现。
 
     @Configuration

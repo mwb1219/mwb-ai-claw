@@ -27,8 +27,8 @@ import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesizer;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
-import com.mwb.ai.claw.domain.memory.synthesize.SynthesisTaskContext;
-import com.mwb.ai.claw.domain.memory.synthesize.SynthesisTaskQueue;
+import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher.SynthesisEvent;
+import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher;
 import com.mwb.ai.claw.infrastructure.memory.strategy.ImportanceEvictionPolicy;
 import com.mwb.ai.claw.infrastructure.memory.strategy.TokenBudgetEvictionPolicy;
 import com.mwb.ai.claw.infrastructure.util.TokenEstimator;
@@ -45,13 +45,13 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
     private final MemorySynthesizer synthesizer;
     private final MemoryRetriever retriever;
     private final PageEvictionPolicy evictionPolicy;
-    private final SynthesisTaskQueue taskQueue;
+    private final MemorySynthesisDispatcher taskQueue;
 
     public LayeredMemoryGatewayImpl(AgentProperties properties,
                                     MemoryPageStore pageStore,
                                     MemorySynthesizer synthesizer,
                                     MemoryRetriever retriever,
-                                    SynthesisTaskQueue taskQueue) {
+                                    MemorySynthesisDispatcher taskQueue) {
         this.config = properties.getMemory();
         this.pageStore = pageStore;
         this.synthesizer = synthesizer;
@@ -130,14 +130,15 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
             return;
         }
         // 提炼（摘要生成）是 LLM 调用，异步执行不阻塞主对话链路。
-        // 通过 SynthesisTaskQueue.produce 投递：快照延迟获取（锁/claim 内才取），
+        // 通过 MemorySynthesisDispatcher.produce 投递：快照延迟获取（锁/claim 内才取），
         // 执行回调 doAfterTurn 在 consume 阶段被调用。
         final String sessionId = session.getSessionId();
         final AgentScope scope = session.getScope();
         if (config.isSynthesisAsync()) {
-            taskQueue.produce(scope, sessionId, SynthesisTaskQueue.TaskKind.AFTER_TURN,
+            taskQueue.produce(new MemorySynthesisDispatcher.SynthesisEvent(
+                    scope, sessionId, MemorySynthesisDispatcher.Kind.AFTER_TURN,
                     () -> new ArrayList<>(session.getMessages()),
-                    ctx -> doAfterTurn(ctx.getScope(), ctx.getSessionId(), ctx.getSnapshot()));
+                    ctx -> doAfterTurn(ctx.scope, ctx.sessionId, ctx.getSnapshot())));
         } else {
             doAfterTurn(scope, sessionId, new ArrayList<>(session.getMessages()));
         }
@@ -170,13 +171,14 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
             return;
         }
         // 事实提炼（LLM 调用）异步执行；摘要换页由 afterTurn 负责，此处只提炼事实。
-        // 通过 SynthesisTaskQueue.produce 投递，快照延迟获取。
+        // 通过 MemorySynthesisDispatcher.produce 投递，快照延迟获取。
         final String sessionId = session.getSessionId();
         final AgentScope scope = session.getScope();
         if (config.isSynthesisAsync()) {
-            taskQueue.produce(scope, sessionId, SynthesisTaskQueue.TaskKind.AFTER_SESSION,
+            taskQueue.produce(new MemorySynthesisDispatcher.SynthesisEvent(
+                    scope, sessionId, MemorySynthesisDispatcher.Kind.AFTER_SESSION,
                     () -> new ArrayList<>(session.getMessages()),
-                    ctx -> doAfterSession(ctx.getScope(), ctx.getSessionId(), ctx.getSnapshot()));
+                    ctx -> doAfterSession(ctx.scope, ctx.sessionId, ctx.getSnapshot())));
         } else {
             doAfterSession(scope, sessionId, new ArrayList<>(session.getMessages()));
         }

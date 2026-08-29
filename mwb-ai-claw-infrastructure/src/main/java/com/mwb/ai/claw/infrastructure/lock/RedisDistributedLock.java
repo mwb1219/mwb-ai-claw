@@ -40,7 +40,7 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
  *   <li>≥0 = 当前剩余重入层数；0 表示 DEL 成功，锁已完全释放</li>
  * </ul>
  * 由 {@code ClawCoreAutoConfiguration} 在需要分布式锁（会话锁 / 合成锁任一启用 Redis 形态）时装配，
- * 供 {@code RedisSessionLockManager}（会话锁，轮询等待）与 {@code LockSynthesisTaskQueue}（合成锁，
+ * 供 {@code RedisSessionLockManager}（会话锁，轮询等待）与 {@code LockMemorySynthesisDispatcher}（合成锁，
  * tryLock + 续期）复用。
  * <p>
  * watchdog 续期线程池为 daemon 单线程：合成任务经 {@code MemorySynthesisExecutor} 全局串行，

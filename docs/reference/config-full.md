@@ -99,6 +99,7 @@ nav_order: 3
 | `synthesis-lock-ttl-seconds` | `600` | 合成锁 TTL（秒，仅 queue-type=redis 生效；LLM 长上下文时可放大） |
 | `synthesis-lock-watchdog-interval-seconds` | `200` | 合成锁 watchdog 续期间隔（秒，默认 1/3 TTL） |
 | `synthesis-drop-old-pending` | `true` | 是否「保留最新提交、丢弃旧等待」去重（同会话同类型多次提交） |
+| `synthesis-claim-max-retries` | `3` | Phase 2 CAS claim 最大重试次数（仅 queue-type=lockfree 生效） |
 
 ## 5. RAG 检索增强（agent.rag.*）
 

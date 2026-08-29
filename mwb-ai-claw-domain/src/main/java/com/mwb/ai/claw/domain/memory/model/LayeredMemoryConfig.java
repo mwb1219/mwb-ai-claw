@@ -105,6 +105,14 @@ public class LayeredMemoryConfig {
     /** 是否启用"保留最新提交、丢弃旧等待"的去重策略（默认 true） */
     private boolean synthesisDropOldPending = true;
 
+    // ==================== Phase 2：无锁 CAS 配置 ====================
+
+    /**
+     * Phase 2 CAS claim 最大重试次数（默认 3）。
+     * 仅在 queue-type=lockfree 时生效；Phase 1 LockMemorySynthesisDispatcher 不使用此配置。
+     */
+    private int synthesisClaimMaxRetries = 3;
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -359,5 +367,13 @@ public class LayeredMemoryConfig {
 
     public void setSynthesisDropOldPending(boolean synthesisDropOldPending) {
         this.synthesisDropOldPending = synthesisDropOldPending;
+    }
+
+    public int getSynthesisClaimMaxRetries() {
+        return synthesisClaimMaxRetries;
+    }
+
+    public void setSynthesisClaimMaxRetries(int synthesisClaimMaxRetries) {
+        this.synthesisClaimMaxRetries = synthesisClaimMaxRetries;
     }
 }

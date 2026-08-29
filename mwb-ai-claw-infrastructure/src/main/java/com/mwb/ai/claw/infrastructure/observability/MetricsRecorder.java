@@ -91,7 +91,7 @@ public class MetricsRecorder {
                 .tag("type", type).tag("status", status).register(registry).increment();
     }
 
-    // ==================== 提炼任务队列（Phase 1） ====================
+    // ==================== 提炼任务队列（Phase 1 / Phase 2 共用） ====================
 
     public void synthLockAcquireFail(String kind, String reason) {
         Counter.builder("claw.synth.lock.acquire.fail")
@@ -116,6 +116,26 @@ public class MetricsRecorder {
     public void synthPendingGauge(int pending, String queueType) {
         Gauge.builder("claw.synth.task.pending", () -> pending)
                 .tag("queue_type", queueType).register(registry);
+    }
+
+    // ==================== Phase 2：无锁 CAS 指标 ====================
+
+    /** CAS claim 重试计数（Phase 2 LockFreeMemorySynthesisDispatcher） */
+    public void synthClaimCasRetry(String type) {
+        Counter.builder("claw.synth.claim.cas.retry")
+                .tag("type", type).register(registry).increment();
+    }
+
+    /** CAS claim 最终失败计数（重试耗尽仍未抢占到） */
+    public void synthClaimFail(String type, String reason) {
+        Counter.builder("claw.synth.claim.fail")
+                .tag("type", type).tag("reason", reason).register(registry).increment();
+    }
+
+    /** CAS claim 成功计数（每次成功抢占一段边界游标） */
+    public void synthClaimSuccess(String type) {
+        Counter.builder("claw.synth.claim.success")
+                .tag("type", type).register(registry).increment();
     }
 
     // ==================== 查询 ====================

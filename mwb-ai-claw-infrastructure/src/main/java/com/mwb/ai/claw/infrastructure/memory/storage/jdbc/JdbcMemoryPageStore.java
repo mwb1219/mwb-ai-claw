@@ -231,6 +231,112 @@ public class JdbcMemoryPageStore implements MemoryPageStore, MemorySearchable {
         }
     }
 
+    // ==================== Phase 2：无锁 CAS 边界游标 claim ====================
+
+    @Override
+    public int claimSummaryBlock(AgentScope scope, String sessionId,
+                                 int desiredStart, int blockSize, int snapshotSize) {
+        return claimBlockInternal(scope, sessionId, "summary", desiredStart, blockSize, snapshotSize);
+    }
+
+    @Override
+    public int claimArchiveBlock(AgentScope scope, String sessionId,
+                                 int desiredStart, int blockSize, int snapshotSize) {
+        return claimBlockInternal(scope, sessionId, "archive", desiredStart, blockSize, snapshotSize);
+    }
+
+    /**
+     * CAS 抢占"下一段写区间"的内部实现：
+     * 1. 确保 boundary 行存在（不存在则 INSERT 默认值）
+     * 2. 读取当前游标值 + version
+     * 3. 计算目标游标 = current + blockSize
+     * 4. 判断是否有可写块：current >= snapshotSize 则返回 -1
+     * 5. CAS UPDATE：WHERE version=? AND cursor=? AND cursor+blockSize <= snapshotSize
+     *    受影响行数=1 → 抢占成功，返回旧 cursor 值
+     *    受影响行数=0 → 被并发抢占，返回 -1（由调用方重试）
+     */
+    private int claimBlockInternal(AgentScope scope, String sessionId, String cursorType,
+                                   int desiredStart, int blockSize, int snapshotSize) {
+        String cursorCol = "summary".equals(cursorType) ? "summary_end" : "archive_end";
+
+        // 1. 确保 boundary 行存在
+        ensureBoundaryRow(scope, sessionId);
+
+        // 2. 读取当前游标 + version
+        String selectSql = "SELECT " + cursorCol + ", version FROM claw_memory_boundary "
+                + "WHERE tenant_id=? AND user_id=? AND session_id=?";
+        try {
+            BoundaryRow row = jdbc.queryForObject(selectSql, (rs, i) ->
+                    new BoundaryRow(rs.getInt(cursorCol), rs.getInt("version")),
+                    tid(scope), uid(scope), sessionId);
+
+            if (row == null) {
+                log.warn("CAS claim: boundary 行不存在（刚 ensure 过？）: sessionId={}", sessionId);
+                return -1;
+            }
+
+            int currentEnd = row.cursorValue;
+            int version = row.version;
+
+            // 3. 无可写块：当前游标 >= 快照末尾
+            if (currentEnd >= snapshotSize) {
+                return -1;
+            }
+
+            // 4. 快照旧于期望位置（desiredStart 是调用方的估计值，可能落后于实际）：
+            //    直接用 currentEnd 作为抢占起点，避免永远抢不到
+            int claimStart = currentEnd;
+            int targetEnd = Math.min(currentEnd + blockSize, snapshotSize);
+            int actualBlockSize = targetEnd - currentEnd;
+
+            if (actualBlockSize <= 0) {
+                return -1;
+            }
+
+            // 5. CAS UPDATE：乐观锁
+            String updateSql = "UPDATE claw_memory_boundary SET " + cursorCol + " = ?, "
+                    + "version = version + 1, update_time = ? "
+                    + "WHERE tenant_id=? AND user_id=? AND session_id=? "
+                    + "AND version = ? AND " + cursorCol + " = ?";
+            int updated = jdbc.update(updateSql, targetEnd, System.currentTimeMillis(),
+                    tid(scope), uid(scope), sessionId, version, currentEnd);
+
+            if (updated == 1) {
+                // 抢占成功，返回 claimStart
+                return claimStart;
+            } else {
+                // 被并发抢占
+                return -1;
+            }
+        } catch (Exception e) {
+            log.warn("CAS claim 异常: sessionId={}, type={}, error={}", sessionId, cursorType, e.getMessage());
+            return -1;
+        }
+    }
+
+    /**
+     * 确保 claw_memory_boundary 表中有该会话的行。
+     * 使用 INSERT ... ON DUPLICATE KEY UPDATE 实现幂等初始化。
+     */
+    private void ensureBoundaryRow(AgentScope scope, String sessionId) {
+        String upsertSql = "INSERT INTO claw_memory_boundary "
+                + "(tenant_id, user_id, session_id, summary_end, archive_end, version, update_time) "
+                + "VALUES (?, ?, ?, 0, 0, 1, ?) "
+                + "ON DUPLICATE KEY UPDATE session_id = VALUES(session_id)";
+        jdbc.update(upsertSql, tid(scope), uid(scope), sessionId, System.currentTimeMillis());
+    }
+
+    /** Boundary 行快照：游标值 + version */
+    private static final class BoundaryRow {
+        final int cursorValue;
+        final int version;
+
+        BoundaryRow(int cursorValue, int version) {
+            this.cursorValue = cursorValue;
+            this.version = version;
+        }
+    }
+
     // ==================== 工具方法 ====================
 
     private List<MemoryPage> queryPages(AgentScope scope, String pageType) {

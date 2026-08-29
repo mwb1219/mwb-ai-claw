@@ -64,7 +64,7 @@ nav_order: 8
 | 换页策略 | `PageEvictionPolicy` | token / importance | 实现接口（`agent.memory.eviction-policy`） |
 | 检索召回 | `MemoryRetriever` | 关键词 / 向量 / 混合 | 实现接口（`agent.memory.retriever`） |
 | 事实提炼 | `MemorySynthesizer` | LLM 提炼（可配小模型） | 实现接口 |
-| 提炼任务队列 | `SynthesisTaskQueue` | `LockSynthesisTaskQueue`（Phase 1，分布式锁）/ `LocalSynthesisTaskQueue`（本地兜底） | 实现接口（`agent.memory.synthesis-queue-type`，见 [分层记忆模型](memory-model.md) §5） |
+| 提炼任务队列 | `MemorySynthesisDispatcher` | `LockMemorySynthesisDispatcher`（Phase 1，分布式锁）/ `LockFreeMemorySynthesisDispatcher`（Phase 2，无锁 CAS）/ `LocalMemorySynthesisDispatcher`（本地兜底）/ `RocketMqMemorySynthesisDispatcher`（Phase 3，example-web 扩展，RocketMQ 生产级） | 实现接口（`agent.memory.synthesis-queue-type`，见 [分层记忆模型](memory-model.md) §5） |
 | 提炼缓存 | `SynthesisCache` | `LocalSynthesisCache` / `RedisSynthesisCache`（按存储形态切换） | 条件装配（`agent.memory.synthesis-cache-type`） |
 
 ### 3.3.1 分布式锁（infrastructure 扩展点）

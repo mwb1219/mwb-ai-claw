@@ -1,27 +1,32 @@
 # ============================================================
 # example-web 一键完整构建：后端应用 + 前端控制台 + 中间件
 #   - example-web：后端服务（独立工程，独立版本号），镜像由本目录源码构建（框架依赖
-#     mwb-ai-claw-spring-boot-starter:1.0.3（Central 正式版自动下载；additional_contexts 注入为可选加速）
+#     mwb-ai-claw-spring-boot-starter:1.0.4-SNAPSHOT，additional_contexts 注入宿主机 ~/.m2）
 #   - example-web-frontend：前端控制台（React + Vite），Nginx 静态托管 + API 反代到后端
 #   - mysql：MySQL 8（权威存储：会话/记忆/知识库文档与索引条目文本）
 #   - redis：Redis Stack Server（召回：RediSearch 向量 + 全文索引；分布式会话锁）
+#   - rocketmq-namesrv：RocketMQ 5.x NameServer（Phase 3 提炼队列调度）
+#   - rocketmq-broker：RocketMQ 5.x Broker（CLUSTERING 模式，会话粒度串行消费）
 #
 # 用法（在 example-web 目录下执行）：
 #   1. cp src/main/resources/.env.example .env   # 填入 DEFAULT_API_KEY（启用 RAG 另需 RAG_EMBEDDING_*）
 #   2. docker compose up -d --build              # 首次构建应用/前端镜像并启动全部服务
-#   3. docker compose ps                         # mysql / redis / example-web / example-web-frontend 均 healthy
+#   3. docker compose ps                         # mysql / redis / rocketmq-* / example-web / frontend 均 healthy
 #   4. 浏览器访问 http://localhost:5173           # 前端控制台（API 经 Nginx 反代到后端 8080）
 #
+# Phase 3 RocketMQ 提炼队列验证：
+#   - 默认 SYNTHESIS_QUEUE_TYPE=rocketmq（docker-compose environment 覆盖）
+#   - 应用启动日志搜索 "RocketMqMemorySynthesisDispatcher" / "Phase 3 MQ" 确认生效
+#   - 触发 afterTurn / afterSession 提炼 → docker logs example-web 看到 MQ produce + consume 日志
+#   - 临时关闭 RocketMQ：注释掉 rocketmq-* 两个 service + 切 SYNTHESIS_QUEUE_TYPE=lockfree
+#
 # 说明：
-#   - 后端镜像构建上下文 = 本目录（example-web 独立工程）；框架依赖 mwb-ai-claw-spring-boot-starter:1.0.3
-#     为 Maven Central 正式版（Maven 自动下载）；additional_contexts(host-m2) 注入宿主机 ~/.m2 仅作为
-#     可选加速（复用已缓存依赖，无需在容器内重新下载）
+#   - 后端镜像构建上下文 = 本目录；additional_contexts(host-m2) 注入宿主机 ~/.m2
 #   - 前端镜像构建上下文 = ../example-web-frontend：npm ci → vite build → Nginx（静态 + 反代）
-#   - mysql 首次初始化执行 ./db/mysql/*.sql：建框架表（记忆/会话/知识库/索引条目/可观测性）与用户表
-#     同目录 SQL 按字母序执行：framework-schema.sql → example-web-schema.sql
-#   - 应用侧 spring.sql.init 保持 never（MySQL 建表由 initdb 完成，避免应用侧重复执行）
+#   - mysql 首次初始化执行 ./db/mysql/*.sql：建框架表（记忆/会话/知识库/索引条目/可观测性 + claw_memory_snapshot Phase3 暂存表）与用户表
+#   - 应用侧 spring.sql.init 保持 never（MySQL 建表由 initdb 完成）
 #   - .env 缺失时容器使用 application.yml 内置默认值（DEFAULT_API_KEY 为空则 LLM 调用不可用，请务必配置）
-#   - env_file 的 required:false 需 Docker Compose v2.24+；老版本可去掉该字段（.env 必需存在）
+#   - RocketMQ 5.x docker 镜像使用 apache/rocketmq:5.3.1（官方镜像，兼容性好）
 # ============================================================
 name: example-web
 
@@ -41,7 +46,6 @@ services:
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      # 首次初始化时自动执行 MySQL 版建表脚本（重建数据卷时生效）
       - ./db/mysql:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$${MYSQL_USER} -p$${MYSQL_PASSWORD} --silent"]
@@ -63,14 +67,51 @@ services:
       retries: 10
     restart: unless-stopped
 
+  # ===== 中间件：RocketMQ 5.x NameServer（Phase 3 MQ 提炼队列） =====
+  rocketmq-namesrv:
+    image: apache/rocketmq:5.3.1
+    container_name: example-web-rocketmq-namesrv
+    command: sh mqnamesrv
+    environment:
+      JAVA_OPT: -Duser.home=/home/rocketmq
+      JAVA_EXT_DIRS: /home/rocketmq/rocketmq-5.3.1/lib
+      NAMESRV_ADDR: rocketmq-namesrv:9876
+    ports:
+      - "9876:9876"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/9876'"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  # ===== 中间件：RocketMQ 5.x Broker（Phase 3 MQ 提炼队列） =====
+  rocketmq-broker:
+    image: apache/rocketmq:5.3.1
+    container_name: example-web-rocketmq-broker
+    # bash -c 彻底覆盖镜像 entrypoint
+    entrypoint: ["bash", "-c", "cd /home/rocketmq/rocketmq-5.3.1/bin && ./mqbroker -n rocketmq-namesrv:9876"]
+    environment:
+      JAVA_OPT: -Duser.home=/home/rocketmq -server -Xms512m -Xmx512m -Xmn256m
+      JAVA_EXT_DIRS: /home/rocketmq/rocketmq-5.3.1/lib
+      NAMESRV_ADDR: rocketmq-namesrv:9876
+    # 不挂载 broker_data volume（避免 ScheduleMessageService NPE），用容器内临时存储
+    depends_on:
+      rocketmq-namesrv:
+        condition: service_healthy
+    ports:
+      - "10911:10911"
+      - "10909:10909"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/10911'"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
   # ===== 应用：example-web（Dockerfile 多阶段构建，端口 8080） =====
   example-web:
     build:
-      # example-web 为独立工程：构建上下文 = 本目录；框架依赖 1.0.3 为 Maven Central 正式版（自动下载），
-      # additional_contexts(host-m2) 注入宿主机 ~/.m2 仅作为可选加速（复用已缓存依赖）
-      # Dockerfile 构建时会复制 src/main/resources 下的 .env（容器版：DB_URL/REDIS_URI 改写为
-      # mysql/redis 服务名）、agents.json、orchestrations.json、mcp-server.json 到镜像 /app，
-      # 实例启动后按「运行目录优先」加载（ConfigFileLocator / DotenvEnvironmentPostProcessor）
       context: .
       dockerfile: Dockerfile
       additional_contexts:
@@ -82,38 +123,46 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      rocketmq-namesrv:
+        condition: service_healthy
+      rocketmq-broker:
+        condition: service_started
     env_file:
       - path: .env
         required: false
     environment:
-      # 容器内通过服务名访问中间件（覆盖 .env 中的 localhost 地址）
+      # ===== 存储中间件（容器内服务名） =====
       DB_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-clawdb}?useSSL=false&serverTimezone=Asia/Shanghai
       DB_USERNAME: ${MYSQL_USER:-claw}
       DB_PASSWORD: ${MYSQL_PASSWORD:-claw}
       DB_DRIVER: com.mysql.cj.jdbc.Driver
       SQL_INIT_MODE: never
-      # Redis 连接：会话锁走 agent.collaboration.lock.redis-uri（REDIS_URI）；
-      # 检索索引（RedisSearchTemplate）复用 Spring Boot 自动配置的 spring.redis.*，
-      # 必须显式指向容器内 redis 服务，否则默认 localhost:6379 导致召回失败
       SPRING_REDIS_HOST: redis
       SPRING_REDIS_PORT: 6379
       REDIS_URI: redis://redis:6379
-      # 容器化部署默认：记忆 / 运行用量 / trace 全部落库（表由 initdb 创建）
       STORAGE_TYPE: db
       RUN_USAGE_STORE: db
       TRACE_STORE: db
+
+      # ===== Phase 3：启用 RocketMQ 提炼队列 =====
+      SYNTHESIS_QUEUE_TYPE: rocketmq
+      ROCKETMQ_NAME_SERVER: rocketmq-namesrv:9876
+      ROCKETMQ_PRODUCER_GROUP: claw-synth-producer
+      ROCKETMQ_CONSUMER_GROUP: claw-synth-consumer
+
+      # ===== 可观测性 =====
+      TZ: Asia/Shanghai
     ports:
       - "8080:8080"
     volumes:
-      - example_web_agent:/app/.agent   # 长期记忆（AGENT.md / MEMORY.md）
-      - example_web_logs:/app/logs      # 运行日志
+      - example_web_agent:/app/.agent
+      - example_web_logs:/app/logs
     healthcheck:
-      # TCP 探测 8080（eclipse-temurin 镜像无 curl/wget，用 bash /dev/tcp）
       test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080'"]
       interval: 10s
       timeout: 5s
       retries: 12
-      start_period: 60s
+      start_period: 90s
     restart: unless-stopped
 
   # ===== 前端控制台：example-web-frontend（React + Vite → Nginx，端口 5173） =====
