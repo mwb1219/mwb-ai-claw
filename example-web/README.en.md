@@ -12,7 +12,7 @@
 | Capability | Framework mechanism | This example |
 | --- | --- | --- |
 | Distributed session lock (multi-instance) | `SessionLockManager` SPI: `LocalSessionLockManager` (JVM `ReentrantLock`) / `RedisSessionLockManager` (`SET NX PX` + atomic Lua release) | `agent.collaboration.lock.type=redis`; Redis service in [docker-compose.yml](docker-compose.yml) |
-| Memory synthesis queue (Phase 3 RocketMQ, production-grade) | `MemorySynthesisDispatcher` SPI: `Local` (single instance) / `Lock` (Phase 1 distributed lock) / `LockFree` (Phase 2 lock-free CAS) / **`RocketMqMemorySynthesisDispatcher` (Phase 3, example-web extension)** — RocketMQ CLUSTERING + sessionId hash partition, same-session serialisation | `SYNTHESIS_QUEUE_TYPE=rocketmq`; `rocketmq-namesrv` + `rocketmq-broker` in [docker-compose.yml](docker-compose.yml); snapshots staged in MySQL `claw_memory_snapshot` table to keep MQ payload small |
+| Memory synthesis queue (distributed consistency) | `MemorySynthesisDispatcher` SPI: `Local` (single instance) / `Lock` (Redis distributed lock) / `LockFree` (lock-free CAS) / **`RocketMqMemorySynthesisDispatcher` (RocketMQ production-grade, example-web extension)** — RocketMQ CLUSTERING + sessionId hash partition, same-session serialisation | `SYNTHESIS_QUEUE_TYPE=rocketmq`; `rocketmq-namesrv` + `rocketmq-broker` in [docker-compose.yml](docker-compose.yml); snapshots staged in MySQL `claw_memory_snapshot` table to keep MQ payload small |
 | Redis as an optional dependency | redis dependency is `optional` in infra, gated by `@ConditionalOnClass` | [pom.xml](pom.xml) explicitly adds `spring-boot-starter-data-redis` |
 | Pluggable vector store | `RagIndexStore` SPI: `LocalRagIndexStore` (files, `auto+file`) / `RedisRagIndexStore` (text in MySQL + retrieval via Redis Stack, `auto+db` or explicit `redis`) | `agent.rag.provider=auto` + `STORAGE_TYPE=db`; mysql + redis-stack-server in [docker-compose.yml](docker-compose.yml) (initdb creates tables) |
 | Multi-format document parsing | `RagDocumentParser` SPI (composite detects by classpath) | PDFBox / POI-XWPF in [pom.xml](pom.xml); uploads support `.md/.txt/.pdf/.docx` |
@@ -24,7 +24,7 @@
 
 ## 2. Middleware (Docker)
 
-Storage / retrieval (MySQL + Redis Stack), the distributed session lock (Redis), and the Phase 3 RocketMQ synthesis queue are brought up with Docker:
+Storage / retrieval (MySQL + Redis Stack), the distributed session lock (Redis), and the RocketMQ synthesis queue are brought up with Docker:
 
 ```bash
 cd example-web
@@ -35,7 +35,7 @@ docker compose ps   # mysql / redis / rocketmq-namesrv / rocketmq-broker should 
 - **mysql** (`localhost:3306`, default db/user/password `clawdb/claw/claw`)
   - On first init, [db/mysql/framework-schema.sql](db/mysql/framework-schema.sql) (framework tables:
     session / fact / memory-page / long-term, RAG documents & index-entry text, observability
-    `claw_trace` / `claw_run_usage`, **Phase 3 staging table `claw_memory_snapshot`**) and
+    `claw_trace` / `claw_run_usage`, **RocketMQ staging table `claw_memory_snapshot`**) and
     [db/mysql/example-web-schema.sql](db/mysql/example-web-schema.sql) (app user table `claw_user`) run automatically.
   - Acts as the **authoritative store** for `agent.storage.type=db` (memory / knowledge-base text); retrieval
     never queries MySQL, it goes through the Redis index.
@@ -44,16 +44,16 @@ docker compose ps   # mysql / redis / rocketmq-namesrv / rocketmq-broker should 
     vector KNN), dual-written after a successful MySQL write;
   - Also backs the `agent.collaboration.lock.type=redis` distributed session lock.
 - **rocketmq-namesrv + rocketmq-broker** (NameServer `localhost:9876`, Broker `localhost:10911`)
-  - Message broker for the Phase 3 synthesis queue; auto-enabled when `SYNTHESIS_QUEUE_TYPE=rocketmq`.
+  - Message broker for the RocketMQ synthesis queue; auto-enabled when `SYNTHESIS_QUEUE_TYPE=rocketmq`.
   - `RocketMqMemorySynthesisDispatcher` publishes to topic `CLAW_SYNTH_TASK` (partitioned by sessionId hash →
     same session always lands on the same queue for serial processing), consumed by `RocketMqSynthesisConsumer`
     in CLUSTERING mode. Snapshots are staged in the `claw_memory_snapshot` table first to keep MQ messages small.
-  - To switch back to Phase 2 lock-free CAS: comment out the `rocketmq-namesrv` / `rocketmq-broker` services in
-    `docker-compose.yml` and change `SYNTHESIS_QUEUE_TYPE` to `lockfree` (Phase 2 has no MQ dependency).
+  - To switch back to LockFree lock-free CAS: comment out the `rocketmq-namesrv` / `rocketmq-broker` services in
+    `docker-compose.yml` and change `SYNTHESIS_QUEUE_TYPE` to `lockfree` (LockFree has no MQ dependency).
 
 > Minimal zero-middleware demo: default `STORAGE_TYPE=file` (local files) with `LOCK_TYPE=local` (JVM lock) and
 > `RAG_PROVIDER=auto` (follows storage → `local` index); no middleware is needed for chat and local RAG. Start
-> Docker only when you want MySQL persistence / Redis Stack retrieval / distributed session lock / Phase 3 RocketMQ queue.
+> Docker only when you want MySQL persistence / Redis Stack retrieval / distributed session lock / RocketMQ queue.
 
 ## 3. Quick Start
 
@@ -81,13 +81,13 @@ mvn spring-boot:run             # 2) start example-web (port 8080)
 | `REDIS_URI` | `redis://localhost:6379` | Redis address (retrieval index + distributed lock; `agent.redis` reuses `spring.data.redis.*`, falls back to this when unset) |
 | `RAG_EMBEDDING_MODEL/BASE_URL/API_KEY` | empty | standalone RAG embedding (OpenAI-compatible `/embeddings`) |
 | `BOOTSTRAP_API_KEY` | `sk-admin-bootstrap` | bootstrap admin key (tenant=admin, superuser, can manage `admin-*` seed KBs) |
-| `SYNTHESIS_QUEUE_TYPE` | `lockfree` | synthesis queue implementation: `local` (single instance) / `redis` (Phase 1 distributed lock) / `lockfree` (Phase 2 lock-free CAS) / **`rocketmq` (Phase 3 production-grade MQ)** |
-| `SYNTHESIS_LOCK_TTL_SECONDS` | `600` | Phase 1: synthesis-lock TTL (seconds), watchdog renews |
-| `SYNTHESIS_LOCK_WATCHDOG_INTERVAL` | `200` | Phase 1: watchdog renewal interval (seconds, default 1/3 of TTL) |
-| `SYNTHESIS_CLAIM_MAX_RETRIES` | `3` | Phase 2: max CAS-claim retries |
-| `ROCKETMQ_NAME_SERVER` | — | Phase 3: RocketMQ NameServer address (required when `SYNTHESIS_QUEUE_TYPE=rocketmq`) |
-| `ROCKETMQ_PRODUCER_GROUP` | `claw-synth-producer` | Phase 3: RocketMQ producer group |
-| `ROCKETMQ_CONSUMER_GROUP` | `claw-synth-consumer` | Phase 3: RocketMQ consumer group |
+| `SYNTHESIS_QUEUE_TYPE` | `lockfree` | synthesis queue implementation: `local` (single instance) / `redis` (Redis distributed lock) / `lockfree` (lock-free CAS) / **`rocketmq` (RocketMQ production-grade MQ)** |
+| `SYNTHESIS_LOCK_TTL_SECONDS` | `600` | Redis Lock mode: synthesis-lock TTL (seconds), watchdog renews |
+| `SYNTHESIS_LOCK_WATCHDOG_INTERVAL` | `200` | Redis Lock mode: watchdog renewal interval (seconds, default 1/3 of TTL) |
+| `SYNTHESIS_CLAIM_MAX_RETRIES` | `3` | LockFree mode: max CAS-claim retries |
+| `ROCKETMQ_NAME_SERVER` | — | RocketMQ: NameServer address (required when `SYNTHESIS_QUEUE_TYPE=rocketmq`) |
+| `ROCKETMQ_PRODUCER_GROUP` | `claw-synth-producer` | RocketMQ: producer group |
+| `ROCKETMQ_CONSUMER_GROUP` | `claw-synth-consumer` | RocketMQ: consumer group |
 
 A successful startup prints:
 
@@ -188,10 +188,11 @@ the backend generates pending-approval nodes (`PendingApproval`). The approval p
 
 ![Approval - rejected](screenshots/08-approval-rejected.jpg)
 
-## 6. Phase 3 RocketMQ Verification
+## 6. RocketMQ Synthesis Queue Verification
 
-Phase 3 uses RocketMQ as the distributed synthesis queue. The docker-compose stack starts RocketMQ (NameServer + Broker)
-by default, and `SYNTHESIS_QUEUE_TYPE=rocketmq` makes example-web auto-assemble `RocketMqMemorySynthesisDispatcher`.
+When `SYNTHESIS_QUEUE_TYPE=rocketmq` is set, example-web auto-assembles `RocketMqMemorySynthesisDispatcher`.
+The docker-compose stack starts RocketMQ (NameServer + Broker) by default; the steps below verify the full
+produce/consume chain of synthesis events.
 
 ### 6.1 Startup check
 
@@ -241,10 +242,10 @@ docker exec example-web-rocketmq-broker bash -c \
 # → CLAW_SYNTH_TASK (auto-created topic, sessionId-hashed to the same queueId for serial processing)
 ```
 
-### 6.3 Switch back to Phase 2 (no MQ dependency)
+### 6.3 Switch back to LockFree (no MQ dependency)
 
 ```bash
-# Stop RocketMQ services, switch to Phase 2 lock-free queue
+# Stop RocketMQ services, switch to LockFree lock-free queue
 docker compose stop rocketmq-namesrv rocketmq-broker
 # Change SYNTHESIS_QUEUE_TYPE=lockfree in .env or docker-compose
 docker compose restart example-web

@@ -11,7 +11,7 @@
 | 能力 | 框架机制 | 本示例配置 / 代码 |
 | --- | --- | --- |
 | 分布式会话锁（多实例共享） | `SessionLockManager` SPI：`LocalSessionLockManager`（JVM 内 ReentrantLock）/ `RedisSessionLockManager`（`SET NX PX` + Lua 原子释放） | `agent.collaboration.lock.type=redis`；[docker-compose.yml](docker-compose.yml) 起 Redis |
-| 记忆提炼队列（Phase 3 RocketMQ 生产级） | `MemorySynthesisDispatcher` SPI：`Local`（单实例）/ `Lock`（Phase 1 分布式锁）/ `LockFree`（Phase 2 CAS 无锁）/ **`RocketMqMemorySynthesisDispatcher`（Phase 3，example-web 扩展）** —— RocketMQ CLUSTERING + sessionId hash 分区保证同会话串行 | `SYNTHESIS_QUEUE_TYPE=rocketmq`；[docker-compose.yml](docker-compose.yml) 起 `rocketmq-namesrv` + `rocketmq-broker`；快照暂存 MySQL `claw_memory_snapshot` 表避免 MQ 消息体过大 |
+| 记忆提炼队列（分布式一致性） | `MemorySynthesisDispatcher` SPI：`Local`（单实例）/ `Lock`（Redis 分布式锁）/ `LockFree`（CAS 无锁）/ **`RocketMqMemorySynthesisDispatcher`（RocketMQ 生产级，example-web 扩展）** —— RocketMQ CLUSTERING + sessionId hash 分区保证同会话串行 | `SYNTHESIS_QUEUE_TYPE=rocketmq`；[docker-compose.yml](docker-compose.yml) 起 `rocketmq-namesrv` + `rocketmq-broker`；快照暂存 MySQL `claw_memory_snapshot` 表避免 MQ 消息体过大 |
 | Redis 作为可选用例 | infra 中 redis 依赖为 `optional`，由 `@ConditionalOnClass` 门控 | [pom.xml](pom.xml) 显式引入 `spring-boot-starter-data-redis` |
 | 向量库适配（可切换） | `RagIndexStore` SPI：`LocalRagIndexStore`（本地文件，`auto+file`）/ `RedisRagIndexStore`（MySQL 存文本 + Redis Stack 召回，`auto+db` 或显式 `redis`） | `agent.rag.provider=auto` + `STORAGE_TYPE=db`；[docker-compose.yml](docker-compose.yml) 起 mysql + redis-stack-server（initdb 自动建表） |
 | 多格式文档解析 | `RagDocumentParser` SPI（组合器按 classpath 探测） | [pom.xml](pom.xml) 引入 PDFBox / POI-XWPF；上传支持 `.md/.txt/.pdf/.docx` |
@@ -23,7 +23,7 @@
 
 ## 2. 依赖中间件（Docker）
 
-本示例的存储 / 召回（MySQL + Redis Stack）、分布式会话锁（Redis）与 Phase 3 RocketMQ 提炼队列用 Docker 一键拉起：
+本示例的存储 / 召回（MySQL + Redis Stack）、分布式会话锁（Redis）与 RocketMQ 提炼队列用 Docker 一键拉起：
 
 ```bash
 cd example-web
@@ -34,22 +34,22 @@ docker compose ps   # mysql / redis / rocketmq-namesrv / rocketmq-broker 均 hea
 - **mysql**（`localhost:3306`，库/账号/密码默认 `clawdb/claw/claw`）
   - 首次初始化自动执行 [db/mysql/framework-schema.sql](db/mysql/framework-schema.sql)（框架表：
     会话 / 事实 / 记忆页 / 长期记忆、RAG 文档与索引条目文本、可观测性 `claw_trace` / `claw_run_usage`、
-    **Phase 3 暂存表 `claw_memory_snapshot`**）
+    **RocketMQ 提炼暂存表 `claw_memory_snapshot`**）
     与 [db/mysql/example-web-schema.sql](db/mysql/example-web-schema.sql)（接入方用户表 `claw_user`）。
   - `agent.storage.type=db` 时作为**权威存储**（记忆 / 知识库文本落库），召回不查库、只走 Redis 索引。
 - **redis**（`localhost:6379`）使用 `redis/redis-stack-server` 镜像，内置 **RediSearch**：
   - `agent.storage.type=db` 时承载记忆与 RAG 的**召回索引**（全文倒排 + 向量 KNN），MySQL 写入成功后双写；
   - 同时用于 `agent.collaboration.lock.type=redis` 分布式会话锁。
 - **rocketmq-namesrv + rocketmq-broker**（NameServer `localhost:9876`，Broker `localhost:10911`）
-  - Phase 3 提炼队列的消息中间件；`SYNTHESIS_QUEUE_TYPE=rocketmq` 时自动启用。
+  - RocketMQ 提炼队列的消息中间件；`SYNTHESIS_QUEUE_TYPE=rocketmq` 时自动启用。
   - `RocketMqMemorySynthesisDispatcher` 投递 `CLAW_SYNTH_TASK` 主题（按 sessionId hash → 同会话同分区），
     `RocketMqSynthesisConsumer` CLUSTERING 模式消费；快照先存 `claw_memory_snapshot` 表避免 MQ 消息体过大。
-  - 切换回 Phase 2 无锁 CAS：注释掉 docker-compose 里的 `rocketmq-namesrv` / `rocketmq-broker` 两个 service，
-    并把 `SYNTHESIS_QUEUE_TYPE` 改成 `lockfree`（Phase 2 不依赖任何 MQ）。
+  - 切换回 lockfree 无锁 CAS：注释掉 docker-compose 里的 `rocketmq-namesrv` / `rocketmq-broker` 两个 service，
+    并把 `SYNTHESIS_QUEUE_TYPE` 改成 `lockfree`（lockfree 不依赖任何 MQ）。
 
 > 无 Docker 的最小演示：默认 `STORAGE_TYPE=file`（本地文件）且 `LOCK_TYPE=local`（JVM 内锁）、
 > `RAG_PROVIDER=auto`（跟随存储 → `local` 本地索引），此时无需任何中间件即可跑通对话与本地 RAG；
-> 要体验 MySQL 持久化 / Redis Stack 召回 / 分布式会话锁 / Phase 3 RocketMQ 提炼队列再启动 Docker。
+> 要体验 MySQL 持久化 / Redis Stack 召回 / 分布式会话锁 / RocketMQ 提炼队列再启动 Docker。
 
 ## 3. 快速开始
 
@@ -60,7 +60,7 @@ cp src/main/resources/.env.example .env
 # 2. 构建并启动（example-web 为独立工程，独立版本号，不随仓库 reactor 构建）
 #    框架依赖 mwb-ai-claw-spring-boot-starter:1.0.4-SNAPSHOT（需先在仓库根目录 mvn install -DskipTests）
 mvn clean package -DskipTests   # 1) 本地编译打包
-mvn spring-boot:run             # 2) 启动 example-web（端口 8080，默认 Phase 2 lockfree 队列）
+mvn spring-boot:run             # 2) 启动 example-web（端口 8080，默认 lockfree 队列）
 ```
 
 > 容器化一键构建（后端 + 前端 + 中间件）：`docker compose up -d --build`（见 [docker-compose.yml](docker-compose.yml)）。
@@ -80,13 +80,13 @@ mvn spring-boot:run             # 2) 启动 example-web（端口 8080，默认 P
 | `REDIS_URI` | `redis://localhost:6379` | Redis 地址（召回索引 + 分布式锁；`agent.redis` 连接复用 `spring.data.redis.*`，未配置时以本值兜底） |
 | `RAG_EMBEDDING_MODEL/BASE_URL/API_KEY` | 空 | 独立 RAG 的 Embedding（OpenAI 兼容 `/embeddings`） |
 | `BOOTSTRAP_API_KEY` | `sk-admin-bootstrap` | 引导管理员 Key（tenant=admin，超级用户，可管理 `admin-*` 种子库） |
-| `SYNTHESIS_QUEUE_TYPE` | `lockfree` | 提炼队列实现：`local`（单实例）/ `redis`（Phase 1 分布式锁）/ `lockfree`（Phase 2 CAS 无锁）/ **`rocketmq`（Phase 3 生产级 MQ）** |
-| `SYNTHESIS_LOCK_TTL_SECONDS` | `600` | Phase 1：合成锁 TTL（秒），watchdog 续期 |
-| `SYNTHESIS_LOCK_WATCHDOG_INTERVAL` | `200` | Phase 1：watchdog 续期间隔（秒，默认 1/3 TTL） |
-| `SYNTHESIS_CLAIM_MAX_RETRIES` | `3` | Phase 2：CAS claim 最大重试次数 |
-| `ROCKETMQ_NAME_SERVER` | — | Phase 3：RocketMQ NameServer 地址（`SYNTHESIS_QUEUE_TYPE=rocketmq` 时必填） |
-| `ROCKETMQ_PRODUCER_GROUP` | `claw-synth-producer` | Phase 3：RocketMQ Producer Group |
-| `ROCKETMQ_CONSUMER_GROUP` | `claw-synth-consumer` | Phase 3：RocketMQ Consumer Group |
+| `SYNTHESIS_QUEUE_TYPE` | `lockfree` | 提炼队列实现：`local`（单实例）/ `redis`（Redis 分布式锁）/ `lockfree`（CAS 无锁）/ **`rocketmq`（RocketMQ 生产级 MQ）** |
+| `SYNTHESIS_LOCK_TTL_SECONDS` | `600` | Redis Lock 模式：合成锁 TTL（秒），watchdog 续期 |
+| `SYNTHESIS_LOCK_WATCHDOG_INTERVAL` | `200` | Redis Lock 模式：watchdog 续期间隔（秒，默认 1/3 TTL） |
+| `SYNTHESIS_CLAIM_MAX_RETRIES` | `3` | LockFree 模式：CAS claim 最大重试次数 |
+| `ROCKETMQ_NAME_SERVER` | — | RocketMQ：NameServer 地址（`SYNTHESIS_QUEUE_TYPE=rocketmq` 时必填） |
+| `ROCKETMQ_PRODUCER_GROUP` | `claw-synth-producer` | RocketMQ：Producer Group |
+| `ROCKETMQ_CONSUMER_GROUP` | `claw-synth-consumer` | RocketMQ：Consumer Group |
 
 启动后日志若出现：
 
@@ -178,10 +178,10 @@ npm run build      # 生产构建 → dist/
 
 ![审批-拒绝后](screenshots/08-approval-rejected.jpg)
 
-## 6. Phase 3 RocketMQ 验证
+## 6. RocketMQ 提炼队列验证
 
-Phase 3 使用 RocketMQ 作为分布式提炼队列。docker-compose 默认已启 RocketMQ（NameServer + Broker），
-`SYNTHESIS_QUEUE_TYPE=rocketmq` 让 example-web 自动装配 `RocketMqMemorySynthesisDispatcher`。
+当 `SYNTHESIS_QUEUE_TYPE=rocketmq` 时，example-web 自动装配 `RocketMqMemorySynthesisDispatcher`。
+docker-compose 默认已启 RocketMQ（NameServer + Broker），以下步骤可验证完整的提炼生产/消费链路。
 
 ### 6.1 启动检查
 
@@ -204,7 +204,7 @@ docker exec example-web-mysql mysql -uclaw -pclaw clawdb -e \
 # → claw_memory_snapshot
 ```
 
-### 6.2 Phase 3 消息生产/消费验证
+### 6.2 消息生产/消费验证
 
 ```bash
 # 触发一次提炼（通过对话产生记忆）—— 任选以下之一：
@@ -231,10 +231,10 @@ docker exec example-web-rocketmq-broker bash -c \
 # → CLAW_SYNTH_TASK（自动创建的 Topic，按 sessionId hash 到同一个 queueId 保证串行）
 ```
 
-### 6.3 切换回 Phase 2（无 MQ 依赖）
+### 6.3 切换回 LockFree（无 MQ 依赖）
 
 ```bash
-# 关闭 RocketMQ service，用 phase2 lockfree 队列
+# 关闭 RocketMQ service，用 lockfree 无锁队列
 docker compose stop rocketmq-namesrv rocketmq-broker
 # 改 .env 或 docker-compose 里的 SYNTHESIS_QUEUE_TYPE=lockfree
 # 重启 example-web
