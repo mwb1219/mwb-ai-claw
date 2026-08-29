@@ -4,7 +4,7 @@
 
     <!-- ============================================================
          example-commerce 独立工程：不随 mwb-ai-claw 仓库 reactor 构建，单独管理版本号。
-         框架依赖 mwb-ai-claw-spring-boot-starter:1.0.3（Central 正式版，Maven 自动下载）：
+         框架依赖 mwb-ai-claw-spring-boot-starter:1.0.4（Central 正式版，Maven 自动下载）：
            - 本地运行：直接在 example-commerce 目录执行 mvn 命令即可；
            - Docker 构建：docker compose 构建时自动拉取 Central 依赖（additional_contexts 可选加速）。
          ============================================================ -->
@@ -26,7 +26,7 @@
         <java.version>1.8</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <!-- 框架版本：Central 正式版（升级框架后同步修改） -->
-        <mwb-ai-claw.version>1.0.3</mwb-ai-claw.version>
+        <mwb-ai-claw.version>1.0.4</mwb-ai-claw.version>
     </properties>
 
     <dependencies>

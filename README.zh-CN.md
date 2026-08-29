@@ -102,7 +102,7 @@ Web 模式提供 REST 对话、SSE 流式、WebSocket、会话管理以及一个
 <dependency>
     <groupId>io.github.mwb1219</groupId>
     <artifactId>mwb-ai-claw-app</artifactId>
-    <version>1.0.3</version>
+    <version>1.0.4</version>
 </dependency>
 ```
 
@@ -112,7 +112,7 @@ Web 模式提供 REST 对话、SSE 流式、WebSocket、会话管理以及一个
 <dependency>
     <groupId>io.github.mwb1219</groupId>
     <artifactId>mwb-ai-claw-spring-boot-starter</artifactId>
-    <version>1.0.3</version>
+    <version>1.0.4</version>
 </dependency>
 ```
 

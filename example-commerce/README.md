@@ -43,7 +43,7 @@ mvn -pl example-commerce spring-boot:run           # 2) 单独启动 example-com
 cp src/main/resources/.env.example .env
 
 # 2. 构建并启动（在 example-commerce 目录下执行）
-# 框架依赖 mwb-ai-claw-spring-boot-starter:1.0.3（Central 正式版自动下载，无需本地仓库）
+# 框架依赖 mwb-ai-claw-spring-boot-starter:1.0.4（Central 正式版自动下载，无需本地仓库）
 docker compose up -d --build
 
 # 3. 验证
