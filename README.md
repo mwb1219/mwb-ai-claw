@@ -1,100 +1,102 @@
 # mwb-ai-claw
 
-> A **Java Agent Harness** framework, built on COLA architecture (DDD). Inspired by OpenClaw — an out-of-the-box personal AI assistant that can actually get things done.
+> 一个基于 COLA 架构（DDD）的 **Java Agent Harness** 框架。灵感来自 OpenClaw —— 一个开箱即用、真正能干活解放双手的个人 AI 助手。
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.mwb1219/mwb-ai-claw-app?color=blue)](https://search.maven.org/artifact/io.github.mwb1219/mwb-ai-claw-app)
 [![Docs](https://img.shields.io/badge/docs-online-blue)](https://mwb1219.github.io/mwb-ai-claw/)
 
-## What is an Agent Harness?
+> 🌐 English version: [README.zh-CN.md](README.zh-CN.md)
 
-mwb-ai-claw is **not** a model-integration library (in the vein of LangChain4j / Spring AI, which hand you `ChatClient`-level building blocks that you must assemble yourself). It is an **Agent Harness** — the ready-to-run runtime that takes an LLM and turns it into an agent that can actually get work done. It supplies everything around the model:
+## 什么是 Agent Harness？
 
-- **Execution loop** — a ReAct (Thought → Action → Observation) loop with an adaptive step budget and token guard
-- **Tool execution & safety** — sandboxed shell commands (command whitelist/blacklist, path restrictions, timeout, output truncation + secret masking), approval gates, HTTP allowlist
-- **Layered memory** — a five-layer memory model with dynamic paging, retrieval and distillation
-- **Session & state** — session-first CRUD with multi-tenant `AgentScope` isolation
-- **Config-driven agents** — agents and orchestrations are declared in `agents.json` / `orchestrations.json` rather than hardcoded; the kernel stays stable while capabilities grow at the edges
-- **Observability & resilience** — metrics, JSONL run logs, retry / degradation, step & token budgets
-- **Multiple entry points** — Shell, Web console, REST API, WebSocket (SSE streaming), and the embeddable `ClawRuntime`
+mwb-ai-claw **不是**一个模型集成库（同类的 LangChain4j / Spring AI 会给你 `ChatClient` 一级的积木，需要你自己去组装）。它是一台 **Agent Harness** —— 开箱即用的运行时，把一个大模型变成真正能干活、能解放双手的 Agent。它负责模型之外的一切：
 
-If LangChain4j / Spring AI are the **parts** for building a harness, mwb-ai-claw is the **already-assembled harness** — a self-contained, deployable agent runtime.
+- **执行循环** —— ReAct（思考 → 行动 → 观察）循环，带自适应步数预算与 token 保护
+- **工具执行与安全** —— 沙箱化的 Shell 命令（命令白/黑名单、路径限制、超时、输出截断 + 敏感信息脱敏）、审批门禁、HTTP 白名单
+- **分层记忆** —— 五层记忆模型，支持动态换页、检索召回与长期记忆提炼
+- **会话与状态** —— 以会话为优先的完整 CRUD，并用多租户 `AgentScope` 做数据隔离
+- **配置化 Agent 定义** —— Agent 与编排在 `agents.json` / `orchestrations.json` 里声明，而非硬编码；内核保持稳定，能力在边缘生长
+- **可观测性与韧性** —— 指标、JSONL 运行记录、重试/降级、步数与 token 预算保护
+- **多入口** —— Shell、Web 控制台、REST API、WebSocket（SSE 流式），以及可嵌入的 `ClawRuntime`
 
-## Features
+如果说 LangChain4j / Spring AI 是「造 harness 的零件」，那么 mwb-ai-claw 就是「已经装好的 harness」—— 一个自包含、可部署的 Agent 运行时。
 
-- **Multiple entry points** — interactive Shell, Web console, REST API, and WebSocket (SSE streaming)
-- **ReAct reasoning loop** — iterative Thought → Action → Observation execution with adaptive step budget
-- **Tool calling** — file I/O, sandboxed shell commands, and MCP tool integration (stdio / streamable_http)
-- **Layered memory** — five-layer memory model with dynamic paging and retrieval
-- **RAG retrieval** — background knowledge base: upload documents → parse / chunk / embed / index → retrieve (with optional reranking) and inject into the context, fully independent from agent memory
-- **Multi-agent orchestration** — routing / conversational / delegate collaboration modes
-- **Skills** — pluggable skills following the `SKILL.md` spec with three-level loading
-- **Multi-tenancy** — AgentScope-based data isolation
-- **Storage backends** — file (zero dependency), or `db` = MySQL storage + Redis Stack retrieval (keyword + vector KNN)
-- **Observability & resilience** — metrics, JSONL run logs, retry / degradation
-- **Embeddable** — embed `ClawRuntime` in your own Java app (streaming chat, multi-tenant scope)
+## 特性
 
-## Extensible by design
+- **多入口** —— 交互式 Shell、Web 控制台、REST API、WebSocket（SSE 流式）
+- **ReAct 推理循环** —— 「思考 → 行动 → 观察」迭代执行，带自适应步数预算
+- **工具调用** —— 文件 I/O、沙箱化 Shell 命令、MCP 工具集成（stdio / streamable_http）
+- **分层记忆** —— 五层记忆模型，支持动态换页与检索召回
+- **RAG 检索增强** —— 后台知识库：上传文档 → 解析 / 切块 / 嵌入 / 建索引 → 检索（可选重排）并注入上下文，与 Agent 记忆完全独立
+- **多 Agent 编排** —— routing / conversational / delegate 三种协作模式
+- **技能系统（Skills）** —— 遵循 `SKILL.md` 规范的可插拔技能，三级加载
+- **多租户** —— 基于 AgentScope 的数据隔离
+- **存储后端** —— file（零依赖），或 db = MySQL 存储 + Redis Stack 召回（关键词 + 向量 KNN）
+- **可观测性与韧性** —— 指标、JSONL 运行记录、重试/降级
+- **可嵌入** —— 在你自己的 Java 应用中嵌入 `ClawRuntime`（流式对话、多租户 scope）
 
-Extensibility is a first-class design goal: the core pipeline (ReAct loop, sessions, memory distillation) stays stable, while capabilities grow at the edges — via configuration or pluggable SPI, **without touching the kernel**.
+## 为扩展而生
 
-**Zero-code extension (for users)**
+扩展性是一等设计目标：核心管线（ReAct 循环、会话、记忆提炼）保持稳定，能力在边缘生长 —— 通过配置或可插拔 SPI，**无需触碰内核**。
 
-Drop a same-named file into the run directory to override the built-in defaults — no repackaging:
+**零代码扩展（面向用户）**
 
-| Extension | What you can do | Where |
+往运行目录里丢一个同名文件，即可覆盖内置默认值，无需重新打包：
+
+| 扩展 | 你能做什么 | 位置 |
 | --- | --- | --- |
-| `agents.json` | add / tune specialist Agents and per-Agent models | run dir or install dir |
-| `orchestrations.json` | define collaboration modes (routing / conversational / delegate) | run dir or install dir |
-| `skills/<name>/SKILL.md` | give the Agent a reusable skill without writing code | `skills/` or `agent.skills-dir` |
-| `mcp-server.json` | integrate external tools via the MCP protocol | run dir or install dir |
-| `.env` | models and API keys with `${VAR:default}` references | run dir or install dir |
+| `agents.json` | 新增 / 调优专家 Agent 以及每个 Agent 独立的模型 | 运行目录或安装目录 |
+| `orchestrations.json` | 定义协作模式（routing / conversational / delegate） | 运行目录或安装目录 |
+| `skills/<name>/SKILL.md` | 不写代码就能给 Agent 加一个可复用技能 | `skills/` 或 `agent.skills-dir` |
+| `mcp-server.json` | 通过 MCP 协议接入外部工具 | 运行目录或安装目录 |
+| `.env` | 配置模型与 API Key，支持 `${VAR:default}` 引用 | 运行目录或安装目录 |
 
-**Developer extension (SPI)**
+**开发者扩展（SPI）**
 
-Every subsystem exposes a domain-layer SPI with a ready-to-use default implementation, registered via `@ConditionalOnMissingBean` — declare a same-interface bean to **replace** it, or wrap it (decorator / reranker) to **enhance** it:
+每个子系统都暴露领域层的 SPI，并带有开箱即用的默认实现，通过 `@ConditionalOnMissingBean` 注册 —— 声明一个同接口的 Bean 来**替换**它，或把它**包装**起来（装饰器 / 重排器）来**增强**它：
 
-- **LLM**: `LlmGateway` / `EmbeddingGateway`
-- **Tools**: `ToolGateway` / `ToolExecutor`
-- **Memory**: `MemoryGateway` / `MemoryPageStore` / `PageEvictionPolicy` / `MemoryRetriever`
-- **Orchestration**: `AgentOrchestrator` (add a new collaboration mode) / `ExecutionUnit`
-- **RAG**: `RagDocumentParser` / `RagChunker` / `RagEmbeddingGateway` / `RagIndexStore` / `RagReranker` / ...
+- **LLM**：`LlmGateway` / `EmbeddingGateway`
+- **工具**：`ToolGateway` / `ToolExecutor`
+- **记忆**：`MemoryGateway` / `MemoryPageStore` / `PageEvictionPolicy` / `MemoryRetriever`
+- **编排**：`AgentOrchestrator`（新增一种协作模式）/ `ExecutionUnit`
+- **RAG**：`RagDocumentParser` / `RagChunker` / `RagEmbeddingGateway` / `RagIndexStore` / `RagReranker` / ...
 
-Embedded users register their own components via `ClawRuntime.Builder.register(...)`. See the [Extensibility design](docs/design/extensibility.md) for the full picture.
+嵌入场景的用户通过 `ClawRuntime.Builder.register(...)` 注册自己的组件。完整全景见 [扩展能力设计](docs/design/extensibility.md)。
 
-## Quick start
+## 快速开始
 
-Requires JDK 8+ and Maven 3.6+.
+需要 JDK 8+ 与 Maven 3.6+。
 
 ```bash
-# 1. Build the start module (compile + package executable jar)
+# 1. 构建 start 模块（编译 + 打可执行 jar 包）
 mvn package -pl start -am -DskipTests
 
-# 2. Prepare your LLM API key
+# 2. 准备你的 LLM API Key
 cp .env.example .env
-#    Edit .env and set at least DEFAULT_API_KEY=sk-xxx (default model: deepseek-chat)
+#    编辑 .env，至少设置 DEFAULT_API_KEY=sk-xxx（默认模型：deepseek-chat）
 
-# 3. Launch the interactive Shell (REPL)
+# 3. 启动交互式 Shell（REPL）
 java -jar start/target/start-*.jar --spring.profiles.active=shell
 ```
 
-Then just type your question:
+然后直接输入你的问题即可：
 
 ```text
-> Hello, introduce yourself
+> 你好，请介绍一下你自己
 ```
 
-Prefer a browser? Run the Web mode and visit `http://localhost:8080`:
+更喜欢用浏览器？启动 Web 模式并访问 `http://localhost:8080`：
 
 ```bash
 java -jar start/target/start-*.jar --spring.profiles.active=web
 ```
 
-Web mode provides REST chat, SSE streaming, WebSocket, session management, and a frontend console.
+Web 模式提供 REST 对话、SSE 流式、WebSocket、会话管理以及一个前端控制台。
 
-## Use as a Maven dependency
+## 作为 Maven 依赖使用
 
-Published on Maven Central (`io.github.mwb1219`, requires JDK 8+). Embed `ClawRuntime` in your own Java app with the core module:
+已发布到 Maven Central（`io.github.mwb1219`，要求 JDK 8+）。用核心模块把 `ClawRuntime` 嵌入你自己的 Java 应用：
 
 ```xml
 <dependency>
@@ -104,7 +106,7 @@ Published on Maven Central (`io.github.mwb1219`, requires JDK 8+). Embed `ClawRu
 </dependency>
 ```
 
-Or use the Spring Boot Starter to get the full server-side stack (REST / WebSocket / Shell):
+或者使用 Spring Boot Starter 获得完整的服务端栈（REST / WebSocket / Shell）：
 
 ```xml
 <dependency>
@@ -114,16 +116,15 @@ Or use the Spring Boot Starter to get the full server-side stack (REST / WebSock
 </dependency>
 ```
 
-See [Embedding Integration](docs/guide/embedding.md) and [Server Integration](docs/guide/server-integration.md) for usage details.
+使用细节见 [嵌入式集成](docs/guide/embedding.md) 与 [服务端集成](docs/guide/server-integration.md)。
 
-## Documentation
+## 文档
 
-- 中文版 README：[简体中文](README.zh-CN.md)
 - 中文文档站：https://mwb1219.github.io/mwb-ai-claw/
 - English site: https://mwb1219.github.io/mwb-ai-claw/en/
 
-Full documentation (quick start, configuration, REST / WebSocket / Shell references, design overviews) is also maintained in [docs/](docs/).
+完整的文档（快速开始、配置详解、REST / WebSocket / Shell 参考、设计概要）也维护在 [docs/](docs/) 下。
 
-## License
+## 许可协议
 
-Licensed under the [Apache License, Version 2.0](LICENSE).
+基于 [Apache License, Version 2.0](LICENSE) 授权。
