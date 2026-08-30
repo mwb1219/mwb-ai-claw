@@ -6,7 +6,7 @@
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.mwb1219/mwb-ai-claw-app?color=blue)](https://search.maven.org/artifact/io.github.mwb1219/mwb-ai-claw-app)
 [![Docs](https://img.shields.io/badge/docs-online-blue)](https://mwb1219.github.io/mwb-ai-claw/)
 
-> 🌐 English version: [README.zh-CN.md](README.zh-CN.md)
+> 🌐 English version: [README.en.md](README.en.md)
 
 ## 什么是 Agent Harness？
 
