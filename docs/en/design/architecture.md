@@ -11,7 +11,7 @@ nav_order: 1
 
 ## 0. Position: This Is a Java Agent Harness
 
-> mwb-ai-claw is a **Java Agent Harness** — it assembles the model + execution loop + tool safety + memory + sessions + config-driven agent definitions + observability into an out-of-the-box, deployable agent.
+> mwb-ai-claw is a **Java Agent Harness** — an out-of-the-box, low-cost, easy-to-get-started Agent runtime framework. It assembles the model + execution loop + tool safety + memory + sessions + config-driven agent definitions + observability into a deployable agent, and every component is exposed through SPI so you can replace or enhance it as needed.
 > If LangChain4j / Spring AI supply the **parts** for building a harness (`ChatClient`-level building blocks), this framework is the **already-assembled harness**.
 > That role is reflected across the subsystems: the ReAct loop ([core-loop](core-loop.md)), tool sandbox & approval gates ([security](security.md)), layered memory ([memory-model](memory-model.md)), config-driven agents/orchestration ([agents config](../guide/agents-config.md)), and multi-tenant / multi-instance storage ([storage-multitenancy](storage-multitenancy.md) / [horizontal-scaling](horizontal-scaling.md)) together form the runtime scaffolding around the model.
 

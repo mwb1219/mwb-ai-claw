@@ -11,7 +11,7 @@ nav_order: 1
 
 ## 0. 定位：这是一个 Java Agent Harness
 
-> mwb-ai-claw 是一个 **Java Agent Harness**——它把「模型 + 执行循环 + 工具安全 + 记忆 + 会话 + 配置化 Agent 定义 + 可观测性」装配成开箱即用、可部署的 Agent 整机。
+> mwb-ai-claw 是一个 **Java Agent Harness**——开箱即用、低开发成本、易上手的 Agent 运行时框架。它把「模型 + 执行循环 + 工具安全 + 记忆 + 会话 + 配置化 Agent 定义 + 可观测性」装配成可部署的 Agent 整机，同时每个零组件都通过 SPI 暴露，可按需替换或增强。
 > 若 LangChain4j / Spring AI 提供的是「造 harness 的零件（`ChatClient` 级积木）」，那么本框架本身就是「装好的 harness」。
 > 这一角色体现在各子系统：ReAct 执行循环（[core-loop](core-loop.md)）、工具沙箱与审批门禁（[security](security.md)）、分层记忆（[memory-model](memory-model.md)）、配置化 Agent/编排（[agents 配置](../guide/agents-config.md)）、多租户与多实例存储（[storage-multitenancy](storage-multitenancy.md) / [horizontal-scaling](horizontal-scaling.md)）共同构成模型之外的运行时脚手架。
 

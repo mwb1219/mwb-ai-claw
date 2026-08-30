@@ -1,6 +1,6 @@
 # mwb-ai-claw
 
-> A **Java Agent Harness** framework, built on COLA architecture (DDD). Inspired by OpenClaw — an out-of-the-box personal AI assistant that can actually get things done.
+> A **Java Agent Harness** framework, built on COLA architecture (DDD). Out of the box, low development cost, easy to get started — every subsystem component is extensible and replaceable.
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.mwb1219/mwb-ai-claw-app?color=blue)](https://search.maven.org/artifact/io.github.mwb1219/mwb-ai-claw-app)
@@ -10,7 +10,7 @@
 
 ## What is an Agent Harness?
 
-mwb-ai-claw is **not** a model-integration library (in the vein of LangChain4j / Spring AI, which hand you `ChatClient`-level building blocks that you must assemble yourself). It is an **Agent Harness** — the ready-to-run runtime that takes an LLM and turns it into an agent that can actually get work done. It supplies everything around the model:
+mwb-ai-claw is **not** a model-integration library (in the vein of LangChain4j / Spring AI, which hand you `ChatClient`-level building blocks that you must assemble yourself). It is an **Agent Harness** — a ready-assembled runtime framework where model + execution loop + tool safety + memory + sessions + config-driven agent definitions + observability all come together. Developers can run it out of the box, and every single component is exposed through SPI so you can replace or enhance it as needed. It supplies everything around the model:
 
 - **Execution loop** — a ReAct (Thought → Action → Observation) loop with an adaptive step budget and token guard
 - **Tool execution & safety** — sandboxed shell commands (command whitelist/blacklist, path restrictions, timeout, output truncation + secret masking), approval gates, HTTP allowlist

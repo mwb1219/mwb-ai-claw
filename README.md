@@ -1,6 +1,6 @@
 # mwb-ai-claw
 
-> 一个基于 COLA 架构（DDD）的 **Java Agent Harness** 框架。灵感来自 OpenClaw —— 一个开箱即用、真正能干活解放双手的个人 AI 助手。
+> 一个基于 COLA 架构（DDD）的 **Java Agent Harness** 框架。开箱即用、低开发成本、易上手 —— 各子系统零组件均可扩展替换。
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Maven Central](https://img.shields.io/maven-central/v/io.github.mwb1219/mwb-ai-claw-app?color=blue)](https://search.maven.org/artifact/io.github.mwb1219/mwb-ai-claw-app)
@@ -10,7 +10,7 @@
 
 ## 什么是 Agent Harness？
 
-mwb-ai-claw **不是**一个模型集成库（同类的 LangChain4j / Spring AI 会给你 `ChatClient` 一级的积木，需要你自己去组装）。它是一台 **Agent Harness** —— 开箱即用的运行时，把一个大模型变成真正能干活、能解放双手的 Agent。它负责模型之外的一切：
+mwb-ai-claw **不是**一个模型集成库（同类的 LangChain4j / Spring AI 会给你 `ChatClient` 一级的积木，需要你自己去组装）。它是一台 **Agent Harness** —— 装配好的运行时框架，把「模型 + 执行循环 + 工具安全 + 记忆 + 会话 + 配置化 Agent 定义 + 可观测性」全部就绪。开发者拿来就能跑，同时每一个零组件都通过 SPI 暴露，可按需替换或增强。它负责模型之外的一切：
 
 - **执行循环** —— ReAct（思考 → 行动 → 观察）循环，带自适应步数预算与 token 保护
 - **工具执行与安全** —— 沙箱化的 Shell 命令（命令白/黑名单、路径限制、超时、输出截断 + 敏感信息脱敏）、审批门禁、HTTP 白名单
