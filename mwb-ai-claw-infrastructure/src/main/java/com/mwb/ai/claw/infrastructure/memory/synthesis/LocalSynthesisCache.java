@@ -7,8 +7,9 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.mwb.ai.claw.domain.memory.model.LayeredMemoryConfig;
+import com.mwb.ai.claw.domain.memory.layered.LayeredMemoryConfig;
 import com.mwb.ai.claw.domain.scope.AgentScope;
+import com.mwb.ai.claw.domain.memory.layered.spi.SynthesisCache;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 
 /**

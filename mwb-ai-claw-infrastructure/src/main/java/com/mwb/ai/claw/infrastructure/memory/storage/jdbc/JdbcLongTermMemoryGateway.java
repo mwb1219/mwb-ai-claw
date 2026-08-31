@@ -5,7 +5,7 @@ import java.util.List;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 
-import com.mwb.ai.claw.domain.memory.gateway.LongTermMemoryGateway;
+import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 
 /**

@@ -1,6 +1,6 @@
 package com.mwb.ai.claw.infrastructure.memory.storage.file;
 
-import com.mwb.ai.claw.domain.memory.gateway.LongTermMemoryGateway;
+import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import org.slf4j.Logger;
@@ -21,7 +21,7 @@ import java.nio.file.Paths;
  */
 public class FileBasedMemoryGateway implements LongTermMemoryGateway {
 
-    private static final Logger log = LoggerFactory.getLogger(FileBasedMemoryGateway.class);
+    private static final Logger log = LoggerFactory.getLogger(FileBasedSessionGateway.class);
 
     private final Path agentDir;
 

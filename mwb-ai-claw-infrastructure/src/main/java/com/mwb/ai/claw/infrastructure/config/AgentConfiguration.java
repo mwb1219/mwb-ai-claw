@@ -10,15 +10,21 @@ import org.springframework.web.client.RestTemplate;
 
 import com.mwb.ai.claw.domain.context.ContextAssembler;
 import com.mwb.ai.claw.infrastructure.context.DefaultContextAssembler;
+import com.mwb.ai.claw.domain.collaboration.execution.ExecutionUnitImpl;
 import com.mwb.ai.claw.domain.collaboration.spi.AgentRouter;
-import com.mwb.ai.claw.infrastructure.collaboration.strategy.routing.CompositeAgentRouter;
-import com.mwb.ai.claw.infrastructure.collaboration.strategy.routing.LlmBasedAgentRouter;
-import com.mwb.ai.claw.infrastructure.collaboration.strategy.routing.RuleBasedAgentRouter;
+import com.mwb.ai.claw.domain.collaboration.spi.ExecutionUnit;
+import com.mwb.ai.claw.domain.collaboration.spi.OrchestrationConfigProvider;
+import com.mwb.ai.claw.domain.collaboration.spi.OrchestratorResolver;
+import com.mwb.ai.claw.domain.collaboration.spi.SessionLockManager;
+import com.mwb.ai.claw.infrastructure.collaboration.routing.CompositeAgentRouter;
+import com.mwb.ai.claw.infrastructure.collaboration.routing.LlmBasedAgentRouter;
+import com.mwb.ai.claw.infrastructure.collaboration.routing.RuleBasedAgentRouter;
 import com.mwb.ai.claw.domain.core.AgentGateway;
 import com.mwb.ai.claw.domain.core.ReActLoopService;
 import com.mwb.ai.claw.domain.llm.LlmGateway;
-import com.mwb.ai.claw.domain.memory.gateway.LayeredMemoryGateway;
-import com.mwb.ai.claw.domain.memory.gateway.LongTermMemoryGateway;
+import com.mwb.ai.claw.domain.core.SessionGateway;
+import com.mwb.ai.claw.domain.memory.MemoryStrategy;
+import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
 import com.mwb.ai.claw.domain.rag.context.RagContextProvider;
 import com.mwb.ai.claw.domain.skill.SkillGateway;
 import com.mwb.ai.claw.domain.tool.ToolGateway;
@@ -44,13 +50,13 @@ public class AgentConfiguration {
 
     @Bean
     public ContextAssembler contextAssembler(ToolGateway toolGateway,
-                                             LongTermMemoryGateway memoryGateway,
-                                             LayeredMemoryGateway layeredMemoryGateway,
+                                             LongTermMemoryGateway sessionGateway,
+                                             MemoryStrategy memoryStrategy,
                                              ObjectProvider<SkillGateway> skillGatewayProvider,
                                              ObjectProvider<RagContextProvider> ragContextProvider,
                                              AgentProperties properties) {
         // 技能开关关闭时无 SkillGateway Bean，ObjectProvider 兜底为 null（不注入技能清单）
-        return new DefaultContextAssembler(toolGateway, memoryGateway, layeredMemoryGateway,
+        return new DefaultContextAssembler(toolGateway, sessionGateway, memoryStrategy,
                 skillGatewayProvider.getIfAvailable(), properties.getSecurity().isPromptInjectionGuard(),
                 ragContextProvider.getIfAvailable());
     }
@@ -58,9 +64,9 @@ public class AgentConfiguration {
     @Bean
     public ReActLoopService reActLoopService(LlmGateway llmGateway, ToolGateway toolGateway,
                                              ContextAssembler contextAssembler,
-                                             LayeredMemoryGateway layeredMemoryGateway,
+                                             MemoryStrategy memoryStrategy,
                                              AgentProperties properties) {
-        return new ReActLoopService(llmGateway, toolGateway, contextAssembler, layeredMemoryGateway,
+        return new ReActLoopService(llmGateway, toolGateway, contextAssembler, memoryStrategy,
                 properties.getMaxStepsExtension());
     }
 
@@ -79,5 +85,17 @@ public class AgentConfiguration {
                                    LlmBasedAgentRouter llmBasedAgentRouter) {
         // 组合路由：规则优先（快速免费），LLM 兜底（语义理解）
         return new CompositeAgentRouter(Arrays.asList(ruleBasedAgentRouter, llmBasedAgentRouter));
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(ExecutionUnit.class)
+    public ExecutionUnit executionUnit(SessionGateway sessionGateway,
+                                        ReActLoopService reActLoopService,
+                                        AgentGateway agentGateway,
+                                        OrchestrationConfigProvider orchestrationConfigProvider,
+                                        OrchestratorResolver orchestratorResolver,
+                                        SessionLockManager sessionLockManager) {
+        return new ExecutionUnitImpl(sessionGateway, reActLoopService, agentGateway,
+                orchestrationConfigProvider, orchestratorResolver, sessionLockManager);
     }
 }

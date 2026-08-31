@@ -5,9 +5,8 @@ import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.mwb.ai.claw.domain.memory.model.LayeredMemoryConfig;
-import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher;
-import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher.SynthesisEvent;
+import com.mwb.ai.claw.domain.memory.layered.LayeredMemoryConfig;
+import com.mwb.ai.claw.domain.memory.layered.spi.MemorySynthesisDispatcher;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.infrastructure.lock.DistributedLock;
 import com.mwb.ai.claw.infrastructure.lock.LockOptions;

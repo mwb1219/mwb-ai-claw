@@ -29,7 +29,7 @@ import com.mwb.ai.claw.domain.llm.LlmResponse;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
 import com.mwb.ai.claw.infrastructure.llm.RetryableLlmException;
 import com.mwb.ai.claw.infrastructure.observability.MetricsRecorder;
-import com.mwb.ai.claw.infrastructure.util.TokenEstimator;
+import com.mwb.ai.claw.domain.util.TokenEstimator;
 
 /**
  * 协议网关公共骨架（D1）：非 OpenAI 协议（Anthropic / Gemini）统一走

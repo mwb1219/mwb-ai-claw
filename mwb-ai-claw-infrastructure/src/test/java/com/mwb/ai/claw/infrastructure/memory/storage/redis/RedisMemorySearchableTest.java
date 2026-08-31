@@ -17,7 +17,7 @@ import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
-import com.mwb.ai.claw.domain.memory.model.MemoryPage;
+import com.mwb.ai.claw.domain.memory.layered.model.MemoryPage;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.infrastructure.redis.RedisSearchTemplate;
 

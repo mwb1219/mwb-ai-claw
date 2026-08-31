@@ -15,7 +15,7 @@ import org.springframework.web.client.RestTemplate;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.mwb.ai.claw.domain.rag.config.RagConfig;
 import com.mwb.ai.claw.domain.rag.embed.RagEmbeddingGateway;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
+import com.mwb.ai.claw.domain.util.JsonUtils;
 
 /**
  * OpenAI 兼容的 RAG 专用 Embedding 实现。

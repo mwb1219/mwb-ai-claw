@@ -3,8 +3,7 @@ package com.mwb.ai.claw.infrastructure.memory.synthesis;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher;
-import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher.SynthesisEvent;
+import com.mwb.ai.claw.domain.memory.layered.spi.MemorySynthesisDispatcher;
 
 /**
  * 本地提炼事件派发器（单实例部署 / storage=file）：

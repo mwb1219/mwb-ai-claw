@@ -9,10 +9,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-import com.mwb.ai.claw.domain.memory.model.LayeredMemoryConfig;
-import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesizer;
-import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher;
-import com.mwb.ai.claw.domain.memory.store.MemoryPageStore;
+import com.mwb.ai.claw.domain.memory.layered.LayeredMemoryConfig;
+import com.mwb.ai.claw.domain.memory.layered.spi.MemorySynthesizer;
+import com.mwb.ai.claw.domain.memory.layered.spi.MemorySynthesisDispatcher;
+import com.mwb.ai.claw.domain.memory.layered.spi.MemoryPageStore;
 import com.mwb.ai.claw.infrastructure.observability.MetricsRecorder;
 
 /**

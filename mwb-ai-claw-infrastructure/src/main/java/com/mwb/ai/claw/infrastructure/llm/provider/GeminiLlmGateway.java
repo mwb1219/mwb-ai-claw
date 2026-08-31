@@ -23,7 +23,7 @@ import com.mwb.ai.claw.domain.llm.ToolCall;
 import com.mwb.ai.claw.domain.tool.ToolSpec;
 import com.mwb.ai.claw.infrastructure.llm.RetryableLlmException;
 import com.mwb.ai.claw.infrastructure.observability.MetricsRecorder;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
+import com.mwb.ai.claw.domain.util.JsonUtils;
 
 /**
  * Gemini GenerateContent API 协议网关（D1）。

@@ -17,11 +17,11 @@ import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.AgentGateway;
 import com.mwb.ai.claw.domain.core.ReActResult;
 import com.mwb.ai.claw.domain.core.Session;
-import com.mwb.ai.claw.domain.memory.gateway.LayeredMemoryGateway;
-import com.mwb.ai.claw.infrastructure.collaboration.approval.ApprovalDecision;
-import com.mwb.ai.claw.infrastructure.collaboration.approval.ApprovalRegistry;
-import com.mwb.ai.claw.infrastructure.collaboration.approval.PendingApproval;
-import com.mwb.ai.claw.infrastructure.collaboration.model.TodoDefinition;
+import com.mwb.ai.claw.domain.memory.layered.LayeredMemoryGateway;
+import com.mwb.ai.claw.infrastructure.collaboration.delegate.approval.ApprovalDecision;
+import com.mwb.ai.claw.infrastructure.collaboration.delegate.approval.ApprovalRegistry;
+import com.mwb.ai.claw.infrastructure.collaboration.delegate.approval.PendingApproval;
+import com.mwb.ai.claw.infrastructure.collaboration.delegate.TodoDefinition;
 
 /**
  * 自定义编排（type=marketing）：营销方案生成/对比编排插件。

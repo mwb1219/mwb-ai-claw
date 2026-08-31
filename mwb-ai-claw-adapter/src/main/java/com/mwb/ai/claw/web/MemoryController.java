@@ -16,16 +16,16 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.mwb.ai.claw.dto.SingleResponse;
-import com.mwb.ai.claw.domain.memory.gateway.LayeredMemoryGateway;
-import com.mwb.ai.claw.domain.memory.model.LayeredMemoryConfig;
-import com.mwb.ai.claw.domain.memory.model.MemoryPage;
-import com.mwb.ai.claw.domain.memory.store.MemoryPageStore;
+import com.mwb.ai.claw.domain.memory.layered.LayeredMemoryGateway;
+import com.mwb.ai.claw.domain.memory.layered.LayeredMemoryConfig;
+import com.mwb.ai.claw.domain.memory.layered.model.MemoryPage;
+import com.mwb.ai.claw.domain.memory.layered.spi.MemoryPageStore;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.memory.synthesis.MemorySynthesisExecutor;
-import com.mwb.ai.claw.infrastructure.memory.synthesis.SynthesisCache;
-import com.mwb.ai.claw.infrastructure.util.TokenEstimator;
+import com.mwb.ai.claw.domain.memory.layered.spi.SynthesisCache;
+import com.mwb.ai.claw.domain.util.TokenEstimator;
 
 /**
  * 记忆可视化面板（Phase 4）：只读 REST 接口，展示分层记忆各层内容与统计。

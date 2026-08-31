@@ -2,6 +2,9 @@ package com.mwb.ai.claw.infrastructure.autoconfigure;
 
 import java.util.List;
 
+import com.mwb.ai.claw.infrastructure.memory.synthesis.LocalMemorySynthesisDispatcher;
+import com.mwb.ai.claw.infrastructure.memory.synthesis.LockFreeMemorySynthesisDispatcher;
+import com.mwb.ai.claw.infrastructure.memory.synthesis.LockMemorySynthesisDispatcher;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -22,14 +25,16 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.util.ClassUtils;
 
 import com.mwb.ai.claw.domain.core.AgentGateway;
+import com.mwb.ai.claw.domain.core.ModelConfig;
 import com.mwb.ai.claw.domain.llm.EmbeddingGateway;
 import com.mwb.ai.claw.domain.llm.LlmGateway;
-import com.mwb.ai.claw.domain.memory.gateway.LayeredMemoryGateway;
-import com.mwb.ai.claw.domain.memory.gateway.LongTermMemoryGateway;
-import com.mwb.ai.claw.domain.memory.gateway.MemoryGateway;
-import com.mwb.ai.claw.domain.memory.retrieve.MemoryRetriever;
-import com.mwb.ai.claw.domain.memory.store.MemoryPageStore;
-import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesizer;
+import com.mwb.ai.claw.domain.memory.layered.LayeredMemoryGateway;
+import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
+import com.mwb.ai.claw.domain.core.SessionGateway;
+import com.mwb.ai.claw.domain.memory.MemoryStrategy;
+import com.mwb.ai.claw.domain.memory.layered.spi.MemoryRetriever;
+import com.mwb.ai.claw.domain.memory.layered.spi.MemoryPageStore;
+import com.mwb.ai.claw.domain.memory.layered.spi.MemorySynthesizer;
 import com.mwb.ai.claw.domain.observability.RunUsageStore;
 import com.mwb.ai.claw.domain.observability.TraceStore;
 import com.mwb.ai.claw.domain.rag.access.RagAccessPolicy;
@@ -48,8 +53,8 @@ import com.mwb.ai.claw.domain.tool.ToolExecutor;
 import com.mwb.ai.claw.domain.tool.ToolGateway;
 import com.mwb.ai.claw.domain.tool.ToolPermissionChecker;
 import com.mwb.ai.claw.infrastructure.auth.ConfigToolPermissionChecker;
-import com.mwb.ai.claw.infrastructure.collaboration.lock.LocalSessionLockManager;
-import com.mwb.ai.claw.infrastructure.collaboration.lock.RedisSessionLockManager;
+import com.mwb.ai.claw.infrastructure.collaboration.common.lock.LocalSessionLockManager;
+import com.mwb.ai.claw.infrastructure.collaboration.common.lock.RedisSessionLockManager;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.lock.DistributedLock;
 import com.mwb.ai.claw.infrastructure.lock.RedisDistributedLock;
@@ -62,7 +67,9 @@ import com.mwb.ai.claw.infrastructure.llm.ResilientLlmGateway;
 import com.mwb.ai.claw.infrastructure.llm.provider.AnthropicLlmGateway;
 import com.mwb.ai.claw.infrastructure.llm.provider.GeminiLlmGateway;
 import com.mwb.ai.claw.infrastructure.llm.provider.ProviderRoutingGateway;
-import com.mwb.ai.claw.infrastructure.memory.gateway.LayeredMemoryGatewayImpl;
+import com.mwb.ai.claw.domain.memory.layered.LayeredSessionGatewayImpl;
+import com.mwb.ai.claw.domain.memory.layered.LayeredMemoryStrategy;
+import com.mwb.ai.claw.infrastructure.memory.simple.SimpleMemoryStrategy;
 import com.mwb.ai.claw.infrastructure.memory.storage.file.FileBasedMemoryGateway;
 import com.mwb.ai.claw.infrastructure.memory.storage.file.FileBasedSessionGateway;
 import com.mwb.ai.claw.infrastructure.memory.storage.file.FileMemoryPageStore;
@@ -71,11 +78,11 @@ import com.mwb.ai.claw.infrastructure.memory.storage.jdbc.JdbcMemoryPageStore;
 import com.mwb.ai.claw.infrastructure.memory.storage.jdbc.JdbcSessionGateway;
 import com.mwb.ai.claw.infrastructure.memory.storage.redis.RedisMemoryIndexer;
 import com.mwb.ai.claw.infrastructure.memory.storage.redis.RedisMemorySearchable;
-import com.mwb.ai.claw.infrastructure.memory.strategy.LlmMemorySynthesizer;
+import com.mwb.ai.claw.domain.memory.layered.synthesize.LlmMemorySynthesizer;
 import com.mwb.ai.claw.infrastructure.memory.synthesis.LocalSynthesisCache;
 import com.mwb.ai.claw.infrastructure.memory.synthesis.MemorySynthesisExecutor;
 import com.mwb.ai.claw.infrastructure.memory.synthesis.RedisSynthesisCache;
-import com.mwb.ai.claw.infrastructure.memory.synthesis.SynthesisCache;
+import com.mwb.ai.claw.domain.memory.layered.spi.SynthesisCache;
 import com.mwb.ai.claw.infrastructure.observability.JdbcRunUsageStore;
 import com.mwb.ai.claw.infrastructure.observability.JdbcTraceStore;
 import com.mwb.ai.claw.infrastructure.observability.LocalRunUsageStore;
@@ -218,7 +225,11 @@ public class ClawCoreAutoConfiguration {
     public LlmMemorySynthesizer llmMemorySynthesizer(LlmGateway llmGateway,
                                                      AgentProperties properties,
                                                      SynthesisCache cache) {
-        return new LlmMemorySynthesizer(llmGateway, properties, cache);
+        ModelConfig mainModel = new ModelConfig();
+        mainModel.setModel(properties.getModel());
+        mainModel.setBaseUrl(properties.getBaseUrl());
+        mainModel.setApiKey(properties.getApiKey());
+        return new LlmMemorySynthesizer(llmGateway, properties.getMemory(), mainModel, cache);
     }
 
     // ==================== 提炼缓存（本地 JVM LRU，默认兜底，单实例 / storage=file 形态） ====================
@@ -292,12 +303,35 @@ public class ClawCoreAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(LayeredMemoryGateway.class)
-    public LayeredMemoryGatewayImpl layeredMemoryGateway(AgentProperties properties,
+    public LayeredSessionGatewayImpl layeredMemoryGateway(AgentProperties properties,
                                                          MemoryPageStore pageStore,
                                                          MemorySynthesizer synthesizer,
                                                          MemoryRetriever retriever,
-                                                         com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher taskQueue) {
-        return new LayeredMemoryGatewayImpl(properties, pageStore, synthesizer, retriever, taskQueue);
+                                                         com.mwb.ai.claw.domain.memory.layered.spi.MemorySynthesisDispatcher taskQueue) {
+        return new LayeredSessionGatewayImpl(properties.getMemory(), pageStore, synthesizer, retriever, taskQueue);
+    }
+
+    // ==================== MemoryStrategy 自动装配 ====================
+    // 根据 agent.memory.strategy 配置选择记忆策略实现：
+    //   layered（默认）→ LayeredMemoryStrategy（分层记忆，包装 LayeredMemoryGateway）
+    //   simple          → SimpleMemoryStrategy（极简记忆，仅保留最近 N 条原文）
+    //   自定义 Bean 名称 → 用户自行 @Bean 提供，@ConditionalOnMissingBean 优先
+
+    @Bean(name = "memoryStrategy")
+    @ConditionalOnMissingBean(MemoryStrategy.class)
+    public MemoryStrategy memoryStrategy(AgentProperties properties,
+                                         ObjectProvider<LayeredMemoryGateway> layeredGatewayProvider) {
+        String strategy = properties.getMemory().getStrategy();
+        if ("simple".equalsIgnoreCase(strategy)) {
+            return new SimpleMemoryStrategy();
+        }
+        // 默认 layered：包装 LayeredMemoryGateway
+        LayeredMemoryGateway gateway = layeredGatewayProvider.getIfAvailable();
+        if (gateway != null) {
+            return new LayeredMemoryStrategy(gateway);
+        }
+        // 兜底：LayeredMemoryGateway 也没配，用 SimpleMemoryStrategy
+        return new SimpleMemoryStrategy();
     }
 
     // ==================== 提炼任务队列（Phase 1：本地兜底，单实例 / storage=file） ====================
@@ -306,10 +340,10 @@ public class ClawCoreAutoConfiguration {
     public static class LocalMemorySynthesisDispatcherConfiguration {
 
         @Bean
-        @ConditionalOnMissingBean(com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher.class)
-        public com.mwb.ai.claw.infrastructure.memory.synthesis.LocalMemorySynthesisDispatcher localMemorySynthesisDispatcher(
+        @ConditionalOnMissingBean(com.mwb.ai.claw.domain.memory.layered.spi.MemorySynthesisDispatcher.class)
+        public LocalMemorySynthesisDispatcher localMemorySynthesisDispatcher(
                 MemorySynthesisExecutor executor) {
-            return new com.mwb.ai.claw.infrastructure.memory.synthesis.LocalMemorySynthesisDispatcher(executor);
+            return new LocalMemorySynthesisDispatcher(executor);
         }
     }
 
@@ -325,13 +359,13 @@ public class ClawCoreAutoConfiguration {
     public static class LockMemorySynthesisDispatcherConfiguration {
 
         @Bean
-        @ConditionalOnMissingBean(com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher.class)
-        public com.mwb.ai.claw.infrastructure.memory.synthesis.LockMemorySynthesisDispatcher lockMemorySynthesisDispatcher(
+        @ConditionalOnMissingBean(com.mwb.ai.claw.domain.memory.layered.spi.MemorySynthesisDispatcher.class)
+        public LockMemorySynthesisDispatcher lockMemorySynthesisDispatcher(
                 DistributedLock distributedLock,
                 AgentProperties properties,
                 MetricsRecorder metrics,
                 MemorySynthesisExecutor executor) {
-            return new com.mwb.ai.claw.infrastructure.memory.synthesis.LockMemorySynthesisDispatcher(
+            return new LockMemorySynthesisDispatcher(
                     distributedLock, properties.getMemory(), metrics, executor);
         }
     }
@@ -362,14 +396,14 @@ public class ClawCoreAutoConfiguration {
     public static class LockFreeMemorySynthesisDispatcherConfiguration {
 
         @Bean
-        @ConditionalOnMissingBean(com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher.class)
-        public com.mwb.ai.claw.infrastructure.memory.synthesis.LockFreeMemorySynthesisDispatcher lockFreeMemorySynthesisDispatcher(
+        @ConditionalOnMissingBean(com.mwb.ai.claw.domain.memory.layered.spi.MemorySynthesisDispatcher.class)
+        public LockFreeMemorySynthesisDispatcher lockFreeMemorySynthesisDispatcher(
                 AgentProperties properties,
                 MetricsRecorder metrics,
                 MemorySynthesisExecutor executor,
                 MemoryPageStore pageStore,
                 MemorySynthesizer synthesizer) {
-            return new com.mwb.ai.claw.infrastructure.memory.synthesis.LockFreeMemorySynthesisDispatcher(
+            return new LockFreeMemorySynthesisDispatcher(
                     properties.getMemory(), metrics, executor, pageStore, synthesizer);
         }
     }
@@ -584,7 +618,7 @@ public class ClawCoreAutoConfiguration {
     public static class FileStorageConfiguration {
 
         @Bean
-        @ConditionalOnMissingBean(MemoryGateway.class)
+        @ConditionalOnMissingBean(SessionGateway.class)
         public FileBasedSessionGateway fileBasedSessionGateway(AgentProperties properties) {
             return new FileBasedSessionGateway(properties);
         }
@@ -607,7 +641,7 @@ public class ClawCoreAutoConfiguration {
     public static class DbStorageConfiguration {
 
         @Bean
-        @ConditionalOnMissingBean(MemoryGateway.class)
+        @ConditionalOnMissingBean(SessionGateway.class)
         public JdbcSessionGateway jdbcSessionGateway(JdbcTemplate jdbc) {
             return new JdbcSessionGateway(jdbc);
         }
@@ -690,7 +724,7 @@ public class ClawCoreAutoConfiguration {
     public static class LocalLockConfiguration {
 
         @Bean
-        @ConditionalOnMissingBean(com.mwb.ai.claw.infrastructure.collaboration.lock.SessionLockManager.class)
+        @ConditionalOnMissingBean(com.mwb.ai.claw.domain.collaboration.spi.SessionLockManager.class)
         public LocalSessionLockManager localSessionLockManager() {
             return new LocalSessionLockManager();
         }
@@ -767,7 +801,7 @@ public class ClawCoreAutoConfiguration {
     public static class RedisLockConfiguration {
 
         @Bean
-        @ConditionalOnMissingBean(com.mwb.ai.claw.infrastructure.collaboration.lock.SessionLockManager.class)
+        @ConditionalOnMissingBean(com.mwb.ai.claw.domain.collaboration.spi.SessionLockManager.class)
         public RedisSessionLockManager redisSessionLockManager(
                 DistributedLock distributedLock, AgentProperties properties) {
             return new RedisSessionLockManager(distributedLock,

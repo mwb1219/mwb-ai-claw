@@ -25,7 +25,7 @@ import com.mwb.ai.claw.domain.rag.model.RagIndexEntry;
 import com.mwb.ai.claw.domain.rag.model.RagSearchResult;
 import com.mwb.ai.claw.domain.rag.model.RagVectorQuery;
 import com.mwb.ai.claw.domain.rag.store.RagIndexStore;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
+import com.mwb.ai.claw.domain.util.JsonUtils;
 
 /**
  * 本地 RAG 向量索引：JSONL 持久化，查询时在内存中执行余弦相似度扫描。

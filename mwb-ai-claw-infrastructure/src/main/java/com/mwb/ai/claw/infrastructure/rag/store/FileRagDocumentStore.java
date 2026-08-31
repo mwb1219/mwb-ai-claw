@@ -18,7 +18,7 @@ import javax.annotation.PostConstruct;
 import com.mwb.ai.claw.domain.rag.config.RagConfig;
 import com.mwb.ai.claw.domain.rag.model.RagDocument;
 import com.mwb.ai.claw.domain.rag.store.RagDocumentStore;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
+import com.mwb.ai.claw.domain.util.JsonUtils;
 
 /**
  * 文件版 RAG 原始文档与状态存储。

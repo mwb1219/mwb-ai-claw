@@ -5,7 +5,7 @@ import com.mwb.ai.claw.domain.skill.SkillGateway;
 import com.mwb.ai.claw.domain.tool.ToolExecutor;
 import com.mwb.ai.claw.domain.tool.ToolResult;
 import com.mwb.ai.claw.domain.tool.ToolSpec;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
+import com.mwb.ai.claw.domain.util.JsonUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;

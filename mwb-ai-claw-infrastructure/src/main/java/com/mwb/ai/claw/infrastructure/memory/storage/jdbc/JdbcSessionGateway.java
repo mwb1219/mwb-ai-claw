@@ -6,16 +6,16 @@ import java.util.List;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.mwb.ai.claw.domain.core.Session;
-import com.mwb.ai.claw.domain.memory.gateway.MemoryGateway;
+import com.mwb.ai.claw.domain.core.SessionGateway;
 import com.mwb.ai.claw.domain.scope.AgentScope;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
+import com.mwb.ai.claw.domain.util.JsonUtils;
 
 /**
  * JDBC 版会话存储（agent.storage.type=jdbc）：claw_session 表，messages 以 JSON CLOB 存储（与现有 Session 序列化一致）。
  * <p>
  * tenant_id / user_id 用空字符串 '' 表示默认空间（MySQL 主键列不允许 NULL，与文件模式 legacy 语义对齐）。
  */
-public class JdbcSessionGateway implements MemoryGateway {
+public class JdbcSessionGateway implements SessionGateway {
 
     private final JdbcTemplate jdbc;
 

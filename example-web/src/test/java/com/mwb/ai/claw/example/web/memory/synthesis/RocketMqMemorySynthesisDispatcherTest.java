@@ -23,16 +23,16 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.mwb.ai.claw.domain.core.MessageRole;
-import com.mwb.ai.claw.domain.memory.model.LayeredMemoryConfig;
-import com.mwb.ai.claw.domain.memory.model.MemoryPage;
-import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher;
-import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher.Kind;
-import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher.SynthesisEvent;
-import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesizer;
+import com.mwb.ai.claw.domain.memory.layered.LayeredMemoryConfig;
+import com.mwb.ai.claw.domain.memory.layered.model.MemoryPage;
+import com.mwb.ai.claw.domain.memory.layered.spi.MemorySynthesisDispatcher;
+import com.mwb.ai.claw.domain.memory.layered.spi.MemorySynthesisDispatcher.Kind;
+import com.mwb.ai.claw.domain.memory.layered.spi.MemorySynthesisDispatcher.SynthesisEvent;
+import com.mwb.ai.claw.domain.memory.layered.spi.MemorySynthesizer;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.example.web.memory.synthesis.RocketMqMemorySynthesisDispatcher.MemoryPageStoreAccessor;
 import com.mwb.ai.claw.infrastructure.observability.MetricsRecorder;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
+import com.mwb.ai.claw.domain.util.JsonUtils;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 

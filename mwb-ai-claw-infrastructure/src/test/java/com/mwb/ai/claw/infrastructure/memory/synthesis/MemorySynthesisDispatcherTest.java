@@ -21,10 +21,9 @@ import org.springframework.data.redis.core.script.RedisScript;
 
 import com.mwb.ai.claw.domain.core.Message;
 import com.mwb.ai.claw.domain.core.MessageRole;
-import com.mwb.ai.claw.domain.memory.model.LayeredMemoryConfig;
-import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher;
-import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher.Kind;
-import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher.SynthesisEvent;
+import com.mwb.ai.claw.domain.memory.layered.LayeredMemoryConfig;
+import com.mwb.ai.claw.domain.memory.layered.spi.MemorySynthesisDispatcher.Kind;
+import com.mwb.ai.claw.domain.memory.layered.spi.MemorySynthesisDispatcher.SynthesisEvent;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.infrastructure.lock.RedisDistributedLock;
 import com.mwb.ai.claw.infrastructure.observability.MetricsRecorder;

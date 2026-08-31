@@ -3,7 +3,7 @@ package com.mwb.ai.claw.example.web.memory.synthesis;
 import java.util.List;
 
 import com.mwb.ai.claw.domain.core.Message;
-import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher.Kind;
+import com.mwb.ai.claw.domain.memory.layered.spi.MemorySynthesisDispatcher.Kind;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 
 /**

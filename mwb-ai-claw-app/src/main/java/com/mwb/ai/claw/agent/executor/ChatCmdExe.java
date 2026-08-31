@@ -34,7 +34,7 @@ import com.mwb.ai.claw.dto.SingleResponse;
 import com.mwb.ai.claw.dto.data.AgentErrorCode;
 import com.mwb.ai.claw.dto.data.ChatResponseDTO;
 import com.mwb.ai.claw.exception.BizException;
-import com.mwb.ai.claw.infrastructure.collaboration.registry.OrchestratorRegistry;
+import com.mwb.ai.claw.infrastructure.collaboration.common.OrchestratorRegistry;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.config.OrchestrationConfigLoader;
 import com.mwb.ai.claw.infrastructure.llm.RunTokenBudget;

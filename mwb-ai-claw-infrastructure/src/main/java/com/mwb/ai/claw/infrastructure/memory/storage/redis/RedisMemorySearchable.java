@@ -6,8 +6,8 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.mwb.ai.claw.domain.memory.model.MemoryPage;
-import com.mwb.ai.claw.domain.memory.store.MemorySearchable;
+import com.mwb.ai.claw.domain.memory.layered.model.MemoryPage;
+import com.mwb.ai.claw.domain.memory.layered.spi.MemorySearchable;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.infrastructure.redis.RedisSearchTemplate;
 

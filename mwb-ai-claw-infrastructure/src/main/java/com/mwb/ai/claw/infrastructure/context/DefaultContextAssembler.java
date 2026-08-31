@@ -16,9 +16,9 @@ import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.llm.LlmMessage;
 import com.mwb.ai.claw.domain.llm.LlmRequest;
 import com.mwb.ai.claw.domain.llm.ToolCall;
-import com.mwb.ai.claw.domain.memory.gateway.LayeredMemoryGateway;
-import com.mwb.ai.claw.domain.memory.gateway.LongTermMemoryGateway;
-import com.mwb.ai.claw.domain.memory.model.MemoryPage;
+import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
+import com.mwb.ai.claw.domain.memory.MemoryStrategy;
+import com.mwb.ai.claw.domain.memory.layered.model.MemoryPage;
 import com.mwb.ai.claw.domain.rag.context.RagContextProvider;
 import com.mwb.ai.claw.domain.rag.context.RagRequestContext;
 import com.mwb.ai.claw.domain.scope.AgentScopeContext;
@@ -40,40 +40,40 @@ public class DefaultContextAssembler implements ContextAssembler {
     private static final Logger log = LoggerFactory.getLogger(DefaultContextAssembler.class);
 
     private final ToolGateway toolGateway;
-    private final LongTermMemoryGateway memoryGateway;
-    private final LayeredMemoryGateway layeredMemory;
+    private final LongTermMemoryGateway sessionGateway;
+    private final MemoryStrategy memoryStrategy;
     private final SkillGateway skillGateway;
     private final RagContextProvider ragContextProvider;
 
     /** 提示词注入防护（默认 true）：system prompt 追加内容边界约束段（C4） */
     private final boolean promptInjectionGuard;
 
-    public DefaultContextAssembler(ToolGateway toolGateway, LongTermMemoryGateway memoryGateway) {
-        this(toolGateway, memoryGateway, null, null, true);
+    public DefaultContextAssembler(ToolGateway toolGateway, LongTermMemoryGateway sessionGateway) {
+        this(toolGateway, sessionGateway, null, null, true);
     }
 
-    public DefaultContextAssembler(ToolGateway toolGateway, LongTermMemoryGateway memoryGateway,
-                                   LayeredMemoryGateway layeredMemory) {
-        this(toolGateway, memoryGateway, layeredMemory, null, true);
+    public DefaultContextAssembler(ToolGateway toolGateway, LongTermMemoryGateway sessionGateway,
+                                   MemoryStrategy memoryStrategy) {
+        this(toolGateway, sessionGateway, memoryStrategy, null, true);
     }
 
-    public DefaultContextAssembler(ToolGateway toolGateway, LongTermMemoryGateway memoryGateway,
-                                   LayeredMemoryGateway layeredMemory, SkillGateway skillGateway) {
-        this(toolGateway, memoryGateway, layeredMemory, skillGateway, true);
+    public DefaultContextAssembler(ToolGateway toolGateway, LongTermMemoryGateway sessionGateway,
+                                   MemoryStrategy memoryStrategy, SkillGateway skillGateway) {
+        this(toolGateway, sessionGateway, memoryStrategy, skillGateway, true);
     }
 
-    public DefaultContextAssembler(ToolGateway toolGateway, LongTermMemoryGateway memoryGateway,
-                                   LayeredMemoryGateway layeredMemory, SkillGateway skillGateway,
+    public DefaultContextAssembler(ToolGateway toolGateway, LongTermMemoryGateway sessionGateway,
+                                   MemoryStrategy memoryStrategy, SkillGateway skillGateway,
                                    boolean promptInjectionGuard) {
-        this(toolGateway, memoryGateway, layeredMemory, skillGateway, promptInjectionGuard, null);
+        this(toolGateway, sessionGateway, memoryStrategy, skillGateway, promptInjectionGuard, null);
     }
 
-    public DefaultContextAssembler(ToolGateway toolGateway, LongTermMemoryGateway memoryGateway,
-                                   LayeredMemoryGateway layeredMemory, SkillGateway skillGateway,
+    public DefaultContextAssembler(ToolGateway toolGateway, LongTermMemoryGateway sessionGateway,
+                                   MemoryStrategy memoryStrategy, SkillGateway skillGateway,
                                    boolean promptInjectionGuard, RagContextProvider ragContextProvider) {
         this.toolGateway = toolGateway;
-        this.memoryGateway = memoryGateway;
-        this.layeredMemory = layeredMemory;
+        this.sessionGateway = sessionGateway;
+        this.memoryStrategy = memoryStrategy;
         this.skillGateway = skillGateway;
         this.promptInjectionGuard = promptInjectionGuard;
         this.ragContextProvider = ragContextProvider;
@@ -99,13 +99,13 @@ public class DefaultContextAssembler implements ContextAssembler {
 
     private List<LlmMessage> buildMessages(Session session, Agent agent) {
         List<LlmMessage> messages = new ArrayList<>();
-        boolean layered = layeredMemory != null && layeredMemory.isEnabled();
+        boolean memoryEnabled = memoryStrategy != null && memoryStrategy.isEnabled();
         String ragContext = buildRagContext(session);
-        if (layered) {
-            // 分层记忆：System 区带事实/摘要，消息区取预算内 Hot 原文
-            LayeredMemoryGateway.MemoryView view = layeredMemory.readContext(session, agent);
-            messages.add(LlmMessage.system(buildSystemPrompt(agent, view, ragContext)));
-            for (Message msg : view.getWorkingMessages()) {
+        if (memoryEnabled) {
+            // 启用记忆策略：由策略决定工作记忆 + System Prompt 增强
+            MemoryStrategy.MemoryContext ctx = memoryStrategy.readContext(session, agent);
+            messages.add(LlmMessage.system(buildSystemPrompt(agent, ctx, ragContext)));
+            for (Message msg : ctx.getWorkingMessages()) {
                 messages.add(toLlmMessage(msg));
             }
         } else {
@@ -193,24 +193,25 @@ public class DefaultContextAssembler implements ContextAssembler {
         return buildSystemPrompt(agent, null, "");
     }
 
-    private String buildSystemPrompt(Agent agent, LayeredMemoryGateway.MemoryView view) {
-        return buildSystemPrompt(agent, view, "");
+    private String buildSystemPrompt(Agent agent, MemoryStrategy.MemoryContext ctx) {
+        return buildSystemPrompt(agent, ctx, "");
     }
 
     private String buildSystemPrompt(Agent agent,
-                                     LayeredMemoryGateway.MemoryView view,
+                                     MemoryStrategy.MemoryContext ctx,
                                      String ragContext) {
         StringBuilder systemPrompt = new StringBuilder(agent.getSystemPrompt());
         if (agent.getAgentInstructions() != null && !agent.getAgentInstructions().trim().isEmpty()) {
             systemPrompt.append("\n\n## Agent 扩展指令\n")
                     .append(agent.getAgentInstructions());
         }
-        if (view != null) {
-            appendPages(systemPrompt, "长期记忆（跨会话）", view.getFactPages());
-            appendPages(systemPrompt, "历史对话摘要", view.getSummaryPages());
-            appendPages(systemPrompt, "相关记忆（检索）", view.getRetrievedPages());
+        if (ctx != null) {
+            // 策略自己拼好的 systemPromptAugment 直接注入
+            if (ctx.getSystemPromptAugment() != null && !ctx.getSystemPromptAugment().trim().isEmpty()) {
+                systemPrompt.append(ctx.getSystemPromptAugment());
+            }
         } else {
-            String memContent = memoryGateway.loadMemory(AgentScopeContext.get());
+            String memContent = sessionGateway.loadMemory(AgentScopeContext.get());
             if (memContent != null && !memContent.trim().isEmpty()) {
                 systemPrompt.append("\n\n## 长期记忆（跨会话）：\n")
                         .append(memContent);

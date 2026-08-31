@@ -8,7 +8,7 @@ import com.mwb.ai.claw.domain.llm.LlmRequest;
 import com.mwb.ai.claw.domain.llm.LlmResponse;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
 import com.mwb.ai.claw.domain.llm.ToolCall;
-import com.mwb.ai.claw.domain.memory.gateway.LayeredMemoryGateway;
+import com.mwb.ai.claw.domain.memory.MemoryStrategy;
 import com.mwb.ai.claw.domain.tool.ToolGateway;
 import com.mwb.ai.claw.domain.tool.ToolResult;
 
@@ -23,7 +23,7 @@ public class ReActLoopService {
     private final LlmGateway llmGateway;
     private final ToolGateway toolGateway;
     private final ContextAssembler contextAssembler;
-    private final LayeredMemoryGateway memoryManager;
+    private final MemoryStrategy memoryStrategy;
 
     /**
      * ReAct 步数扩展系数：初始预算（maxSteps）用尽且工具链未完成时自动追加步数，
@@ -38,18 +38,18 @@ public class ReActLoopService {
 
     public ReActLoopService(LlmGateway llmGateway, ToolGateway toolGateway,
                             ContextAssembler contextAssembler,
-                            LayeredMemoryGateway memoryManager) {
-        this(llmGateway, toolGateway, contextAssembler, memoryManager, 2.0);
+                            MemoryStrategy memoryStrategy) {
+        this(llmGateway, toolGateway, contextAssembler, memoryStrategy, 2.0);
     }
 
     public ReActLoopService(LlmGateway llmGateway, ToolGateway toolGateway,
                             ContextAssembler contextAssembler,
-                            LayeredMemoryGateway memoryManager,
+                            MemoryStrategy memoryStrategy,
                             double maxStepsExtensionFactor) {
         this.llmGateway = llmGateway;
         this.toolGateway = toolGateway;
         this.contextAssembler = contextAssembler;
-        this.memoryManager = memoryManager;
+        this.memoryStrategy = memoryStrategy;
         this.maxStepsExtensionFactor = maxStepsExtensionFactor > 1.0 ? maxStepsExtensionFactor : 2.0;
     }
 
@@ -207,9 +207,9 @@ public class ReActLoopService {
     }
 
     private void afterTurn(Session session, Agent agent) {
-        if (memoryManager != null) {
+        if (memoryStrategy != null) {
             try {
-                memoryManager.afterTurn(session, agent);
+                memoryStrategy.afterTurn(session, agent);
             } catch (Exception e) {
                 // 换页/提炼失败不影响主对话链路
             }

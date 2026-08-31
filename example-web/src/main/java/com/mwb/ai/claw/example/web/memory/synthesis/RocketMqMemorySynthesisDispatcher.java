@@ -13,16 +13,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
-import com.mwb.ai.claw.domain.memory.model.LayeredMemoryConfig;
-import com.mwb.ai.claw.domain.memory.model.MemoryPage;
-import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher;
-import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher.Kind;
-import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher.SynthesisEvent;
-import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesizer;
+import com.mwb.ai.claw.domain.memory.layered.LayeredMemoryConfig;
+import com.mwb.ai.claw.domain.memory.layered.model.MemoryPage;
+import com.mwb.ai.claw.domain.memory.layered.spi.MemorySynthesisDispatcher;
+import com.mwb.ai.claw.domain.memory.layered.spi.MemorySynthesisDispatcher.Kind;
+import com.mwb.ai.claw.domain.memory.layered.spi.MemorySynthesisDispatcher.SynthesisEvent;
+import com.mwb.ai.claw.domain.memory.layered.spi.MemorySynthesizer;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.infrastructure.observability.MetricsRecorder;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
-import com.mwb.ai.claw.infrastructure.util.TokenEstimator;
+import com.mwb.ai.claw.domain.util.JsonUtils;
+import com.mwb.ai.claw.domain.util.TokenEstimator;
 
 /**
  * 生产级 MQ 提炼事件派发器（Phase 3）：
@@ -264,9 +264,9 @@ public class RocketMqMemorySynthesisDispatcher implements MemorySynthesisDispatc
     }
 
     public static final class DefaultMemoryPageStoreAccessor implements MemoryPageStoreAccessor {
-        private final com.mwb.ai.claw.domain.memory.store.MemoryPageStore delegate;
+        private final com.mwb.ai.claw.domain.memory.layered.spi.MemoryPageStore delegate;
 
-        public DefaultMemoryPageStoreAccessor(com.mwb.ai.claw.domain.memory.store.MemoryPageStore delegate) {
+        public DefaultMemoryPageStoreAccessor(com.mwb.ai.claw.domain.memory.layered.spi.MemoryPageStore delegate) {
             this.delegate = delegate;
         }
 

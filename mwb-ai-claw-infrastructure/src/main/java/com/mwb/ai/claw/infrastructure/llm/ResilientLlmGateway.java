@@ -16,7 +16,7 @@ import com.mwb.ai.claw.domain.llm.LlmResponse;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.observability.MetricsRecorder;
-import com.mwb.ai.claw.infrastructure.util.TokenEstimator;
+import com.mwb.ai.claw.domain.util.TokenEstimator;
 
 /**
  * LLM 韧性装饰器：包装主 {@link LlmGateway}，提供重试退避、备用模型降级与 token 预算保护。

@@ -10,7 +10,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.mwb.ai.claw.example.web.model.User;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
+import com.mwb.ai.claw.domain.util.JsonUtils;
 
 /**
  * 用户 MySQL 存储（storage 层 mysql 实现）：基于 JdbcTemplate 持久化到 {@code claw_user} 表。

@@ -1,11 +1,11 @@
 package com.mwb.ai.claw.infrastructure.tool.builtin;
 
-import com.mwb.ai.claw.domain.memory.gateway.LayeredMemoryGateway;
-import com.mwb.ai.claw.domain.memory.model.MemoryPage;
+import com.mwb.ai.claw.domain.memory.MemoryStrategy;
+import com.mwb.ai.claw.domain.memory.layered.model.MemoryPage;
 import com.mwb.ai.claw.domain.tool.ToolResult;
 import com.mwb.ai.claw.domain.tool.ToolSpec;
 import com.mwb.ai.claw.domain.tool.ToolExecutor;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
+import com.mwb.ai.claw.domain.util.JsonUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -30,7 +30,7 @@ public class ReadMemoryTool implements ToolExecutor {
             + "}";
 
     @Resource
-    private LayeredMemoryGateway memoryGateway;
+    private MemoryStrategy memoryStrategy;
 
     @Override
     public String getName() {
@@ -52,14 +52,14 @@ public class ReadMemoryTool implements ToolExecutor {
                 query = JsonUtils.readTree(argumentsJson).path("query").asText(null);
             }
             if (query == null || query.trim().isEmpty()) {
-                String facts = memoryGateway.readFactsText();
+                String facts = memoryStrategy.readMemoryText();
                 if (facts.isEmpty() || "(暂无长期记忆)".equals(facts)) {
                     return ToolResult.success("(暂无长期记忆 — 可以调用 write_memory 工具写入内容)");
                 }
                 log.info("读取长期记忆: {} 字符", facts.length());
                 return ToolResult.success(facts);
             }
-            List<MemoryPage> hits = memoryGateway.search(query.trim(), 5);
+            List<MemoryPage> hits = memoryStrategy.searchMemory(query.trim(), 5);
             if (hits.isEmpty()) {
                 return ToolResult.success("(未检索到与 \"" + query + "\" 相关的记忆)");
             }

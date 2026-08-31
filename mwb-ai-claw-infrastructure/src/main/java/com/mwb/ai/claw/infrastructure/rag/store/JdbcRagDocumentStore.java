@@ -13,7 +13,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.mwb.ai.claw.domain.rag.model.RagDocument;
 import com.mwb.ai.claw.domain.rag.store.RagDocumentStore;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
+import com.mwb.ai.claw.domain.util.JsonUtils;
 
 /**
  * JDBC 版 RAG 原始文档与状态存储（agent.storage.type=db）：claw_rag_document 表。

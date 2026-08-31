@@ -1,11 +1,11 @@
 package com.mwb.ai.claw.infrastructure.tool.builtin;
 
-import com.mwb.ai.claw.domain.memory.gateway.LayeredMemoryGateway;
+import com.mwb.ai.claw.domain.memory.MemoryStrategy;
 import com.mwb.ai.claw.domain.tool.ToolResult;
 import com.mwb.ai.claw.domain.tool.ToolSpec;
 import com.mwb.ai.claw.domain.tool.ToolExecutor;
 import com.mwb.ai.claw.infrastructure.tool.builtin.dto.WriteMemoryParams;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
+import com.mwb.ai.claw.domain.util.JsonUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -35,7 +35,7 @@ public class WriteMemoryTool implements ToolExecutor {
             + "}";
 
     @Resource
-    private LayeredMemoryGateway memoryGateway;
+    private MemoryStrategy memoryStrategy;
 
     @Override
     public String getName() {
@@ -63,7 +63,7 @@ public class WriteMemoryTool implements ToolExecutor {
                 topic = "长期记忆-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("MMdd-HHmmss"));
             }
             double importance = params.getImportance() == null ? 0.8 : params.getImportance();
-            memoryGateway.saveFact(topic, content.trim(), importance);
+            memoryStrategy.saveMemory(topic, content.trim(), importance);
             log.info("长期记忆已写入: topic={}, {} 字符", topic, content.length());
             return ToolResult.success("记忆已保存（主题: " + topic + "）");
         } catch (Exception e) {

@@ -9,10 +9,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
-import com.mwb.ai.claw.domain.memory.model.LayeredMemoryConfig;
+import com.mwb.ai.claw.domain.memory.layered.LayeredMemoryConfig;
 import com.mwb.ai.claw.domain.scope.AgentScope;
+import com.mwb.ai.claw.domain.memory.layered.spi.SynthesisCache;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
+import com.mwb.ai.claw.domain.util.JsonUtils;
 
 /**
  * Redis 分布式版提炼缓存（String + JSON 序列化 + TTL，适合 storage=db 多实例部署）。

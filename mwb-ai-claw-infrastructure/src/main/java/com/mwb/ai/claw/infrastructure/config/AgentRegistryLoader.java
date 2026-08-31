@@ -1,7 +1,7 @@
 package com.mwb.ai.claw.infrastructure.config;
 
 import com.mwb.ai.claw.infrastructure.util.ConfigFileLocator;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
+import com.mwb.ai.claw.domain.util.JsonUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.env.Environment;

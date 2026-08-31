@@ -4,7 +4,7 @@ import com.mwb.ai.claw.domain.tool.ToolResult;
 import com.mwb.ai.claw.domain.tool.ToolSpec;
 import com.mwb.ai.claw.example.commerce.store.CommerceDataStore;
 import com.mwb.ai.claw.example.commerce.store.CommerceDataStore.Campaign;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
+import com.mwb.ai.claw.domain.util.JsonUtils;
 import org.springframework.stereotype.Component;
 
 /**

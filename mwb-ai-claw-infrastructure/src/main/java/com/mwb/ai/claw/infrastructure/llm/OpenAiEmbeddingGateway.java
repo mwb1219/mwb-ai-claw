@@ -2,9 +2,9 @@ package com.mwb.ai.claw.infrastructure.llm;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.mwb.ai.claw.domain.llm.EmbeddingGateway;
-import com.mwb.ai.claw.domain.memory.model.LayeredMemoryConfig;
+import com.mwb.ai.claw.domain.memory.layered.LayeredMemoryConfig;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
+import com.mwb.ai.claw.domain.util.JsonUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpEntity;

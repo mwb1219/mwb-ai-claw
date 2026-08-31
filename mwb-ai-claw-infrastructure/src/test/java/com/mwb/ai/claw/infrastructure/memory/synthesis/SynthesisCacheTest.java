@@ -1,5 +1,6 @@
 package com.mwb.ai.claw.infrastructure.memory.synthesis;
 
+import com.mwb.ai.claw.domain.memory.layered.spi.SynthesisCache;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -16,7 +17,6 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -24,7 +24,7 @@ import static org.mockito.Mockito.when;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
-import com.mwb.ai.claw.domain.memory.model.LayeredMemoryConfig;
+import com.mwb.ai.claw.domain.memory.layered.LayeredMemoryConfig;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 
