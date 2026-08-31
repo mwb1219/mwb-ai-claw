@@ -99,23 +99,29 @@ public class LayeredMemoryGatewayImpl implements LayeredMemoryGateway {
         List<MemoryPage> summaries = pageStore.loadSummaries(scope, session.getSessionId());
         int summaryTokens = summaries.stream().mapToInt(TokenEstimator::estimate).sum();
 
-        // 3. 工作记忆原文：Memory 区预算扣除摘要后，从最新消息往前取
-        int hotTokens = Math.max(budget.getMemoryBudget() - summaryTokens, 0);
-        List<Message> hot = takeRecentMessages(all, hotTokens, config.getHotWindowSize());
-
-        // 4. 共享记忆自动检索换入（多 Agent 共享 + 跨会话档案 RAG）：
-        //    以最新 user 消息为查询，跨会话检索事实/摘要/档案并注入，占用 Memory 预算的一小部分
+        // 3. 工作记忆原文 + 共享检索：两者共享 Memory 区预算，检索从 HOT 份额中挤（补充而非抢占）。
+        //    先算 HOT 可拿多少，再从中切一块给检索（至少 256 token，否则检索结果太少无意义）。
+        int memoryBudget = budget.getMemoryBudget();
+        int hotTokens = Math.max(memoryBudget - summaryTokens, 0);
         List<MemoryPage> retrieved = new ArrayList<>();
         if (config.isSharedRetrieve()) {
             String query = latestUserText(all);
             if (query != null && !query.trim().isEmpty()) {
-                int retrievedBudget = Math.max(256, budget.getMemoryBudget() / 5);
-                retrieved = trimByTokens(retriever.search(scope, query.trim(), config.getTopK()), retrievedBudget);
-                if (!retrieved.isEmpty()) {
-                    log.debug("分层记忆: 共享检索换入 {} 条（查询 '{}'）", retrieved.size(), query.trim());
+                // retrieved 从 HOT 份额里切：至少 256，至多 HOT 的 1/5，且不超过 HOT 本身（防止挤成负数）
+                int retrievedBudget = Math.min(Math.max(256, hotTokens / 5), hotTokens);
+                if (retrievedBudget > 0) {
+                    retrieved = trimByTokens(retriever.search(scope, query.trim(), config.getTopK()), retrievedBudget);
+                    // 实际消费的 retrieved token 从 HOT 份额里扣除，保证 summary + hot + retrieved <= memoryBudget
+                    int retrievedUsed = retrieved.stream().mapToInt(TokenEstimator::estimate).sum();
+                    hotTokens = Math.max(hotTokens - retrievedUsed, 0);
+                    if (!retrieved.isEmpty()) {
+                        log.debug("分层记忆: 共享检索换入 {} 条（查询 '{}'，消耗 {} token）",
+                                retrieved.size(), query.trim(), retrievedUsed);
+                    }
                 }
             }
         }
+        List<Message> hot = takeRecentMessages(all, hotTokens, config.getHotWindowSize());
 
         view.setWorkingMessages(hot);
         view.setSummaryPages(summaries);
