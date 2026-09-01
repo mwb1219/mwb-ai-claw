@@ -19,6 +19,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.mwb.ai.claw.domain.core.Session;
+import com.mwb.ai.claw.domain.core.Message;
 import com.mwb.ai.claw.domain.core.SessionGateway;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
@@ -143,6 +144,34 @@ public class FileBasedSessionGateway implements SessionGateway {
         } catch (IOException e) {
             log.warn("删除会话文件失败: {}", sessionId, e.getMessage());
         }
+    }
+
+    @Override
+    public List<Message> loadRecentMessages(AgentScope scope, String sessionId, int limit) {
+        Session session = getSession(scope, sessionId);
+        if (session == null || session.getMessages() == null) {
+            return new ArrayList<>();
+        }
+        List<Message> all = session.getMessages();
+        if (limit <= 0 || all.size() <= limit) {
+            return new ArrayList<>(all);
+        }
+        return new ArrayList<>(all.subList(all.size() - limit, all.size()));
+    }
+
+    @Override
+    public List<Message> loadAllMessages(AgentScope scope, String sessionId) {
+        Session session = getSession(scope, sessionId);
+        if (session == null || session.getMessages() == null) {
+            return new ArrayList<>();
+        }
+        return new ArrayList<>(session.getMessages());
+    }
+
+    @Override
+    public void markArchived(AgentScope scope, String sessionId, int fromIndex, int toIndex) {
+        // 文件模式不支持归档标记（文件模式本身无读放大问题，按需加载暂通过 loadRecentMessages 截取实现）
+        log.debug("文件模式暂不支持 markArchived: sessionId={}, [{},{})", sessionId, fromIndex, toIndex);
     }
 
     // ==================== 工具方法 ====================

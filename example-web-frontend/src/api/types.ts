@@ -45,6 +45,8 @@ export interface MessageDTO {
   role: string; // user / assistant / system / tool
   content: string;
   timestamp: number;
+  /** 是否已归档：true 表示已滚出热窗、进入跨会话档案（会话详情返回，供展示「归档历史」分隔线） */
+  archived?: boolean;
   /** assistant 消息携带的工具调用（用于刷新后恢复轨迹展示） */
   toolCalls?: ToolCallDTO[];
 }

@@ -1,5 +1,7 @@
 package com.mwb.ai.claw.domain.memory.layered;
 
+import java.time.Duration;
+
 /**
  * 分层记忆配置（绑定 application.yml 的 agent.memory 前缀）。
  */
@@ -64,6 +66,15 @@ public class LayeredMemoryConfig {
 
     /** 档案 RAG：会话结束后是否把会话原文归档为 ARCHIVE 页（跨会话可检索） */
     private boolean archiveEnabled = true;
+
+    /** 归档保留最近 N 条消息不归档不标记（0=使用 hot-window-size 兜底；会话进行中最新原文始终保留在未归档区，供 Hot 工作记忆与前端展示） */
+    private int archiveKeepRecent = 0;
+
+    /** 会话闲置多久后收敛剩余热窗（单位如 30m；仅当距离最后一次会话活动超过该时长时才把热窗整体归档+事实收敛，避免长会话无界保留；null/0=不启用空闲收敛） */
+    private Duration archiveIdleTimeout = Duration.ofMinutes(30);
+
+    /** 块 token 数低于该值时只保留其摘要、不归档全文（0=不限制，始终归档）；用于过滤低价值块的全文归档 */
+    private int archiveMinTokens = 0;
 
     /** 多 Agent 共享：readContext 时是否自动检索其他会话的档案/摘要/事实并换入（共享记忆） */
     private boolean sharedRetrieve = true;
@@ -274,6 +285,30 @@ public class LayeredMemoryConfig {
 
     public void setArchiveEnabled(boolean archiveEnabled) {
         this.archiveEnabled = archiveEnabled;
+    }
+
+    public int getArchiveKeepRecent() {
+        return archiveKeepRecent;
+    }
+
+    public void setArchiveKeepRecent(int archiveKeepRecent) {
+        this.archiveKeepRecent = archiveKeepRecent;
+    }
+
+    public Duration getArchiveIdleTimeout() {
+        return archiveIdleTimeout;
+    }
+
+    public void setArchiveIdleTimeout(Duration archiveIdleTimeout) {
+        this.archiveIdleTimeout = archiveIdleTimeout;
+    }
+
+    public int getArchiveMinTokens() {
+        return archiveMinTokens;
+    }
+
+    public void setArchiveMinTokens(int archiveMinTokens) {
+        this.archiveMinTokens = archiveMinTokens;
     }
 
     public boolean isSharedRetrieve() {

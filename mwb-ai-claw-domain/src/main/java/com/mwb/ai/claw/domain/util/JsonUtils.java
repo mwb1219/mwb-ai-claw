@@ -49,6 +49,17 @@ public final class JsonUtils {
     }
 
     /**
+     * JSON 数组字符串反序列化为 List。
+     */
+    public static <T> java.util.List<T> fromJsonList(String json, Class<T> elementClazz) {
+        try {
+            return MAPPER.readValue(json, MAPPER.getTypeFactory().constructCollectionType(java.util.List.class, elementClazz));
+        } catch (Exception e) {
+            throw new IllegalArgumentException("JSON 反序列化 List 失败: " + elementClazz.getSimpleName(), e);
+        }
+    }
+
+    /**
      * JSON 字符串反序列化为泛型对象（如 List&lt;T&gt;、Map&lt;K,V&gt;）。
      */
     public static <T> T fromJson(String json, TypeReference<T> typeRef) {

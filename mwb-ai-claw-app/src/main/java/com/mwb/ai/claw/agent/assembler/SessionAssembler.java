@@ -41,6 +41,7 @@ public class SessionAssembler {
         dto.setRole(msg.getRole() == null ? null : msg.getRole().getValue());
         dto.setContent(msg.getContent());
         dto.setTimestamp(msg.getTimestamp());
+        dto.setArchived(msg.isArchived());
         if (msg.getToolCalls() != null && !msg.getToolCalls().isEmpty()) {
             List<ToolCallDTO> calls = new ArrayList<>();
             for (ToolCall tc : msg.getToolCalls()) {

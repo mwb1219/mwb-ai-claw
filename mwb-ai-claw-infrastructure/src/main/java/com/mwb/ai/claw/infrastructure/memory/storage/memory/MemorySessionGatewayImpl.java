@@ -1,5 +1,6 @@
 package com.mwb.ai.claw.infrastructure.memory.storage.memory;
 
+import com.mwb.ai.claw.domain.core.Message;
 import com.mwb.ai.claw.domain.core.SessionGateway;
 import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.scope.AgentScope;
@@ -49,5 +50,32 @@ public class MemorySessionGatewayImpl implements SessionGateway {
     @Override
     public void deleteSession(AgentScope scope, String sessionId) {
         store.remove(key(scope, sessionId));
+    }
+
+    @Override
+    public List<Message> loadRecentMessages(AgentScope scope, String sessionId, int limit) {
+        Session session = getSession(scope, sessionId);
+        if (session == null || session.getMessages() == null) {
+            return new ArrayList<>();
+        }
+        List<Message> all = session.getMessages();
+        if (limit <= 0 || all.size() <= limit) {
+            return new ArrayList<>(all);
+        }
+        return new ArrayList<>(all.subList(all.size() - limit, all.size()));
+    }
+
+    @Override
+    public List<Message> loadAllMessages(AgentScope scope, String sessionId) {
+        Session session = getSession(scope, sessionId);
+        if (session == null || session.getMessages() == null) {
+            return new ArrayList<>();
+        }
+        return new ArrayList<>(session.getMessages());
+    }
+
+    @Override
+    public void markArchived(AgentScope scope, String sessionId, int fromIndex, int toIndex) {
+        // 内存模式暂不支持归档标记
     }
 }

@@ -25,7 +25,19 @@ public class Message {
     /** tool 消息关联的工具调用 ID */
     private String toolCallId;
 
+    /**
+     * 会话内原始序号（从 0 起），仅持久化层（JdbcSessionGateway）读写时填充，
+     * 供归档/摘要提炼（markArchived 边界）精确定位；非持久化来源默认为 -1。
+     */
+    private int msgIndex = -1;
+
     private long timestamp;
+
+    /**
+     * 是否已归档（持久化层读写；供前端在对话页展示「归档历史」分隔线）。
+     * 为 true 表示该消息已滚出热窗、进入跨会话档案；false 表示仍属活动工作记忆。
+     */
+    private boolean archived;
 
     public static Message of(MessageRole role, String content) {
         Message m = new Message();

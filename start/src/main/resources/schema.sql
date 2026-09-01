@@ -1,10 +1,18 @@
 -- ============================================================
--- mwb-ai-claw PhaseA 服务端生产化：MySQL 建表脚本（agent.storage.type=db）
+-- mwb-ai-claw 框架自身数据库脚本（由 db/schema.sql 拆分而来）
 -- 覆盖框架内置表：claw_session / claw_fact / claw_memory_page /
 -- claw_long_term（记忆存储）、claw_rag_document / rag_index_entries（RAG）、
 -- claw_trace / claw_run_usage（可观测性）。
+--
+-- 对应 agent.storage.type=db：MySQL 权威存储 + Redis Stack 召回。
+-- 执行方式：mysql -u<user> -p <database> < framework-schema.sql
+-- example-web 的接入方用户表 claw_user 见 example-web-schema.sql。
+-- ============================================================
+
+-- ============================================================
+-- 第一部分：MySQL 建表脚本（agent.storage.type=db）
+-- ============================================================
 -- 目标数据库：MySQL 5.7+ / 8.0（InnoDB / utf8mb4）
--- 执行方式：mysql -u<user> -p <database> < schema.sql（或导入工具执行）
 --
 -- 设计约定：
 --   - 每表使用自增 id 主键（InnoDB 聚簇索引顺序插入，避免字符串复合主键随机插入/页分裂）；
@@ -14,10 +22,9 @@
 --   - 文本字段统一 LONGTEXT（4GB），容纳会话消息 JSON / 记忆正文；
 --   - 脚本可重复执行（CREATE TABLE IF NOT EXISTS）；重复执行时 CREATE INDEX / 建唯一键
 --     会报 Duplicate key name，属预期行为，可忽略。
--- ============================================================
 
 -- ==================== 会话表 ====================
--- 会话消息以 JSON LONGTEXT 存储（与现有 Session 序列化一致）
+-- 会话元数据；消息拆到 claw_session_message 表逐条存储（消除写/读放大、支持按需加载、防并发覆盖）
 CREATE TABLE IF NOT EXISTS claw_session (
     id          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '自增主键（聚簇索引，非业务字段）',
     tenant_id   VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '租户 id（空串=默认空间）',
@@ -27,14 +34,35 @@ CREATE TABLE IF NOT EXISTS claw_session (
     title       VARCHAR(128) DEFAULT NULL COMMENT '会话标题（展示用，可空）',
     status      VARCHAR(16)  DEFAULT NULL COMMENT '会话状态（active/closed 等）',
     version     BIGINT       NOT NULL DEFAULT 0 COMMENT '乐观锁版本号（并发更新冲突检测）',
+    msg_count   INT          NOT NULL DEFAULT 0 COMMENT '消息总数（含已归档，增量写入时同步更新）',
     create_time BIGINT       NOT NULL COMMENT '创建时间戳（epoch 毫秒）',
     update_time BIGINT       NOT NULL COMMENT '最近更新时间戳（epoch 毫秒，会话列表倒序排序依据）',
-    messages    LONGTEXT     DEFAULT NULL COMMENT '消息列表 JSON（与 Session 序列化一致）',
     PRIMARY KEY (id),
     UNIQUE KEY uk_session (tenant_id, user_id, session_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会话表：会话主体与消息 JSON';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会话表：会话元数据（消息逐条存 claw_session_message）';
 
 CREATE INDEX idx_session_update ON claw_session(tenant_id, user_id, update_time DESC);
+
+-- ==================== 会话消息表 ====================
+-- 逐条追加：每轮对话 INSERT 一条，消除 messages LONGTEXT 的写放大/读放大/并发覆盖
+-- msg_index 在会话内唯一（唯一键防并发重复），archived 标记是否已归档/摘要
+CREATE TABLE IF NOT EXISTS claw_session_message (
+    id            BIGINT       NOT NULL AUTO_INCREMENT COMMENT '自增主键（聚簇索引，非业务字段）',
+    tenant_id     VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '租户 id（空串=默认空间，冗余存储防 JOIN）',
+    user_id       VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '用户 id（空串=默认空间，冗余存储防 JOIN）',
+    session_id    VARCHAR(64)  NOT NULL COMMENT '所属会话 id',
+    msg_index     INT          NOT NULL COMMENT '会话内序号（从 0 起，唯一键防并发重复）',
+    role          VARCHAR(16)  NOT NULL COMMENT '消息角色：user | assistant | tool',
+    content       LONGTEXT     DEFAULT NULL COMMENT '消息文本内容',
+    parts_json    LONGTEXT     DEFAULT NULL COMMENT '多模态内容片段 JSON（非空时优先于 content）',
+    tool_calls    LONGTEXT     DEFAULT NULL COMMENT 'assistant 消息携带的工具调用列表 JSON',
+    tool_call_id  VARCHAR(64)  DEFAULT NULL COMMENT 'tool 消息关联的工具调用 ID',
+    archived      TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '是否已归档/摘要（1=已归档，readContext 默认跳过）',
+    create_time   BIGINT       NOT NULL COMMENT '消息创建时间戳（epoch 毫秒）',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_session_msg (tenant_id, user_id, session_id, msg_index),
+    KEY idx_session_msg_unarchived (tenant_id, user_id, session_id, archived, msg_index)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会话消息表：逐条追加，消除写放大与并发覆盖';
 
 -- ==================== 事实表 ====================
 -- 结构化事实，跨会话检索；同 key 合并去重落在 DB 层（version 自增）
@@ -69,7 +97,9 @@ CREATE TABLE IF NOT EXISTS claw_memory_page (
     token_count INT          DEFAULT NULL COMMENT '估算 token 数（预算控制）',
     create_time BIGINT       DEFAULT NULL COMMENT '创建时间戳（epoch 毫秒）',
     PRIMARY KEY (id),
-    UNIQUE KEY uk_page (tenant_id, user_id, page_id)
+    UNIQUE KEY uk_page (tenant_id, user_id, page_id),
+    -- Phase 1：防摘要/归档块重叠硬防线（同租户+用户+会话+页类型+块起点唯一）
+    UNIQUE KEY uk_scope_session_type_start (tenant_id, user_id, session_id, page_type, block_start)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='记忆页表：摘要页与会话归档';
 
 -- ==================== 长期记忆表 ====================
@@ -105,7 +135,7 @@ CREATE TABLE IF NOT EXISTS claw_rag_document (
     PRIMARY KEY (knowledge_base_id, document_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='RAG 原始文档与索引状态';
 
--- ==================== RAG 索引条目表 ====================
+-- ==================== RAG 向量索引表 ====================
 -- RAG 索引条目（provider=redis 或 auto + storage=db）：MySQL 仅存文本 + 元数据（无向量列），
 -- 向量与全文倒排只存在于 Redis Stack 检索索引（可随时清空，从 MySQL 文本重新向量化重建）。
 CREATE TABLE IF NOT EXISTS rag_index_entries (
@@ -120,49 +150,61 @@ CREATE TABLE IF NOT EXISTS rag_index_entries (
     KEY idx_rag_kb (knowledge_base_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='RAG 索引条目（MySQL 权威文本存储，召回走 Redis）';
 
--- ==================== 全链路 trace 表 ====================
--- 步骤级 trace（agent.observability.trace.store=db 时使用）：每次运行写入一行
--- run 标识行（step_type='__run__'）+ 每步一行明细，按 trace_id + step_index 还原链路；
--- 与会话/记忆表同库，多实例共享一份 trace 数据。
+-- ==================== 全链路 trace 表（MySQL 版） ====================
+-- 每次运行写入一行 step_type='__run__' 标识行 + 每步一行明细，按 trace_id + step_index 还原链路
+-- （agent.observability.trace.store=db 时使用；success 用 TINYINT(1) 兼容 MySQL 布尔）
 CREATE TABLE IF NOT EXISTS claw_trace (
     id            BIGINT       NOT NULL AUTO_INCREMENT COMMENT '自增主键（聚簇索引，非业务字段）',
     tenant_id     VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '租户 id（空串=默认空间）',
     user_id       VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '用户 id（空串=默认空间）',
-    trace_id      VARCHAR(64)  NOT NULL COMMENT '链路 trace id（贯穿请求日志/落库）',
+    trace_id      VARCHAR(64)  NOT NULL COMMENT '链路 id（与 /trace/{traceId} 对应）',
     session_id    VARCHAR(64)  DEFAULT NULL COMMENT '会话 id',
-    agent_id      VARCHAR(64)  DEFAULT NULL COMMENT '主导 Agent id',
-    orchestration VARCHAR(32)  DEFAULT NULL COMMENT '实际使用的编排 id',
-    model         VARCHAR(64)  DEFAULT NULL COMMENT '使用的模型',
-    start_time    BIGINT       DEFAULT NULL COMMENT '执行开始时间戳（epoch 毫秒）',
-    duration_ms   BIGINT       DEFAULT NULL COMMENT '执行耗时（毫秒）',
-    success       TINYINT(1)   DEFAULT 1 COMMENT '执行是否成功',
-    error_code    VARCHAR(32)  DEFAULT NULL COMMENT '失败错误码（成功为空）',
-    step_index    INT          DEFAULT NULL COMMENT '步骤序号（0=run 标识行，1..n=明细步骤）',
-    step_type     VARCHAR(16)  DEFAULT NULL COMMENT '步骤类型：__run__ / thought / action / observation / info',
-    step_content  LONGTEXT     DEFAULT NULL COMMENT '步骤内容（轨迹文本）',
+    agent_id      VARCHAR(64)  DEFAULT NULL COMMENT 'Agent id',
+    orchestration VARCHAR(32)  DEFAULT NULL COMMENT '编排 id',
+    model         VARCHAR(64)  DEFAULT NULL COMMENT '模型名',
+    start_time    BIGINT       DEFAULT NULL COMMENT '开始时间戳（epoch 毫秒）',
+    duration_ms   BIGINT       DEFAULT NULL COMMENT '耗时（毫秒）',
+    success       TINYINT(1)   DEFAULT 1 COMMENT '是否成功',
+    error_code    VARCHAR(32)  DEFAULT NULL COMMENT '错误码',
+    step_index    INT          DEFAULT NULL COMMENT '步骤序号（__run__ 行为 0）',
+    step_type     VARCHAR(16)  DEFAULT NULL COMMENT '步骤类型（thought/tool/__run__）',
+    step_content  LONGTEXT     DEFAULT NULL COMMENT '步骤内容',
     create_time   BIGINT       DEFAULT NULL COMMENT '写入时间戳（epoch 毫秒）',
     PRIMARY KEY (id),
     KEY idx_trace (trace_id, tenant_id, user_id),
     KEY idx_trace_session (session_id, create_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='全链路 trace 表：步骤级执行轨迹';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='全链路 trace 表（agent.observability.trace.store=db）';
 
--- ==================== 运行用量摘要表 ====================
--- 每次运行一条运行用量摘要（agent.observability.run-usage-store=db 时使用），
--- 与会话/记忆/trace 同库，多实例共享供 shell /runs 统计。
+-- ==================== 运行用量摘要表（MySQL 版） ====================
+-- 每次运行一条摘要，供 shell /runs 统计（agent.observability.run-usage-store=db 时使用）
 CREATE TABLE IF NOT EXISTS claw_run_usage (
     id            BIGINT       NOT NULL AUTO_INCREMENT COMMENT '自增主键（聚簇索引，非业务字段）',
     tenant_id     VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '租户 id（空串=默认空间，对齐 AgentScope）',
     user_id       VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '用户 id（空串=默认空间，对齐 AgentScope）',
-    trace_id      VARCHAR(64)  DEFAULT NULL COMMENT '关联的全链路 trace id（GET /trace/{traceId} 可还原步骤明细）',
+    trace_id      VARCHAR(64)  DEFAULT NULL COMMENT '关联 trace 链路 id',
     session_id    VARCHAR(64)  DEFAULT NULL COMMENT '会话 id',
-    agent_id      VARCHAR(64)  DEFAULT NULL COMMENT '主导 Agent id',
-    orchestration VARCHAR(32)  DEFAULT NULL COMMENT '实际使用的编排 id',
-    model         VARCHAR(64)  DEFAULT NULL COMMENT '使用的模型',
-    duration_ms   BIGINT       DEFAULT NULL COMMENT '执行耗时（毫秒）',
-    success       TINYINT(1)   DEFAULT 1 COMMENT '执行是否成功',
-    steps         INT          DEFAULT 0 COMMENT '步骤条数',
-    error_code    VARCHAR(32)  DEFAULT NULL COMMENT '失败错误码（成功为空）',
+    agent_id      VARCHAR(64)  DEFAULT NULL COMMENT 'Agent id',
+    orchestration VARCHAR(32)  DEFAULT NULL COMMENT '编排 id',
+    model         VARCHAR(64)  DEFAULT NULL COMMENT '模型名',
+    duration_ms   BIGINT       DEFAULT NULL COMMENT '耗时（毫秒）',
+    success       TINYINT(1)   DEFAULT 1 COMMENT '是否成功',
+    steps         INT          DEFAULT 0 COMMENT '步骤数',
+    error_code    VARCHAR(32)  DEFAULT NULL COMMENT '错误码',
     create_time   BIGINT       DEFAULT NULL COMMENT '写入时间戳（epoch 毫秒）',
     PRIMARY KEY (id),
     KEY idx_run_scope_create (tenant_id, user_id, create_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='运行用量摘要表：每次运行一条';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='运行用量摘要表（agent.observability.run-usage-store=db）';
+
+-- ==================== 记忆提炼边界游标表（Phase 1 行锁兜底 / Phase 2 CAS claim） ====================
+-- 无 Redis 时的 DB 行锁互斥（SELECT ... FOR UPDATE）+ Phase 2 CAS 预占区间的基础设施。
+-- 每个会话一行，记录摘要/归档的已推进边界。
+CREATE TABLE IF NOT EXISTS claw_memory_boundary (
+    tenant_id   VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '租户 id（空串=默认空间）',
+    user_id     VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '用户 id（空串=默认空间）',
+    session_id  VARCHAR(64)  NOT NULL COMMENT '会话 id',
+    summary_end INT          NOT NULL DEFAULT 0 COMMENT '下一段 summary 的 block_start',
+    archive_end INT          NOT NULL DEFAULT 0 COMMENT '下一段 archive 的 block_start',
+    version     INT          NOT NULL DEFAULT 1 COMMENT '乐观锁版本号',
+    update_time BIGINT       NOT NULL COMMENT '最近更新时间戳（epoch 毫秒）',
+    PRIMARY KEY (tenant_id, user_id, session_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会话记忆提炼边界游标';

@@ -69,6 +69,13 @@
 > 设置位置：`application.yml` 的 `agent.storage.type`，环境变量 `STORAGE_TYPE`（写入 `.env`），或命令行覆盖 `mwb-ai-claw --agent.storage.type=db`（优先级递增）。
 > 注意：`db` 时数据源为启动即连（见上表 DB_* 变量），需先确保数据库可达；`db` 形态的召回依赖 Redis Stack（RediSearch），需保证 Redis 可达（见 [横向扩展](docs/design/horizontal-scaling.md)）。
 > 会话并发锁默认使用本地 JVM 实现（`LocalSessionLockManager`，单实例部署，零依赖）；多实例部署时可切换为 Redis 分布式锁（见 8.1 会话锁）。
+>
+> **归档策略（`agent.memory.*`）**：分层记忆的"归档 + 摘要"协作方式可调。
+> - `archive-enabled`：会话结束后归档原文为跨会话档案（默认 `true`）。
+> - `archive-keep-recent`：每次会话保留最近 N 条原文不归档（`0`=使用 `hot-window-size` 兜底），避免把热工作记忆抽干。
+> - `archive-idle-timeout`：会话闲置多久后收敛剩余热窗（如 `30m`；`null`/0 不启用），实现"真正会话结束才全面归档"。
+> - `archive-min-tokens`：块 token 数低于该值时仅保留摘要不归档全文（`0`=不限制），过滤低价值块的全文归档。
+> 完整配置示例见 [config-full.md](docs/reference/config-full.md)。
 
 ## 4. 专家 Agent（config/agents.json）
 

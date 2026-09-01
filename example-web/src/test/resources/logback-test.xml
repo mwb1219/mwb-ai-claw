@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  example-web 测试专用 logback 配置：
+  覆盖框架 starter 内置 logback-spring.xml（Spring Boot 约定：test classpath 优先级更高），
+  仅输出到控制台、不写文件，避免测试环境因无写权限（如 macOS 沙箱 $HOME/mwb-ai-claw/logs）导致
+  @SpringBootTest 上下文加载失败。
+-->
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml" />
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+            <charset>utf8</charset>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE" />
+    </root>
+</configuration>

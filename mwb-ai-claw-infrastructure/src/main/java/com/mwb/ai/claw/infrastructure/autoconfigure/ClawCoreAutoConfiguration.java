@@ -15,6 +15,7 @@ import org.springframework.context.annotation.Condition;
 import org.springframework.context.annotation.ConditionContext;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.core.env.Environment;
 import org.springframework.core.type.AnnotatedTypeMetadata;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -32,6 +33,9 @@ import com.mwb.ai.claw.domain.memory.layered.LayeredMemoryGateway;
 import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
 import com.mwb.ai.claw.domain.core.SessionGateway;
 import com.mwb.ai.claw.domain.memory.MemoryStrategy;
+import com.mwb.ai.claw.domain.memory.layered.retriever.HybridMemoryRetriever;
+import com.mwb.ai.claw.domain.memory.layered.retriever.KeywordMemoryRetriever;
+import com.mwb.ai.claw.domain.memory.layered.retriever.VectorMemoryRetriever;
 import com.mwb.ai.claw.domain.memory.layered.spi.MemoryRetriever;
 import com.mwb.ai.claw.domain.memory.layered.spi.MemoryPageStore;
 import com.mwb.ai.claw.domain.memory.layered.spi.MemorySynthesizer;
@@ -69,7 +73,7 @@ import com.mwb.ai.claw.infrastructure.llm.provider.GeminiLlmGateway;
 import com.mwb.ai.claw.infrastructure.llm.provider.ProviderRoutingGateway;
 import com.mwb.ai.claw.domain.memory.layered.LayeredSessionGatewayImpl;
 import com.mwb.ai.claw.domain.memory.layered.LayeredMemoryStrategy;
-import com.mwb.ai.claw.infrastructure.memory.simple.SimpleMemoryStrategy;
+import com.mwb.ai.claw.domain.memory.simple.SimpleMemoryStrategy;
 import com.mwb.ai.claw.infrastructure.memory.storage.file.FileBasedMemoryGateway;
 import com.mwb.ai.claw.infrastructure.memory.storage.file.FileBasedSessionGateway;
 import com.mwb.ai.claw.infrastructure.memory.storage.file.FileMemoryPageStore;
@@ -301,14 +305,41 @@ public class ClawCoreAutoConfiguration {
         }
     }
 
+    // ==================== 记忆检索器（关键词 / 向量 / 混合 RRF，Phase 3） ====================
+    // HybridMemoryRetriever 按 agent.memory.retriever 在 keyword / vector / hybrid 间切换，
+    // 作为 LayeredMemoryGateway 的检索注入；其余实现保留为独立 Bean 便于测试与组合。
+    @Bean
+    @ConditionalOnMissingBean(KeywordMemoryRetriever.class)
+    public KeywordMemoryRetriever keywordMemoryRetriever(MemoryPageStore pageStore) {
+        return new KeywordMemoryRetriever(pageStore);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(VectorMemoryRetriever.class)
+    public VectorMemoryRetriever vectorMemoryRetriever(MemoryPageStore pageStore,
+                                                       EmbeddingGateway embeddingGateway,
+                                                       AgentProperties properties) {
+        return new VectorMemoryRetriever(pageStore, embeddingGateway, properties.getMemory(), properties.getMemoryDir());
+    }
+
+    @Bean
+    @Primary
+    @ConditionalOnMissingBean(HybridMemoryRetriever.class)
+    public HybridMemoryRetriever hybridMemoryRetriever(KeywordMemoryRetriever keywordMemoryRetriever,
+                                                       VectorMemoryRetriever vectorMemoryRetriever,
+                                                       AgentProperties properties) {
+        return new HybridMemoryRetriever(keywordMemoryRetriever, vectorMemoryRetriever, properties.getMemory());
+    }
+
     @Bean
     @ConditionalOnMissingBean(LayeredMemoryGateway.class)
     public LayeredSessionGatewayImpl layeredMemoryGateway(AgentProperties properties,
                                                          MemoryPageStore pageStore,
                                                          MemorySynthesizer synthesizer,
                                                          MemoryRetriever retriever,
-                                                         com.mwb.ai.claw.domain.memory.layered.spi.MemorySynthesisDispatcher taskQueue) {
-        return new LayeredSessionGatewayImpl(properties.getMemory(), pageStore, synthesizer, retriever, taskQueue);
+                                                         com.mwb.ai.claw.domain.memory.layered.spi.MemorySynthesisDispatcher taskQueue,
+                                                         SessionGateway sessionGateway) {
+        return new LayeredSessionGatewayImpl(properties.getMemory(), pageStore, synthesizer, retriever, taskQueue, sessionGateway);
     }
 
     // ==================== MemoryStrategy 自动装配 ====================

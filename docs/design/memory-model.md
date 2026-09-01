@@ -18,6 +18,12 @@ nav_order: 4
 | 中期 | 摘要页（历史压缩） | `.agent/memory/pages/{sessionId}/summary-*.json` |
 | 长期 | 事实页（LLM 提炼） | `.agent/memory/facts.jsonl` |
 
+> **归档策略与读取路径**：分层记忆中"归档（Archive）+ 摘要（Summarize）"协作分工——摘要把最旧块压缩为摘要页（服务上下文预算），归档把滚出热窗的旧块原文落为跨会话档案页（`ARCHIVE`，服务跨会话检索）。
+> - 归档保留热窗：每次会话只归档已滚出**热窗**（`archive-keep-recent`，默认 `hot-window-size`）的旧块，会话进行中最近原文始终 `archived=0`，既充当工作记忆又不抽干 Hot 区。
+> - 真正会话结束才收敛：会话闲置超过 `archive-idle-timeout` 后，把剩余热窗整体归档 + 事实收敛。
+> - 归档起点跟随摘要进度（避免重复/空转），块 token 低于 `archive-min-tokens` 时仅保留摘要不归档全文。
+> - 读取口径分离：`SessionGateway.getSession`（活动，`archived=0`）供模型工作记忆；新增 `getSessionFull`（含归档全量）供前端会话详情/历史展示。两存储（JDBC 标记 `archived` 列、File 全量）均通过该两条路径提供一致的"活动/全量"语义。
+
 ## 2. 动态换页（Paging）
 
 - [ ] Token 预算模型：`context-window × budget-ratio`，System/Tools/Memory 按比例分配
