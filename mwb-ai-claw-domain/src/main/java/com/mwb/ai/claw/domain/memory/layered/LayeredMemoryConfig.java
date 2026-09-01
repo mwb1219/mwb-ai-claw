@@ -127,6 +127,41 @@ public class LayeredMemoryConfig {
      */
     private int synthesisClaimMaxRetries = 3;
 
+    // ==================== T6：过期记忆页清理 ====================
+
+    /** 过期清理总开关（默认 true；仅 agent.storage.type=db 时生效，file 存储自动跳过） */
+    private boolean cleanupEnabled = true;
+
+    /** 超过该天数未更新的记忆页（SUMMARY/ARCHIVE）与事实页即清理；默认 30 天 */
+    private int cleanupOlderThanDays = 30;
+
+    /** 清理定时任务执行间隔（小时）；默认 24 小时 */
+    private int cleanupIntervalHours = 24;
+
+    public boolean isCleanupEnabled() {
+        return cleanupEnabled;
+    }
+
+    public void setCleanupEnabled(boolean cleanupEnabled) {
+        this.cleanupEnabled = cleanupEnabled;
+    }
+
+    public int getCleanupOlderThanDays() {
+        return cleanupOlderThanDays;
+    }
+
+    public void setCleanupOlderThanDays(int cleanupOlderThanDays) {
+        this.cleanupOlderThanDays = cleanupOlderThanDays;
+    }
+
+    public int getCleanupIntervalHours() {
+        return cleanupIntervalHours;
+    }
+
+    public void setCleanupIntervalHours(int cleanupIntervalHours) {
+        this.cleanupIntervalHours = cleanupIntervalHours;
+    }
+
     public boolean isEnabled() {
         return enabled;
     }

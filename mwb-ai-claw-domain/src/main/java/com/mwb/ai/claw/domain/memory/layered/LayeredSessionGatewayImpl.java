@@ -89,8 +89,31 @@ public class LayeredSessionGatewayImpl implements LayeredMemoryGateway {
         }
 
         MemoryBudget budget = new MemoryBudget(config);
-        List<Message> all = session.getMessages();
         AgentScope scope = session.getScope();
+        String sessionId = session.getSessionId();
+
+        // T4 · HOT 区按需加载：历史未归档段从库取最近 N 条（O(K)，代替 getSession 的全量加载），
+        // 再并入当前轮次内存中尚未入库（msg_index=-1）的 in-flight 消息（最新 user 提问必须在列）。
+        // 老存储不支持 loadRecentMessages（抛异常）时回退 session.getMessages() 全量。
+        List<Message> all;
+        try {
+            List<Message> recent = sessionGateway.loadRecentMessages(scope, sessionId,
+                    config.getHotWindowSize() + config.getSummaryBlockSize());
+            if (recent == null) {
+                all = session.getMessages();
+            } else {
+                List<Message> inFlight = new ArrayList<>();
+                for (Message m : session.getMessages()) {
+                    if (m.getMsgIndex() < 0) {
+                        inFlight.add(m);
+                    }
+                }
+                all = inFlight.isEmpty() ? recent : concat(recent, inFlight);
+            }
+        } catch (Exception e) {
+            log.debug("分层记忆: HOT 按需加载失败，回退全量: {}", e.getMessage());
+            all = session.getMessages();
+        }
 
         // 1. 跨会话事实页（重要度降序，进入 System 区预算）
         List<MemoryPage> facts = pageStore.loadFacts(scope);
@@ -98,7 +121,7 @@ public class LayeredSessionGatewayImpl implements LayeredMemoryGateway {
         facts = trimByTokens(facts, budget.getSystemBudget());
 
         // 2. 当前会话摘要页（占用 Memory 区预算）
-        List<MemoryPage> summaries = pageStore.loadSummaries(scope, session.getSessionId());
+        List<MemoryPage> summaries = pageStore.loadSummaries(scope, sessionId);
         int summaryTokens = summaries.stream().mapToInt(TokenEstimator::estimate).sum();
 
         // 3. 工作记忆原文 + 共享检索：两者共享 Memory 区预算，检索从 HOT 份额中挤（补充而非抢占）。
@@ -109,10 +132,15 @@ public class LayeredSessionGatewayImpl implements LayeredMemoryGateway {
         if (config.isSharedRetrieve()) {
             String query = latestUserText(all);
             if (query != null && !query.trim().isEmpty()) {
+                // T11 · 检索走共享记忆（searchShared 只搜其他会话摘要 + 归档，不纳入事实；本会话摘要靠 pageId 去重）：
+                // 步骤 1 已按重要度全量加载事实、步骤 2 已加载本会话摘要，检索不再重复查这两类。
                 // retrieved 从 HOT 份额里切：至少 256，至多 HOT 的 1/5，且不超过 HOT 本身（防止挤成负数）
                 int retrievedBudget = Math.min(Math.max(256, hotTokens / 5), hotTokens);
                 if (retrievedBudget > 0) {
-                    retrieved = trimByTokens(retriever.search(scope, query.trim(), config.getTopK()), retrievedBudget);
+                    List<MemoryPage> hits = retriever.searchShared(scope, query.trim(), config.getTopK());
+                    // 去重兜底：已进入 System 区（facts）或 Memory 区（本会话 summaries）的页面不再重复注入 Retrieved 区
+                    hits = dedupAgainst(hits, facts, summaries);
+                    retrieved = trimByTokens(hits, retrievedBudget);
                     // 实际消费的 retrieved token 从 HOT 份额里扣除，保证 summary + hot + retrieved <= memoryBudget
                     int retrievedUsed = retrieved.stream().mapToInt(TokenEstimator::estimate).sum();
                     hotTokens = Math.max(hotTokens - retrievedUsed, 0);
@@ -494,6 +522,39 @@ public class LayeredSessionGatewayImpl implements LayeredMemoryGateway {
             tokens += TokenEstimator.estimate(m);
         }
         return tokens;
+    }
+
+    private static List<Message> concat(List<Message> a, List<Message> b) {
+        List<Message> merged = new ArrayList<>(a.size() + b.size());
+        merged.addAll(a);
+        merged.addAll(b);
+        return merged;
+    }
+
+    /** T11 · 检索去重兜底：剔除已在 System 区（facts）/ Memory 区（summaries）注入过的 pageId，避免同一内容重复拼进 System Prompt */
+    private List<MemoryPage> dedupAgainst(List<MemoryPage> hits, List<MemoryPage> facts, List<MemoryPage> summaries) {
+        if (hits == null || hits.isEmpty()) {
+            return hits;
+        }
+        Set<String> seen = new HashSet<>();
+        for (MemoryPage p : facts) {
+            if (p.getPageId() != null) {
+                seen.add(p.getPageId());
+            }
+        }
+        for (MemoryPage p : summaries) {
+            if (p.getPageId() != null) {
+                seen.add(p.getPageId());
+            }
+        }
+        List<MemoryPage> result = new ArrayList<>(hits.size());
+        for (MemoryPage p : hits) {
+            if (p.getPageId() != null && seen.contains(p.getPageId())) {
+                continue;
+            }
+            result.add(p);
+        }
+        return result;
     }
 
     /** 最新 user 消息内容（用作共享检索查询词） */

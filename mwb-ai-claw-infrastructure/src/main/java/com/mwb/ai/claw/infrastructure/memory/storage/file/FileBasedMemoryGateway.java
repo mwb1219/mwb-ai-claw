@@ -66,11 +66,20 @@ public class FileBasedMemoryGateway implements LongTermMemoryGateway {
 
     @Override
     public void saveMemory(AgentScope scope, String content) {
+        writeFile(scope, "MEMORY.md", content);
+    }
+
+    @Override
+    public void saveAgentInstructions(AgentScope scope, String content) {
+        writeFile(scope, "AGENT.md", content);
+    }
+
+    private void writeFile(AgentScope scope, String name, String content) {
         try {
-            Path memoryMd = file(scope, "MEMORY.md");
-            Files.createDirectories(memoryMd.getParent());
-            Files.write(memoryMd, content.getBytes(StandardCharsets.UTF_8));
-            log.info("长期记忆已保存: {} ({} bytes)", memoryMd, content.length());
+            Path target = file(scope, name);
+            Files.createDirectories(target.getParent());
+            Files.write(target, content.getBytes(StandardCharsets.UTF_8));
+            log.info("长期记忆已保存: {} ({} bytes)", target, content.length());
         } catch (IOException e) {
             log.error("保存长期记忆失败: {}", e.getMessage(), e);
             throw new RuntimeException("保存长期记忆失败: " + e.getMessage(), e);

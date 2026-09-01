@@ -319,6 +319,29 @@ public class AgentProperties {
 
         /** 单条消息最大 token 数（超出截断告警） */
         private int maxSingleMessageTokens = 12000;
+
+        // ==================== T7：请求级限流与熔断 ====================
+
+        /** 请求级限流开关（默认 false；true 时按 tenant+model 维度做 QPS 与并发数限制） */
+        private boolean rateLimitEnabled = false;
+
+        /** 限流：单租户+模型组合每秒最大请求数（QPS，默认 20） */
+        private double rateLimitQps = 20;
+
+        /** 限流：单租户+模型组合最大并发在途请求数（默认 8） */
+        private int rateLimitMaxConcurrency = 8;
+
+        /** 模型级熔断开关（默认 false；true 时某模型连续错误率超阈值自动熔断 30s） */
+        private boolean circuitBreakerEnabled = false;
+
+        /** 熔断：窗口内错误率阈值（0-100，如 50 表示 50% 请求失败即熔断） */
+        private int circuitBreakerFailureThresholdPercent = 50;
+
+        /** 熔断：窗口内最少请求数（低于该值不判定熔断避免误伤，默认 10） */
+        private int circuitBreakerMinRequests = 10;
+
+        /** 熔断：熔断持续时间（毫秒，默认 30000 = 30s） */
+        private long circuitBreakerOpenMs = 30000;
     }
 
     @Data

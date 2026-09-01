@@ -43,4 +43,19 @@ public interface MemorySearchable {
      * @param topK         返回条数上限
      */
     List<MemoryPage> searchByVector(AgentScope scope, float[] queryVector, int topK);
+
+    /**
+     * 共享记忆检索（T11 去重）：只搜「其他会话的 SUMMARY + 所有 ARCHIVE」，<b>不</b>纳入事实页。
+     * <p>
+     * 事实页由 readContext 步骤 1 按重要度全量加载进入 System 区，不需要再经检索筛一遍（避免同一条 fact
+     * 在 System 区与 Retrieved 区重复注入）；当前会话摘要的排除由 readContext 层 pageId 去重兜底完成。
+     * 默认委托 {@link #searchPages}（原 STATUS+ARCHIVE 范围），存储实现可覆写以进一步排除当前会话。
+     *
+     * @param scope 作用域（多租户隔离）
+     * @param terms 检索词集合
+     * @param topK  返回条数上限
+     */
+    default List<MemoryPage> searchSharedOnly(AgentScope scope, List<String> terms, int topK) {
+        return searchPages(scope, terms, topK);
+    }
 }

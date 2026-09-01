@@ -29,13 +29,13 @@ public class JdbcTraceStore implements TraceStore {
     private static final String RUN_MARKER = "__run__";
 
     private static final String INSERT_SQL =
-            "INSERT INTO claw_trace (tenant_id, user_id, trace_id, session_id, agent_id, orchestration, model, "
+            "INSERT INTO claw_trace (tenant_id, user_id, trace_id, parent_trace_id, session_id, agent_id, orchestration, model, "
             + "start_time, duration_ms, success, error_code, step_index, step_type, step_content, create_time) "
-            + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+            + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
 
     private static final int[] ARG_TYPES = {
             Types.VARCHAR, Types.VARCHAR, Types.VARCHAR, Types.VARCHAR, Types.VARCHAR,
-            Types.VARCHAR, Types.VARCHAR, Types.BIGINT, Types.BIGINT, Types.BOOLEAN,
+            Types.VARCHAR, Types.VARCHAR, Types.VARCHAR, Types.BIGINT, Types.BIGINT, Types.BOOLEAN,
             Types.VARCHAR, Types.INTEGER, Types.VARCHAR, Types.VARCHAR, Types.BIGINT
     };
 
@@ -89,10 +89,38 @@ public class JdbcTraceStore implements TraceStore {
         }
     }
 
+    @Override
+    public java.util.List<TraceRun> findChildren(AgentScope scope, String parentTraceId) {
+        java.util.List<TraceRun> children = new java.util.ArrayList<>();
+        if (parentTraceId == null || parentTraceId.trim().isEmpty()) {
+            return children;
+        }
+        try {
+            String tid = nz(scope == null ? "" : scope.getTenantId());
+            String uid = nz(scope == null ? "" : scope.getUserId());
+            // 先取子 trace id 列表（去重），再逐条还原步骤
+            List<String> childIds = jdbc.queryForList(
+                    "SELECT DISTINCT trace_id FROM claw_trace "
+                            + "WHERE parent_trace_id = ? AND tenant_id = ? AND user_id = ? "
+                            + "AND step_index = 0 ORDER BY start_time ASC, trace_id ASC",
+                    String.class, parentTraceId, tid, uid);
+            for (String childId : childIds) {
+                TraceRun child = findTrace(scope, childId);
+                if (child != null) {
+                    children.add(child);
+                }
+            }
+            return children;
+        } catch (Exception e) {
+            log.warn("聚合子 trace 失败: {}", e.getMessage());
+            return children;
+        }
+    }
+
     private Object[] row(TraceRun trace, int stepIndex, String stepType, String stepContent, long createTime) {
         return new Object[] {
                 nz(trace.getTenantId()), nz(trace.getUserId()), trace.getTraceId(),
-                trace.getSessionId(), trace.getAgentId(), trace.getOrchestration(), trace.getModel(),
+                trace.getParentTraceId(), trace.getSessionId(), trace.getAgentId(), trace.getOrchestration(), trace.getModel(),
                 trace.getStartTime(), trace.getDurationMs(), trace.isSuccess(), trace.getErrorCode(),
                 stepIndex, stepType, stepContent, createTime
         };
@@ -107,6 +135,7 @@ public class JdbcTraceStore implements TraceStore {
                 run.setTraceId(str(row.get("trace_id")));
                 run.setTenantId(nz(str(row.get("tenant_id"))));
                 run.setUserId(nz(str(row.get("user_id"))));
+                run.setParentTraceId(str(row.get("parent_trace_id")));
                 run.setSessionId(str(row.get("session_id")));
                 run.setAgentId(str(row.get("agent_id")));
                 run.setOrchestration(str(row.get("orchestration")));

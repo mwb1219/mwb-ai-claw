@@ -19,4 +19,16 @@ public interface MemoryRetriever {
      * @return 命中的记忆页（FACT / SUMMARY / RETRIEVED）
      */
     List<MemoryPage> search(AgentScope scope, String query, int topK);
+
+    /**
+     * 共享记忆检索（T11 去重）：只搜「其他会话摘要 + 归档」，不纳入事实页（由 readContext 已全量加载）。
+     * 当前会话摘要的排除由 readContext 层 pageId 去重兜底完成。
+     * <p>
+     * 默认委托 {@link #search}；实现方可通过 {@code MemorySearchable.searchSharedOnly} 缩小范围。
+     *
+     * @return 命中的记忆页（SUMMARY / ARCHIVE / RETRIEVED）
+     */
+    default List<MemoryPage> searchShared(AgentScope scope, String query, int topK) {
+        return search(scope, query, topK);
+    }
 }

@@ -35,6 +35,9 @@ public class TraceRun {
     /** 使用的模型 */
     private String model;
 
+    /** 父 trace id（跨实例/嵌套编排链路关联：delegate 子任务 trace 记录其父 traceId，缺失时为 null） */
+    private String parentTraceId;
+
     /** 执行开始时间戳（epoch 毫秒） */
     private long startTime;
 
@@ -49,4 +52,7 @@ public class TraceRun {
 
     /** 步骤级明细（Thought / Action / Observation / Info） */
     private List<TraceStep> steps = new ArrayList<>();
+
+    /** 子 trace 列表（expand=true 聚合跨实例完整调用树时填充，非展开时不回填） */
+    private List<TraceRun> children;
 }

@@ -81,10 +81,39 @@ public class VectorMemoryRetriever implements MemoryRetriever {
             log.debug("向量记忆检索(Redis 下推) '{}' 命中 {} 条", query, pushed.size());
             return pushed;
         }
+        return searchInMemory(scope, queryVec, false, topK);
+    }
 
-        // 候选 = 事实 + 摘要 + 档案（跨会话，多 Agent 共享，scope 隔离）
+    @Override
+    public List<MemoryPage> searchShared(AgentScope scope, String query, int topK) {
+        if (!config.isVectorEnabled()) {
+            return new ArrayList<>();
+        }
+        if (query == null || query.trim().isEmpty() || topK <= 0) {
+            return new ArrayList<>();
+        }
+        float[] queryVec = embeddingGateway.embed(query);
+        if (queryVec == null || queryVec.length == 0) {
+            return new ArrayList<>();
+        }
+        // T11：与 search 一致，Redis 下推覆盖 SUMMARY+ARCHIVE；内存打分时排除事实
+        if (pageStore instanceof MemorySearchable) {
+            List<MemoryPage> pushed = ((MemorySearchable) pageStore).searchByVector(scope, queryVec, topK);
+            log.debug("向量记忆检索(共享) '{}' 命中 {} 条", query, pushed.size());
+            return pushed;
+        }
+        return searchInMemory(scope, queryVec, true, topK);
+    }
+
+    // ==================== 私有方法 ====================
+
+    /** 内存向量打分（sharedOnly=true 时不加载事实，T11 缩小范围） */
+    private List<MemoryPage> searchInMemory(AgentScope scope, float[] queryVec, boolean sharedOnly, int topK) {
+        // 候选 = 摘要 + 档案（跨会话，多 Agent 共享，scope 隔离）；sharedOnly 时也不含事实
         List<MemoryPage> candidates = new ArrayList<>();
-        candidates.addAll(pageStore.loadFacts(scope));
+        if (!sharedOnly) {
+            candidates.addAll(pageStore.loadFacts(scope));
+        }
         candidates.addAll(pageStore.listAllSummaries(scope));
         candidates.addAll(pageStore.listAllArchive(scope));
 
@@ -105,11 +134,8 @@ public class VectorMemoryRetriever implements MemoryRetriever {
         for (int i = 0; i < Math.min(topK, scored.size()); i++) {
             result.add(scored.get(i).page);
         }
-        log.debug("向量记忆检索 '{}' 命中 {} 条", query, result.size());
         return result;
     }
-
-    // ==================== 私有方法 ====================
 
     /** 取候选页向量：内存缓存 → 磁盘缓存 → 计算并写盘（缓存 key 带 scope 前缀防串户） */
     private float[] vectorOf(AgentScope scope, MemoryPage page) {

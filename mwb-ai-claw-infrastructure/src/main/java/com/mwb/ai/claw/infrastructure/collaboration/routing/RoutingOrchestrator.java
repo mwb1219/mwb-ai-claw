@@ -9,6 +9,7 @@ import com.mwb.ai.claw.domain.collaboration.spi.AgentRouter;
 import com.mwb.ai.claw.domain.core.ReActResult;
 import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.memory.layered.LayeredMemoryGateway;
+import com.mwb.ai.claw.infrastructure.memory.longterm.LongTermMemoryWriter;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
@@ -25,6 +26,9 @@ public class RoutingOrchestrator implements AgentOrchestrator {
 
     @Resource
     private LayeredMemoryGateway layeredMemoryGateway;
+
+    @Resource
+    private LongTermMemoryWriter longTermMemoryWriter;
 
     @Override
     public String type() {
@@ -51,6 +55,10 @@ public class RoutingOrchestrator implements AgentOrchestrator {
 
         // 追加用户消息（D2 多模态：parts 非空时携带图片片段）并执行 ReAct
         session.addUserMessage(ctx.getMessage(), ctx.getParts());
+
+        // T8-A 关键字触发入口（异步，不阻塞）：命中「我叫/我是/记住我」等身份/风格声明即写入 MEMORY.md
+        longTermMemoryWriter.captureAsync(ctx.getScope(), ctx.getMessage());
+
         ReActResult result = ctx.getExecutionUnit()
                 .runSession(session, agent, ctx.getCallback(), ctx.getStreamCallback());
 

@@ -27,9 +27,20 @@ public interface LongTermMemoryGateway {
     String loadMemory(AgentScope scope);
 
     /**
-     * 保存 MEMORY.md 内容（覆盖写入）。
+     * 保存 MEMORY.md 内容（覆盖写入，由调用方自行做合并去重）。
      *
      * @param content 新的长期记忆内容
      */
     void saveMemory(AgentScope scope, String content);
+
+    /**
+     * 保存 AGENT.md 内容（T9：租户级 Agent 行为规则，覆盖写入；业务方运行时更新无需重启）。
+     * <p>
+     * 默认空实现（不修改 AGENT.md）：为 SPI 扩展点，自定义网关需显式实现。
+     *
+     * @param content 新的 Agent 行为规则内容
+     */
+    default void saveAgentInstructions(AgentScope scope, String content) {
+        // 默认不落地，避免破坏既有自定义实现；JDBC / 文件实现均覆盖此方法
+    }
 }

@@ -143,6 +143,23 @@ public class RedisMemoryIndexer {
         }
     }
 
+    // ==================== T6：过期清理（DB 清理时同步失效派生索引） ====================
+
+    /** 清理 create_time 早于 cutoff 的页面/FACT 派生索引条目（跨所有 scope 全局执行，供定时任务在 DB 清理后调用）。 */
+    public void cleanExpired(long cutoff) {
+        try {
+            // 同时覆盖 FACT / SUMMARY / ARCHIVE：create_time 数值范围查询
+            List<String> keys = template.keysByQuery(
+                    template.index("memory"), "@create_time:[-inf (" + cutoff + "]", 10000);
+            if (keys != null && !keys.isEmpty()) {
+                template.delete(keys.toArray(new String[0]));
+                log.info("Memory Redis 索引过期清理: 删除 {} 条 (cutoff={})", keys.size(), cutoff);
+            }
+        } catch (Exception e) {
+            log.warn("Memory Redis 索引过期清理失败: {}", e.getMessage());
+        }
+    }
+
     // ==================== 索引管理 ====================
 
     /** 懒建 Memory 索引：维度以首次向量写入确定，后续维度变化跳过向量字段；索引被外部

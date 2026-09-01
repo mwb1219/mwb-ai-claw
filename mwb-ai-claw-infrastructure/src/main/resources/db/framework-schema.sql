@@ -158,6 +158,7 @@ CREATE TABLE IF NOT EXISTS claw_trace (
     tenant_id     VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '租户 id（空串=默认空间）',
     user_id       VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '用户 id（空串=默认空间）',
     trace_id      VARCHAR(64)  NOT NULL COMMENT '链路 id（与 /trace/{traceId} 对应）',
+    parent_trace_id VARCHAR(64) DEFAULT NULL COMMENT '父 trace id（跨实例/嵌套编排链路聚合，expand=true 用）',
     session_id    VARCHAR(64)  DEFAULT NULL COMMENT '会话 id',
     agent_id      VARCHAR(64)  DEFAULT NULL COMMENT 'Agent id',
     orchestration VARCHAR(32)  DEFAULT NULL COMMENT '编排 id',

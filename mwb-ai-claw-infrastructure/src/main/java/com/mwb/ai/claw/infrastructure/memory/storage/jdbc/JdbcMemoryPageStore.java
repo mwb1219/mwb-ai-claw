@@ -231,6 +231,23 @@ public class JdbcMemoryPageStore implements MemoryPageStore, MemorySearchable {
         }
     }
 
+    // ==================== T6：过期记忆页清理（全局跨 scope） ====================
+
+    /**
+     * 清理所有 scope 下 create_time 早于 cutoff 的 SUMMARY / ARCHIVE 记忆页；返回删除条数。
+     * 供后台清理任务调用（MySQL 权威删除），Redis 派生索引的同步失效由调用方触发 {@code indexer.cleanExpired}。
+     */
+    public int deleteSummaryArchiveOlderThan(long cutoff) {
+        String sql = "DELETE FROM claw_memory_page WHERE page_type IN ('SUMMARY','ARCHIVE') AND create_time < ?";
+        return jdbc.update(sql, cutoff);
+    }
+
+    /** 清理所有 scope 下 update_time 早于 cutoff 的事实页；返回删除条数。 */
+    public int deleteFactsOlderThan(long cutoff) {
+        String sql = "DELETE FROM claw_fact WHERE update_time < ?";
+        return jdbc.update(sql, cutoff);
+    }
+
     // ==================== Phase 2：无锁 CAS 边界游标 claim ====================
 
     @Override

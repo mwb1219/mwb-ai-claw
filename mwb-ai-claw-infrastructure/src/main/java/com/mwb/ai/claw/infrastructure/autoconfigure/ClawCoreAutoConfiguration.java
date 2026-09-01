@@ -68,6 +68,8 @@ import com.mwb.ai.claw.infrastructure.core.AgentGatewayImpl;
 import com.mwb.ai.claw.infrastructure.llm.LlmGatewayImpl;
 import com.mwb.ai.claw.infrastructure.llm.OpenAiEmbeddingGateway;
 import com.mwb.ai.claw.infrastructure.llm.ResilientLlmGateway;
+import com.mwb.ai.claw.infrastructure.llm.LlmCircuitBreaker;
+import com.mwb.ai.claw.infrastructure.llm.LlmRateLimiter;
 import com.mwb.ai.claw.infrastructure.llm.provider.AnthropicLlmGateway;
 import com.mwb.ai.claw.infrastructure.llm.provider.GeminiLlmGateway;
 import com.mwb.ai.claw.infrastructure.llm.provider.ProviderRoutingGateway;
@@ -76,6 +78,7 @@ import com.mwb.ai.claw.domain.memory.layered.LayeredMemoryStrategy;
 import com.mwb.ai.claw.domain.memory.simple.SimpleMemoryStrategy;
 import com.mwb.ai.claw.infrastructure.memory.storage.file.FileBasedMemoryGateway;
 import com.mwb.ai.claw.infrastructure.memory.storage.file.FileBasedSessionGateway;
+import com.mwb.ai.claw.infrastructure.memory.storage.MemoryPageCleanupScheduler;
 import com.mwb.ai.claw.infrastructure.memory.storage.file.FileMemoryPageStore;
 import com.mwb.ai.claw.infrastructure.memory.storage.jdbc.JdbcLongTermMemoryGateway;
 import com.mwb.ai.claw.infrastructure.memory.storage.jdbc.JdbcMemoryPageStore;
@@ -205,14 +208,34 @@ public class ClawCoreAutoConfiguration {
     public LlmGateway llmGateway(org.springframework.web.client.RestTemplate restTemplate,
                                  MetricsRecorder metrics, AgentProperties properties) {
         // 默认实现：Provider 路由网关（openai/ollama/anthropic/gemini）外层包韧性装饰器
-        //（重试/退避/fallback/token 预算）；用户自定义 LlmGateway Bean 不经包装
+        //（重试/退避/fallback/token 预算 + T7 限流/熔断）；用户自定义 LlmGateway Bean 不经包装
         int connect = properties.getLlm().getConnectTimeoutMs();
         int read = properties.getLlm().getReadTimeoutMs();
         LlmGateway openAi = new LlmGatewayImpl(restTemplate, metrics, connect, read);
         LlmGateway anthropic = new AnthropicLlmGateway(restTemplate, metrics, connect, read);
         LlmGateway gemini = new GeminiLlmGateway(restTemplate, metrics, connect, read);
         LlmGateway router = new ProviderRoutingGateway(openAi, anthropic, gemini);
-        return new ResilientLlmGateway(router, properties.getLlm(), metrics);
+        return new ResilientLlmGateway(router, properties.getLlm(), metrics,
+                rateLimiter(properties), circuitBreaker(properties));
+    }
+
+    /** T7 装配：请求级限流器（agent.llm.rate-limit 配置；开关关闭时返回 null 不生效）。 */
+    private LlmRateLimiter rateLimiter(AgentProperties properties) {
+        AgentProperties.LlmResilienceConfig c = properties.getLlm();
+        if (!c.isRateLimitEnabled()) {
+            return null;
+        }
+        return new LlmRateLimiter((int) c.getRateLimitQps(), c.getRateLimitMaxConcurrency());
+    }
+
+    /** T7 装配：模型级熔断器（agent.llm.circuit-breaker 配置；开关关闭时返回 null 不生效）。 */
+    private LlmCircuitBreaker circuitBreaker(AgentProperties properties) {
+        AgentProperties.LlmResilienceConfig c = properties.getLlm();
+        if (!c.isCircuitBreakerEnabled()) {
+            return null;
+        }
+        return new LlmCircuitBreaker(c.getCircuitBreakerFailureThresholdPercent(),
+                c.getCircuitBreakerMinRequests(), c.getCircuitBreakerOpenMs());
     }
 
     @Bean
@@ -710,6 +733,16 @@ public class ClawCoreAutoConfiguration {
         @ConditionalOnClass(RedisConnectionFactory.class)
         public RedisMemorySearchable redisMemorySearchable(RedisSearchTemplate redisSearchTemplate) {
             return new RedisMemorySearchable(redisSearchTemplate);
+        }
+
+        /** T6：记忆页过期清理定时任务（db 形态；cleanup-enabled=false 或文件存储时静默不启用）。 */
+        @Bean
+        @ConditionalOnMissingBean(MemoryPageCleanupScheduler.class)
+        public MemoryPageCleanupScheduler memoryPageCleanupScheduler(JdbcMemoryPageStore jdbcMemoryPageStore,
+                                                                     ObjectProvider<RedisMemoryIndexer> indexer,
+                                                                     AgentProperties properties) {
+            return new MemoryPageCleanupScheduler(jdbcMemoryPageStore,
+                    indexer.getIfAvailable(), properties.getMemory());
         }
     }
 

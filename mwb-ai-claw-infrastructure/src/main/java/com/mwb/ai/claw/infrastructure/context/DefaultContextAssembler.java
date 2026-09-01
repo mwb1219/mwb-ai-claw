@@ -220,6 +220,7 @@ public class DefaultContextAssembler implements ContextAssembler {
         if (ragContext != null && !ragContext.trim().isEmpty()) {
             systemPrompt.append(ragContext);
         }
+        appendMemoryDivision(systemPrompt);
         appendSkills(systemPrompt);
         appendBudgetHint(systemPrompt, agent);
         if (promptInjectionGuard) {
@@ -267,9 +268,20 @@ public class DefaultContextAssembler implements ContextAssembler {
     }
 
     /**
-     * 注入推理步数预算提示：告知 LLM 可用步数与工具调用建议，减少无效往返
-     * （配合 ReActLoopService 的动态步数扩展，让 LLM 高效利用预算）。
+     * 追加「长期记忆分工」指令（T8+T9）：明确两种长期记忆的写入分流规则，避免 LLM 误写。
+     * - AGENT.md：行为规则层（禁止/允许什么、风格约束），业务方配置，不要自动修改；
+     * - MEMORY.md：用户校准层（身份/风格偏好），可通过 write_long_term_memory 自动积累；
+     * - 事实页（write_memory）：数据点/知识点，可检索、可能被预算挤掉。
      */
+    private void appendMemoryDivision(StringBuilder sb) {
+        sb.append("\n\n## 长期记忆分工\n")
+                .append("- 用户明确声明的<b>身份/姓名/职业/风格偏好/关注领域</b>（如“我叫…”“我是…”“我的风格是…”）"
+                        + "→ 使用 write_long_term_memory 写入 MEMORY.md（增量合并、跨会话固定注入）。\n")
+                .append("- <b>数据点/知识点/项目上下文/重要决策</b> → 使用 write_memory 写入事实页（可检索、可能被预算挤掉）。\n")
+                .append("- AGENT.md 是业务方配置的行为规则层（禁止/允许什么、风格约束），你<b>不应</b>改动它，只遵循其中规则。\n")
+                .append("- 不是值得长期保留的信息时，两种工具都不要调用。");
+    }
+
     private void appendBudgetHint(StringBuilder sb, Agent agent) {
         sb.append("\n\n## 推理预算\n")
                 .append("本次任务有 ").append(agent.getMaxSteps())

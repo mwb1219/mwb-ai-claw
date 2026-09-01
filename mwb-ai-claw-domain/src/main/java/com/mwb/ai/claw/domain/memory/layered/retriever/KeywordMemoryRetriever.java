@@ -45,22 +45,42 @@ public class KeywordMemoryRetriever implements MemoryRetriever {
             return new ArrayList<>();
         }
         if (pageStore instanceof MemorySearchable) {
-            return searchWithPushdown(scope, terms, topK);
+            return searchWithPushdown(scope, "FULL", terms, topK);
         }
-        return searchWithInMemoryScore(scope, terms, topK);
+        return searchWithInMemoryScore(scope, false, terms, topK);
     }
 
-    /** db 模式：SQL 下推（事实页 + 记忆页各自按权重排序，合并后截断 topK） */
-    private List<MemoryPage> searchWithPushdown(AgentScope scope, Set<String> terms, int topK) {
+    @Override
+    public List<MemoryPage> searchShared(AgentScope scope, String query, int topK) {
+        if (query == null || query.trim().isEmpty() || topK <= 0) {
+            return new ArrayList<>();
+        }
+        Set<String> terms = tokenize(query);
+        if (terms.isEmpty()) {
+            return new ArrayList<>();
+        }
+        if (pageStore instanceof MemorySearchable) {
+            // T11：只搜共享记忆（其他会话摘要 + 归档），不下推事实
+            return searchWithPushdown(scope, "SHARED", terms, topK);
+        }
+        return searchWithInMemoryScore(scope, true, terms, topK);
+    }
+
+    /** db 模式：SQL 下推（mode=FULL 含事实；mode=SHARED 仅摘要+归档，T11 去重缩小范围） */
+    private List<MemoryPage> searchWithPushdown(AgentScope scope, String mode, Set<String> terms, int topK) {
         MemorySearchable searchable = (MemorySearchable) pageStore;
         List<String> termList = new ArrayList<>(terms);
         List<MemoryPage> hits = new ArrayList<>();
-        hits.addAll(searchable.searchFacts(scope, termList, topK));
-        hits.addAll(searchable.searchPages(scope, termList, topK));
+        if ("FULL".equals(mode)) {
+            hits.addAll(searchable.searchFacts(scope, termList, topK));
+            hits.addAll(searchable.searchPages(scope, termList, topK));
+        } else {
+            hits.addAll(searchable.searchSharedOnly(scope, termList, topK));
+        }
         if (hits.size() > topK) {
             hits = new ArrayList<>(hits.subList(0, topK));
         }
-        log.debug("记忆检索(SQL 下推) '{}' 命中 {} 条", queryOf(terms), hits.size());
+        log.debug("记忆检索(SQL 下推,{}模式) '{}' 命中 {} 条", mode, queryOf(terms), hits.size());
         return hits;
     }
 
@@ -68,10 +88,12 @@ public class KeywordMemoryRetriever implements MemoryRetriever {
         return String.join(" ", terms);
     }
 
-    /** file 模式：全量加载 + 内存打分（原有逻辑） */
-    private List<MemoryPage> searchWithInMemoryScore(AgentScope scope, Set<String> terms, int topK) {
+    /** file 模式：全量加载 + 内存打分（sharedOnly=true 时不加载事实，T11 缩小范围） */
+    private List<MemoryPage> searchWithInMemoryScore(AgentScope scope, boolean sharedOnly, Set<String> terms, int topK) {
         List<MemoryPage> candidates = new ArrayList<>();
-        candidates.addAll(pageStore.loadFacts(scope));
+        if (!sharedOnly) {
+            candidates.addAll(pageStore.loadFacts(scope));
+        }
         candidates.addAll(pageStore.listAllSummaries(scope));
         candidates.addAll(pageStore.listAllArchive(scope));
 

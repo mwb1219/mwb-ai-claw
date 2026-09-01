@@ -47,27 +47,31 @@ public class JdbcSessionGateway implements SessionGateway {
         String userId = norm(session.getUserId());
         String sessionId = session.getSessionId();
         ScopeClause where = scopeWhere(tenantId, userId);
+        Long now = System.currentTimeMillis();
+        String status = session.getStatus() == null ? null : session.getStatus().name();
 
-        // 1. 检查会话是否存在（WHERE 子句除 session_id 外还有 tenant_id/user_id 占位符，须一并绑定）
-        String countSql = "SELECT COUNT(*) FROM claw_session WHERE session_id = ? AND " + where.sql;
-        Integer cnt = jdbc.queryForObject(countSql, Integer.class, buildArgs(sessionId, where.args).toArray());
-        boolean exists = cnt != null && cnt > 0;
-
-        if (!exists) {
-            // 新建会话
-            String status = session.getStatus() == null ? null : session.getStatus().name();
-            jdbc.update(
-                    "INSERT INTO claw_session (tenant_id, user_id, session_id, agent_id, title, status, version, msg_count, create_time, update_time) "
-                            + "VALUES (?,?,?,?,?,?,?,?,?,?)",
-                    tenantId, userId, sessionId, session.getAgentId(), session.getTitle(),
-                    status, session.getVersion(), session.getMessages() == null ? 0 : session.getMessages().size(),
-                    session.getCreateTime(), session.getUpdateTime());
-            // 全量写入消息
-            if (session.getMessages() != null) {
-                insertMessages(tenantId, userId, sessionId, session.getMessages(), 0);
-            }
-            return;
-        }
+        // 1. 单条 UPSERT 会话元数据（INSERT ... ON DUPLICATE KEY UPDATE）
+        //    消除「SELECT COUNT + INSERT/UPDATE」的竞态窗口：两个实例同时入库同一 session_id 时，
+        //    MySQL 借 uk_session(tenant,user,session) 唯一键合并为一次写入，后写者只更新元数据而不报错。
+        //    version 用原子自增（version = version + 1）做乐观版本，避免并发丢失更新。
+        String upsertSql = "INSERT INTO claw_session "
+                + "(tenant_id, user_id, session_id, agent_id, title, status, version, msg_count, create_time, update_time) "
+                + "VALUES (?,?,?,?,?,?,?,?,?,?) "
+                + "ON DUPLICATE KEY UPDATE "
+                + "agent_id=VALUES(agent_id), title=VALUES(title), status=VALUES(status), "
+                + "version=version+1, update_time=VALUES(update_time)";
+        List<Object> metaArgs = new ArrayList<>();
+        metaArgs.add(tenantId);
+        metaArgs.add(userId);
+        metaArgs.add(sessionId);
+        metaArgs.add(session.getAgentId());
+        metaArgs.add(session.getTitle());
+        metaArgs.add(status);
+        metaArgs.add(session.getVersion());
+        metaArgs.add(session.getMessages() == null ? 0 : session.getMessages().size());
+        metaArgs.add(session.getCreateTime());
+        metaArgs.add(now);
+        jdbc.update(upsertSql, metaArgs.toArray());
 
         // 2. 读取当前最大消息序号，作为下一个 msg_index 的起点（MAX+1 消除 msg_count 滞后的竞态窗口）
         Integer maxIdx = jdbc.queryForObject(
@@ -97,26 +101,16 @@ public class JdbcSessionGateway implements SessionGateway {
             }
         }
 
-        // 4. 独立 UPDATE 元数据（version + 1 CAS）+ 用子查询精确同步 msg_count
-        long newVersion = session.getVersion() + 1;
-        session.setVersion(newVersion);
-        session.setUpdateTime(System.currentTimeMillis());
-        String status = session.getStatus() == null ? null : session.getStatus().name();
-        String sql = "UPDATE claw_session SET agent_id=?, title=?, status=?, version=?, msg_count="
-                + "(SELECT c FROM (SELECT COUNT(*) c FROM claw_session_message WHERE session_id=? AND " + where.sql + ") t), "
-                + "update_time=? "
+        // 4. 用子查询精确同步 msg_count（与消息表一致，消除元数据计数滞后的窗口）
+        String syncMsgCount = "UPDATE claw_session SET msg_count = "
+                + "(SELECT c FROM (SELECT COUNT(*) c FROM claw_session_message WHERE session_id=? AND " + where.sql + ") t) "
                 + "WHERE session_id = ? AND " + where.sql;
-        List<Object> args = new ArrayList<>();
-        args.add(session.getAgentId());
-        args.add(session.getTitle());
-        args.add(status);
-        args.add(newVersion);
-        args.add(sessionId);
-        args.addAll(where.args);
-        args.add(session.getUpdateTime());
-        args.add(sessionId);
-        args.addAll(where.args);
-        jdbc.update(sql, args.toArray());
+        List<Object> syncArgs = new ArrayList<>();
+        syncArgs.add(sessionId);
+        syncArgs.addAll(where.args);
+        syncArgs.add(sessionId);
+        syncArgs.addAll(where.args);
+        jdbc.update(syncMsgCount, syncArgs.toArray());
     }
 
     /** 批量 INSERT 消息（忽略已存在的 msg_index，防并发重复） */
