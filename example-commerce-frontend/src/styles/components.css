@@ -472,6 +472,34 @@
   flex-direction: column;
 }
 
+/* 归档历史分隔线：标记活动热窗与已归档跨会话档案原文的边界 */
+.archive-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin: 2px 0;
+  color: var(--text-faint);
+  user-select: none;
+}
+
+.archive-divider-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border-color, rgba(128, 128, 128, 0.25));
+}
+
+.archive-divider-label {
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: var(--bg-elevated, transparent);
+  padding: 4px 10px;
+  border-radius: 99px;
+  border: 1px dashed var(--border-color, rgba(128, 128, 128, 0.35));
+}
+
 .messages {
   flex: 1;
   overflow-y: auto;

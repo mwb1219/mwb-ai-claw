@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 
 import com.mwb.ai.claw.domain.tool.McpServerConfig;
 import com.mwb.ai.claw.infrastructure.util.ConfigFileLocator;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
+import com.mwb.ai.claw.domain.util.JsonUtils;
 
 /**
  * MCP Server 配置加载器：从 mcp-server.json 读取配置。

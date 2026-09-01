@@ -3,10 +3,11 @@ package com.mwb.ai.claw.infrastructure.config;
 import com.mwb.ai.claw.exception.BizException;
 import com.mwb.ai.claw.domain.collaboration.model.OrchestrationDefinition;
 import com.mwb.ai.claw.domain.collaboration.spi.AgentOrchestrator;
+import com.mwb.ai.claw.domain.collaboration.spi.OrchestrationConfigProvider;
+import com.mwb.ai.claw.domain.collaboration.spi.OrchestratorResolver;
 import com.mwb.ai.claw.dto.data.AgentErrorCode;
-import com.mwb.ai.claw.infrastructure.collaboration.registry.OrchestratorRegistry;
 import com.mwb.ai.claw.infrastructure.util.ConfigFileLocator;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
+import com.mwb.ai.claw.domain.util.JsonUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -29,22 +30,22 @@ import java.util.stream.Collectors;
  * 启动时预加载并执行启动校验（fail-fast：id 重复 / type 未注册 / 引用 agentId 不存在启动即报错）。
  */
 @Component
-public class OrchestrationConfigLoader {
+public class OrchestrationConfigLoader implements OrchestrationConfigProvider {
 
     private static final Logger log = LoggerFactory.getLogger(OrchestrationConfigLoader.class);
 
     private static final String FILE_NAME = "orchestrations.json";
 
-    private final OrchestratorRegistry orchestratorRegistry;
+    private final OrchestratorResolver orchestratorResolver;
     private final AgentRegistryLoader agentRegistryLoader;
     private final AgentProperties agentProperties;
 
     private volatile Map<String, OrchestrationDefinition> cached;
 
-    public OrchestrationConfigLoader(OrchestratorRegistry orchestratorRegistry,
+    public OrchestrationConfigLoader(OrchestratorResolver orchestratorResolver,
                                      AgentRegistryLoader agentRegistryLoader,
                                      AgentProperties agentProperties) {
-        this.orchestratorRegistry = orchestratorRegistry;
+        this.orchestratorResolver = orchestratorResolver;
         this.agentRegistryLoader = agentRegistryLoader;
         this.agentProperties = agentProperties;
     }
@@ -63,10 +64,18 @@ public class OrchestrationConfigLoader {
     }
 
     /**
-     * 按 id 取编排定义；不存在抛业务异常并列出可用 id。
+     * 按 id 取编排定义；不存在返回 null。
      */
+    @Override
     public OrchestrationDefinition get(String id) {
-        OrchestrationDefinition definition = loadIndexed().get(id);
+        return loadIndexed().get(id);
+    }
+
+    /**
+     * 按 id 取编排定义；不存在抛业务异常并列出可用 id（供外部调用，保持兼容）。
+     */
+    public OrchestrationDefinition getOrThrow(String id) {
+        OrchestrationDefinition definition = get(id);
         if (definition == null) {
             throw new BizException(AgentErrorCode.B_AGENT_CONFIG_ERROR.getErrCode(),
                     "编排不存在: " + id + "（可用编排: " + loadIndexed().keySet() + "）");
@@ -120,12 +129,8 @@ public class OrchestrationConfigLoader {
 
     /** 启动校验：type 已注册、引用 agentId 存在 */
     private void validate(OrchestrationDefinition definition, Set<String> knownAgentIds) {
-        AgentOrchestrator plugin = orchestratorRegistry.get(definition.getType());
-        if (plugin == null) {
-            throw new IllegalArgumentException("编排 '" + definition.getId()
-                    + "' 引用了未注册的类型 '" + definition.getType() + "'");
-        }
-        plugin.validate(definition);
+        // 用 OrchestratorResolver.resolve 间接校验（会抛 IllegalArgumentException）
+        AgentOrchestrator plugin = orchestratorResolver.resolve(definition);
         if (definition.getAgents() != null) {
             for (String agentId : definition.getAgents()) {
                 if (!knownAgentIds.contains(agentId)) {

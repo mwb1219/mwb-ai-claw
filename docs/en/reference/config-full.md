@@ -86,6 +86,9 @@ nav_order: 3
 | `vector-enabled` | `true` | Whether the vector index is enabled |
 | `embedding-model` / `-base-url` / `-api-key` | Inherits default | Embedding configuration |
 | `archive-enabled` | `true` | Archive raw session content at the end of a session |
+| `archive-keep-recent` | `0` | Keep the most recent N raw messages unarchived per session (0=falls back to `hot-window-size`; recent window stays unarchived during an active session) |
+| `archive-idle-timeout` | `30m` | How long a session must be idle before its remaining window is converged (e.g. `30m`; `null`/0 disables idle convergence) |
+| `archive-min-tokens` | `0` | Blocks below this token count only keep a summary, not full text (0=no limit, always archive) |
 | `shared-retrieve` | `true` | Shared retrieval across multiple Agents |
 | `synthesizer-model` / `-base-url` / `-api-key` | Inherits default | Dedicated small model for synthesis |
 | `synthesis-cache-size` | `50` | Synthesis cache capacity (≤0 disables it) |

@@ -5,6 +5,7 @@ Thank you for considering contributing to mwb-ai-claw! We welcome bug reports, f
 ## Quick links
 
 - Documentation: [docs/README.md](docs/README.md)
+
 - License: [Apache-2.0](LICENSE)
 
 ## Development setup
@@ -19,11 +20,17 @@ mvn package -pl start -am -DskipTests      # build only the runnable start modul
 ## Project layout
 
 - `mwb-ai-claw-client` — public client-facing interfaces (API contract)
+
 - `mwb-ai-claw-adapter` — adapters (Web / REST / WebSocket / Shell entry points)
+
 - `mwb-ai-claw-app` — application layer (use-case orchestration, `ClawRuntime`)
+
 - `mwb-ai-claw-domain` — domain layer (Agent / tool / memory core models)
+
 - `mwb-ai-claw-infrastructure` — infrastructure (LLM clients, storage, tool sandbox, MCP)
+
 - `mwb-ai-claw-spring-boot-starter` — Spring Boot auto-configuration
+
 - `example-embed` / `example-web` / `start` — samples and the runnable launcher
 
 Follow the COLA (DDD) layering: keep dependency arrows pointing inward (adapter → app → domain ← infrastructure).
@@ -57,4 +64,6 @@ Follow the COLA (DDD) layering: keep dependency arrows pointing inward (adapter 
 ## Reporting issues
 
 - Bugs: use the [bug report template](.github/ISSUE_TEMPLATE/bug_report.yml).
+
 - Feature ideas: use the [feature request template](.github/ISSUE_TEMPLATE/feature_request.yml).
+

@@ -15,7 +15,7 @@ import com.mwb.ai.claw.domain.rag.model.RagSearchResult;
 import com.mwb.ai.claw.domain.rag.model.RagVectorQuery;
 import com.mwb.ai.claw.domain.rag.store.RagIndexStore;
 import com.mwb.ai.claw.infrastructure.redis.RedisSearchTemplate;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
+import com.mwb.ai.claw.domain.util.JsonUtils;
 
 /**
  * RAG 索引的 MySQL + Redis 双后端实现（provider=redis，或 auto + storage=db）。

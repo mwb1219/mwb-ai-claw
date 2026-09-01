@@ -8,8 +8,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.mwb.ai.claw.domain.llm.EmbeddingGateway;
-import com.mwb.ai.claw.domain.memory.model.LayeredMemoryConfig;
-import com.mwb.ai.claw.domain.memory.model.MemoryPage;
+import com.mwb.ai.claw.domain.memory.layered.LayeredMemoryConfig;
+import com.mwb.ai.claw.domain.memory.layered.model.MemoryPage;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.infrastructure.redis.RedisSearchTemplate;
 
@@ -140,6 +140,23 @@ public class RedisMemoryIndexer {
         List<String> keys = template.keysByQuery(template.index("memory"), query.toString(), 1000);
         if (keys != null && !keys.isEmpty()) {
             template.delete(keys.toArray(new String[0]));
+        }
+    }
+
+    // ==================== T6：过期清理（DB 清理时同步失效派生索引） ====================
+
+    /** 清理 create_time 早于 cutoff 的页面/FACT 派生索引条目（跨所有 scope 全局执行，供定时任务在 DB 清理后调用）。 */
+    public void cleanExpired(long cutoff) {
+        try {
+            // 同时覆盖 FACT / SUMMARY / ARCHIVE：create_time 数值范围查询
+            List<String> keys = template.keysByQuery(
+                    template.index("memory"), "@create_time:[-inf (" + cutoff + "]", 10000);
+            if (keys != null && !keys.isEmpty()) {
+                template.delete(keys.toArray(new String[0]));
+                log.info("Memory Redis 索引过期清理: 删除 {} 条 (cutoff={})", keys.size(), cutoff);
+            }
+        } catch (Exception e) {
+            log.warn("Memory Redis 索引过期清理失败: {}", e.getMessage());
         }
     }
 

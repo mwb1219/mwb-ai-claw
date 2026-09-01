@@ -15,7 +15,7 @@ import com.mwb.ai.claw.infrastructure.tool.mcp.transport.McpTransport;
 import com.mwb.ai.claw.infrastructure.tool.mcp.transport.SseTransport;
 import com.mwb.ai.claw.infrastructure.tool.mcp.transport.StdioTransport;
 import com.mwb.ai.claw.infrastructure.tool.mcp.transport.StreamableHttpTransport;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
+import com.mwb.ai.claw.domain.util.JsonUtils;
 
 /**
  * MCP 客户端：封装 JSON-RPC 2.0 协议，提供 initialize / tools/list / tools/call 等方法。

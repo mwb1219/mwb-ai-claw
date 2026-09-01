@@ -18,6 +18,12 @@ nav_order: 4
 | Medium-term | Summary pages (history compression) | `.agent/memory/pages/{sessionId}/summary-*.json` |
 | Long-term | Fact pages (LLM-distilled) | `.agent/memory/facts.jsonl` |
 
+> **Archive strategy & read paths**: In layered memory, "Archive" and "Summarize" cooperate——Summarize compresses the oldest blocks into summary pages (serving the context-token budget), while Archive persists the raw text of blocks that have rolled out of the hot window into cross-session archive pages (`ARCHIVE`, serving cross-session retrieval).
+> - Archive keeps the hot window: each session run archives only the old blocks that already rolled out of the hot window (`archive-keep-recent`, defaults to `hot-window-size`); the most recent raw messages stay `archived=0` during an active session, so the working memory (Hot) is never drained.
+> - Converge on true session end: once a session is idle beyond `archive-idle-timeout`, the remaining hot window is archived as a whole and facts are consolidated.
+> - The archive start follows summarize progress (avoiding duplicate/no-op archive); blocks below `archive-min-tokens` keep only their summary, not full text.
+> - Read-path separation: `SessionGateway.getSession` (active, `archived=0`) serves the model's working memory; the new `getSessionFull` (full, including archived) serves the frontend session detail / history display. Both storage backends (JDBC marking the `archived` column, File holding full content) provide consistent "active / full" semantics through these two paths.
+
 ## 2. Dynamic Paging
 
 - [ ] Token budget model: `context-window × budget-ratio`; System / Tools / Memory allocated proportionally

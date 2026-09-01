@@ -8,9 +8,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.mwb.ai.claw.domain.core.Message;
-import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher.Kind;
+import com.mwb.ai.claw.domain.memory.layered.spi.MemorySynthesisDispatcher.Kind;
 import com.mwb.ai.claw.domain.scope.AgentScope;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
+import com.mwb.ai.claw.domain.util.JsonUtils;
 /**
  * JDBC 快照暂存实现：使用 {@code claw_memory_snapshot} 表。
  * <p>

@@ -14,16 +14,20 @@ import com.mwb.ai.claw.domain.llm.LlmMessage;
 import com.mwb.ai.claw.domain.llm.LlmRequest;
 import com.mwb.ai.claw.domain.llm.LlmResponse;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
+import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.observability.MetricsRecorder;
-import com.mwb.ai.claw.infrastructure.util.TokenEstimator;
+import com.mwb.ai.claw.domain.util.TokenEstimator;
 
 /**
- * LLM 韧性装饰器：包装主 {@link LlmGateway}，提供重试退避、备用模型降级与 token 预算保护。
+ * LLM 韧性装饰器：包装主 {@link LlmGateway}，提供请求级限流、模型级熔断、重试退避、
+ * 备用模型降级与 token 预算保护。
  * <p>
  * - 重试：仅对瞬时错误（HTTP 429 / 5xx / 连接与读超时 / 网络 IOException，由
  *   {@link RetryableLlmException} 标识）进行指数退避 + 抖动重试；业务错误（4xx）不重试。
  * - 降级：主模型重试耗尽后，若配置了 {@code agent.llm.fallback-model}，用备用模型发起一次（不重试）。
+ * - 限流（T7）：按 tenant+model 维度 QPS + 并发数限制，超限返回 429 语义错误。
+ * - 熔断（T7）：某模型窗口内错误率超阈值自动熔断 {@code openMs} 毫秒，期间短路请求。
  * - 预算：每次调用成功后按响应 usage（缺失时估算）累计到当前线程的 {@link RunTokenBudget}，
  *   超限即中止并返回明确错误，避免单次运行 token 失控。
  * - 单消息截断：请求中单条消息超过 {@code agent.llm.max-single-message-tokens} 时按估算截断并 WARN。
@@ -37,41 +41,76 @@ public class ResilientLlmGateway implements LlmGateway {
     private final LlmGateway delegate;
     private final AgentProperties.LlmResilienceConfig config;
     private final MetricsRecorder metrics;
+    private final LlmRateLimiter rateLimiter;
+    private final LlmCircuitBreaker circuitBreaker;
     private final Random random = new Random();
 
     public ResilientLlmGateway(LlmGateway delegate, AgentProperties.LlmResilienceConfig config,
                                MetricsRecorder metrics) {
+        this(delegate, config, metrics, null, null);
+    }
+
+    /** T7：传入限流器 / 熔断器实例（null 表示对应保护关闭）。 */
+    public ResilientLlmGateway(LlmGateway delegate, AgentProperties.LlmResilienceConfig config,
+                               MetricsRecorder metrics, LlmRateLimiter rateLimiter, LlmCircuitBreaker circuitBreaker) {
         this.delegate = delegate;
         this.config = config;
         this.metrics = metrics;
+        this.rateLimiter = rateLimiter;
+        this.circuitBreaker = circuitBreaker;
     }
 
     @Override
     public LlmResponse chat(LlmRequest request, ModelConfig modelConfig) {
         LlmRequest req = sanitize(request);
-        int maxAttempts = config.getRetry().getMaxAttempts();
-        int attempt = 0;
-        while (true) {
-            try {
-                return consumeBudget(req, delegate.chat(req, modelConfig), modelConfig);
-            } catch (RetryableLlmException e) {
-                // 任务被取消（断连回收）：不重试，避免取消后继续消耗 token
-                if (Thread.currentThread().isInterrupted()) {
-                    log.warn("LLM 调用因任务被取消而放弃重试: model={}, err={}",
-                            modelConfig.getModel(), e.getMessage());
-                    return errorResponse("已取消");
+        String key = rateKey(modelConfig);
+        if (circuitBreaker != null && circuitBreaker.isOpen(modelConfig.getModel())) {
+            log.warn("LLM 模型熔断打开，短路请求: model={}", modelConfig.getModel());
+            return errorResponse("模型熔断中（" + modelConfig.getModel() + "），请稍后重试");
+        }
+        if (rateLimiter != null && !rateLimiter.tryAcquire(key)) {
+            log.warn("LLM 请求触发限流(429): key={}", key);
+            return errorResponse("请求过于频繁，已触发限流，请稍后重试");
+        }
+        try {
+            int maxAttempts = config.getRetry().getMaxAttempts();
+            int attempt = 0;
+            while (true) {
+                try {
+                    LlmResponse resp = consumeBudget(req, delegate.chat(req, modelConfig), modelConfig);
+                    if (circuitBreaker != null) {
+                        circuitBreaker.recordSuccess(modelConfig.getModel());
+                    }
+                    return resp;
+                } catch (RetryableLlmException e) {
+                    // 任务被取消（断连回收）：不重试，避免取消后继续消耗 token
+                    if (Thread.currentThread().isInterrupted()) {
+                        log.warn("LLM 调用因任务被取消而放弃重试: model={}, err={}",
+                                modelConfig.getModel(), e.getMessage());
+                        if (circuitBreaker != null) {
+                            circuitBreaker.recordFailure(modelConfig.getModel());
+                        }
+                        return errorResponse("已取消");
+                    }
+                    if (circuitBreaker != null) {
+                        circuitBreaker.recordFailure(modelConfig.getModel());
+                    }
+                    attempt++;
+                    if (attempt > maxAttempts) {
+                        return fallback(req, modelConfig, e);
+                    }
+                    long backoff = backoff(attempt);
+                    log.warn("LLM 调用重试: model={}, attempt={}/{}（0=关闭后不重试）, 原因={}, 下次退避={}ms",
+                            modelConfig.getModel(), attempt, maxAttempts, e.getMessage(), backoff);
+                    if (metrics != null) {
+                        metrics.llmRetry(modelConfig.getModel(), attempt);
+                    }
+                    sleep(backoff);
                 }
-                attempt++;
-                if (attempt > maxAttempts) {
-                    return fallback(req, modelConfig, e);
-                }
-                long backoff = backoff(attempt);
-                log.warn("LLM 调用重试: model={}, attempt={}/{}（0=关闭后不重试）, 原因={}, 下次退避={}ms",
-                        modelConfig.getModel(), attempt, maxAttempts, e.getMessage(), backoff);
-                if (metrics != null) {
-                    metrics.llmRetry(modelConfig.getModel(), attempt);
-                }
-                sleep(backoff);
+            }
+        } finally {
+            if (rateLimiter != null) {
+                rateLimiter.release(key);
             }
         }
     }
@@ -79,29 +118,60 @@ public class ResilientLlmGateway implements LlmGateway {
     @Override
     public LlmResponse streamChat(LlmRequest request, ModelConfig modelConfig, LlmStreamCallback callback) {
         LlmRequest req = sanitize(request);
-        int maxAttempts = config.getRetry().getMaxAttempts();
-        int attempt = 0;
-        while (true) {
-            try {
-                return consumeBudget(req, delegate.streamChat(req, modelConfig, callback), modelConfig);
-            } catch (RetryableLlmException e) {
-                // 任务被取消（断连回收）：不重试，避免取消后继续消耗 token
-                if (Thread.currentThread().isInterrupted()) {
-                    log.warn("LLM 流式调用因任务被取消而放弃重试: model={}, err={}",
-                            modelConfig.getModel(), e.getMessage());
-                    return errorResponse("已取消");
+        String key = rateKey(modelConfig);
+        if (circuitBreaker != null && circuitBreaker.isOpen(modelConfig.getModel())) {
+            log.warn("LLM 流式模型熔断打开，短路请求: model={}", modelConfig.getModel());
+            if (callback != null) {
+                callback.onError(new RetryableLlmException("模型熔断中（" + modelConfig.getModel() + "），请稍后重试"));
+            }
+            return errorResponse("模型熔断中（" + modelConfig.getModel() + "），请稍后重试");
+        }
+        if (rateLimiter != null && !rateLimiter.tryAcquire(key)) {
+            log.warn("LLM 流式请求触发限流(429): key={}", key);
+            if (callback != null) {
+                callback.onError(new RetryableLlmException("请求过于频繁，已触发限流，请稍后重试"));
+            }
+            return errorResponse("请求过于频繁，已触发限流，请稍后重试");
+        }
+        try {
+            int maxAttempts = config.getRetry().getMaxAttempts();
+            int attempt = 0;
+            while (true) {
+                try {
+                    LlmResponse resp = consumeBudget(req, delegate.streamChat(req, modelConfig, callback), modelConfig);
+                    if (circuitBreaker != null) {
+                        circuitBreaker.recordSuccess(modelConfig.getModel());
+                    }
+                    return resp;
+                } catch (RetryableLlmException e) {
+                    // 任务被取消（断连回收）：不重试，避免取消后继续消耗 token
+                    if (Thread.currentThread().isInterrupted()) {
+                        log.warn("LLM 流式调用因任务被取消而放弃重试: model={}, err={}",
+                                modelConfig.getModel(), e.getMessage());
+                        if (circuitBreaker != null) {
+                            circuitBreaker.recordFailure(modelConfig.getModel());
+                        }
+                        return errorResponse("已取消");
+                    }
+                    if (circuitBreaker != null) {
+                        circuitBreaker.recordFailure(modelConfig.getModel());
+                    }
+                    attempt++;
+                    if (attempt > maxAttempts) {
+                        return fallbackStream(req, modelConfig, callback, e);
+                    }
+                    long backoff = backoff(attempt);
+                    log.warn("LLM 流式调用重试: model={}, attempt={}/{}（0=关闭后不重试）, 原因={}, 下次退避={}ms",
+                            modelConfig.getModel(), attempt, maxAttempts, e.getMessage(), backoff);
+                    if (metrics != null) {
+                        metrics.llmRetry(modelConfig.getModel(), attempt);
+                    }
+                    sleep(backoff);
                 }
-                attempt++;
-                if (attempt > maxAttempts) {
-                    return fallbackStream(req, modelConfig, callback, e);
-                }
-                long backoff = backoff(attempt);
-                log.warn("LLM 流式调用重试: model={}, attempt={}/{}（0=关闭后不重试）, 原因={}, 下次退避={}ms",
-                        modelConfig.getModel(), attempt, maxAttempts, e.getMessage(), backoff);
-                if (metrics != null) {
-                    metrics.llmRetry(modelConfig.getModel(), attempt);
-                }
-                sleep(backoff);
+            }
+        } finally {
+            if (rateLimiter != null) {
+                rateLimiter.release(key);
             }
         }
     }
@@ -288,5 +358,11 @@ public class ResilientLlmGateway implements LlmGateway {
 
     private boolean hasText(String s) {
         return s != null && !s.trim().isEmpty();
+    }
+
+    /** 限流 key：tenant + model，未登录/匿名时为默认租户空串兜底。 */
+    private String rateKey(ModelConfig modelConfig) {
+        String tenant = AgentScopeContext.get() == null ? "" : AgentScopeContext.get().getTenantId();
+        return (tenant == null ? "" : tenant) + ":" + modelConfig.getModel();
     }
 }

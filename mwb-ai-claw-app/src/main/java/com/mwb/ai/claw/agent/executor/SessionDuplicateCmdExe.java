@@ -3,7 +3,7 @@ package com.mwb.ai.claw.agent.executor;
 import com.mwb.ai.claw.dto.SingleResponse;
 import com.mwb.ai.claw.exception.BizException;
 import com.mwb.ai.claw.agent.assembler.SessionAssembler;
-import com.mwb.ai.claw.domain.memory.gateway.MemoryGateway;
+import com.mwb.ai.claw.domain.core.SessionGateway;
 import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.dto.data.AgentErrorCode;
@@ -21,10 +21,10 @@ import java.util.UUID;
 public class SessionDuplicateCmdExe {
 
     @Resource
-    private MemoryGateway memoryGateway;
+    private SessionGateway sessionGateway;
 
     public SingleResponse<SessionDTO> execute(String sessionId) {
-        Session src = memoryGateway.getSession(AgentScopeContext.get(), sessionId);
+        Session src = sessionGateway.getSession(AgentScopeContext.get(), sessionId);
         if (src == null) {
             throw new BizException(AgentErrorCode.B_AGENT_SESSION_NOT_FOUND.getErrCode(), "会话不存在: " + sessionId);
         }
@@ -40,7 +40,7 @@ public class SessionDuplicateCmdExe {
         copy.setUserId(src.getUserId());
         copy.setMessages(new ArrayList<>(src.getMessages()));
         copy.setTraceSteps(new ArrayList<>(src.getTraceSteps()));
-        memoryGateway.saveSession(copy);
+        sessionGateway.saveSession(copy);
         return SingleResponse.of(SessionAssembler.toDTO(copy));
     }
 }

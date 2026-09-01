@@ -1,13 +1,16 @@
 -- ============================================================
--- mwb-ai-claw 框架自身数据库脚本（MySQL 版）
+-- mwb-ai-claw 框架自身数据库脚本（由 db/schema.sql 拆分而来）
 -- 覆盖框架内置表：claw_session / claw_fact / claw_memory_page /
 -- claw_long_term（记忆存储）、claw_rag_document / rag_index_entries（RAG）、
 -- claw_trace / claw_run_usage（可观测性）。
 --
+-- 对应 agent.storage.type=db：MySQL 权威存储 + Redis Stack 召回。
 -- 执行方式：mysql -u<user> -p <database> < framework-schema.sql
---           （对应 agent.storage.type=db：MySQL 权威存储 + Redis Stack 召回）
 -- example-web 的接入方用户表 claw_user 见 example-web-schema.sql。
--- 与框架主脚本（mwb-ai-claw-infrastructure/src/main/resources/db/framework-schema.sql）保持同构。
+-- ============================================================
+
+-- ============================================================
+-- 第一部分：MySQL 建表脚本（agent.storage.type=db）
 -- ============================================================
 -- 目标数据库：MySQL 5.7+ / 8.0（InnoDB / utf8mb4）
 --
@@ -21,7 +24,7 @@
 --     会报 Duplicate key name，属预期行为，可忽略。
 
 -- ==================== 会话表 ====================
--- 会话消息以 JSON LONGTEXT 存储（与现有 Session 序列化一致）
+-- 会话元数据；消息拆到 claw_session_message 表逐条存储（消除写/读放大、支持按需加载、防并发覆盖）
 CREATE TABLE IF NOT EXISTS claw_session (
     id          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '自增主键（聚簇索引，非业务字段）',
     tenant_id   VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '租户 id（空串=默认空间）',
@@ -31,14 +34,35 @@ CREATE TABLE IF NOT EXISTS claw_session (
     title       VARCHAR(128) DEFAULT NULL COMMENT '会话标题（展示用，可空）',
     status      VARCHAR(16)  DEFAULT NULL COMMENT '会话状态（active/closed 等）',
     version     BIGINT       NOT NULL DEFAULT 0 COMMENT '乐观锁版本号（并发更新冲突检测）',
+    msg_count   INT          NOT NULL DEFAULT 0 COMMENT '消息总数（含已归档，增量写入时同步更新）',
     create_time BIGINT       NOT NULL COMMENT '创建时间戳（epoch 毫秒）',
     update_time BIGINT       NOT NULL COMMENT '最近更新时间戳（epoch 毫秒，会话列表倒序排序依据）',
-    messages    LONGTEXT     DEFAULT NULL COMMENT '消息列表 JSON（与 Session 序列化一致）',
     PRIMARY KEY (id),
     UNIQUE KEY uk_session (tenant_id, user_id, session_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会话表：会话主体与消息 JSON';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会话表：会话元数据（消息逐条存 claw_session_message）';
 
 CREATE INDEX idx_session_update ON claw_session(tenant_id, user_id, update_time DESC);
+
+-- ==================== 会话消息表 ====================
+-- 逐条追加：每轮对话 INSERT 一条，消除 messages LONGTEXT 的写放大/读放大/并发覆盖
+-- msg_index 在会话内唯一（唯一键防并发重复），archived 标记是否已归档/摘要
+CREATE TABLE IF NOT EXISTS claw_session_message (
+    id            BIGINT       NOT NULL AUTO_INCREMENT COMMENT '自增主键（聚簇索引，非业务字段）',
+    tenant_id     VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '租户 id（空串=默认空间，冗余存储防 JOIN）',
+    user_id       VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '用户 id（空串=默认空间，冗余存储防 JOIN）',
+    session_id    VARCHAR(64)  NOT NULL COMMENT '所属会话 id',
+    msg_index     INT          NOT NULL COMMENT '会话内序号（从 0 起，唯一键防并发重复）',
+    role          VARCHAR(16)  NOT NULL COMMENT '消息角色：user | assistant | tool',
+    content       LONGTEXT     DEFAULT NULL COMMENT '消息文本内容',
+    parts_json    LONGTEXT     DEFAULT NULL COMMENT '多模态内容片段 JSON（非空时优先于 content）',
+    tool_calls    LONGTEXT     DEFAULT NULL COMMENT 'assistant 消息携带的工具调用列表 JSON',
+    tool_call_id  VARCHAR(64)  DEFAULT NULL COMMENT 'tool 消息关联的工具调用 ID',
+    archived      TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '是否已归档/摘要（1=已归档，readContext 默认跳过）',
+    create_time   BIGINT       NOT NULL COMMENT '消息创建时间戳（epoch 毫秒）',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_session_msg (tenant_id, user_id, session_id, msg_index),
+    KEY idx_session_msg_unarchived (tenant_id, user_id, session_id, archived, msg_index)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会话消息表：逐条追加，消除写放大与并发覆盖';
 
 -- ==================== 事实表 ====================
 -- 结构化事实，跨会话检索；同 key 合并去重落在 DB 层（version 自增）
@@ -111,7 +135,7 @@ CREATE TABLE IF NOT EXISTS claw_rag_document (
     PRIMARY KEY (knowledge_base_id, document_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='RAG 原始文档与索引状态';
 
--- ==================== RAG 索引条目表 ====================
+-- ==================== RAG 向量索引表 ====================
 -- RAG 索引条目（provider=redis 或 auto + storage=db）：MySQL 仅存文本 + 元数据（无向量列），
 -- 向量与全文倒排只存在于 Redis Stack 检索索引（可随时清空，从 MySQL 文本重新向量化重建）。
 CREATE TABLE IF NOT EXISTS rag_index_entries (
@@ -126,7 +150,7 @@ CREATE TABLE IF NOT EXISTS rag_index_entries (
     KEY idx_rag_kb (knowledge_base_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='RAG 索引条目（MySQL 权威文本存储，召回走 Redis）';
 
--- ==================== 全链路 trace 表 ====================
+-- ==================== 全链路 trace 表（MySQL 版） ====================
 -- 每次运行写入一行 step_type='__run__' 标识行 + 每步一行明细，按 trace_id + step_index 还原链路
 -- （agent.observability.trace.store=db 时使用；success 用 TINYINT(1) 兼容 MySQL 布尔）
 CREATE TABLE IF NOT EXISTS claw_trace (
@@ -134,6 +158,7 @@ CREATE TABLE IF NOT EXISTS claw_trace (
     tenant_id     VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '租户 id（空串=默认空间）',
     user_id       VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '用户 id（空串=默认空间）',
     trace_id      VARCHAR(64)  NOT NULL COMMENT '链路 id（与 /trace/{traceId} 对应）',
+    parent_trace_id VARCHAR(64) DEFAULT NULL COMMENT '父 trace id（跨实例/嵌套编排链路聚合，expand=true 用）',
     session_id    VARCHAR(64)  DEFAULT NULL COMMENT '会话 id',
     agent_id      VARCHAR(64)  DEFAULT NULL COMMENT 'Agent id',
     orchestration VARCHAR(32)  DEFAULT NULL COMMENT '编排 id',
@@ -151,7 +176,7 @@ CREATE TABLE IF NOT EXISTS claw_trace (
     KEY idx_trace_session (session_id, create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='全链路 trace 表（agent.observability.trace.store=db）';
 
--- ==================== 运行用量摘要表 ====================
+-- ==================== 运行用量摘要表（MySQL 版） ====================
 -- 每次运行一条摘要，供 shell /runs 统计（agent.observability.run-usage-store=db 时使用）
 CREATE TABLE IF NOT EXISTS claw_run_usage (
     id            BIGINT       NOT NULL AUTO_INCREMENT COMMENT '自增主键（聚簇索引，非业务字段）',
@@ -184,23 +209,3 @@ CREATE TABLE IF NOT EXISTS claw_memory_boundary (
     update_time BIGINT       NOT NULL COMMENT '最近更新时间戳（epoch 毫秒）',
     PRIMARY KEY (tenant_id, user_id, session_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会话记忆提炼边界游标';
-
--- ==================== 提炼任务快照暂存表（Phase 3 MQ staging） ====================
--- Phase 3 RocketMqSynthesisTaskQueue 在 produce 时将快照暂存于此表（避免 MQ 消息体过大），
--- consume 时从 staging 读取快照后执行提炼，完成后清理。
--- 若 MQ 消息丢失，staging 中快照在 TTL 清理前可被手动回放；
--- 配合 claw_memory_boundary 的 CAS / 行锁 + DB 幂等 UPSERT 形成「MQ 串行 + DB 兜底」双层正确性。
-CREATE TABLE IF NOT EXISTS claw_memory_snapshot (
-    id            BIGINT       NOT NULL AUTO_INCREMENT,
-    tenant_id     VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '租户 id',
-    user_id       VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '用户 id',
-    session_id    VARCHAR(128) NOT NULL COMMENT '会话 id',
-    task_kind     VARCHAR(32)  NOT NULL COMMENT 'AFTER_TURN / AFTER_SESSION',
-    snapshot_data TEXT         NOT NULL COMMENT 'JSON 序列化的消息快照',
-    version       BIGINT       NOT NULL COMMENT '快照版本号（epoch 毫秒时间戳，用于去重）',
-    create_time   BIGINT       NOT NULL COMMENT '写入时间戳（epoch 毫秒）',
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_scope_session_kind_version (tenant_id, user_id, session_id, task_kind, version),
-    KEY idx_scope_session_kind (tenant_id, user_id, session_id, task_kind),
-    KEY idx_create_time (create_time)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='提炼任务快照暂存（Phase 3 RocketMQ staging）';

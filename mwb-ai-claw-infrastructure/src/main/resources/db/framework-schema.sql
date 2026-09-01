@@ -24,7 +24,7 @@
 --     会报 Duplicate key name，属预期行为，可忽略。
 
 -- ==================== 会话表 ====================
--- 会话消息以 JSON LONGTEXT 存储（与现有 Session 序列化一致）
+-- 会话元数据；消息拆到 claw_session_message 表逐条存储（消除写/读放大、支持按需加载、防并发覆盖）
 CREATE TABLE IF NOT EXISTS claw_session (
     id          BIGINT       NOT NULL AUTO_INCREMENT COMMENT '自增主键（聚簇索引，非业务字段）',
     tenant_id   VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '租户 id（空串=默认空间）',
@@ -34,14 +34,35 @@ CREATE TABLE IF NOT EXISTS claw_session (
     title       VARCHAR(128) DEFAULT NULL COMMENT '会话标题（展示用，可空）',
     status      VARCHAR(16)  DEFAULT NULL COMMENT '会话状态（active/closed 等）',
     version     BIGINT       NOT NULL DEFAULT 0 COMMENT '乐观锁版本号（并发更新冲突检测）',
+    msg_count   INT          NOT NULL DEFAULT 0 COMMENT '消息总数（含已归档，增量写入时同步更新）',
     create_time BIGINT       NOT NULL COMMENT '创建时间戳（epoch 毫秒）',
     update_time BIGINT       NOT NULL COMMENT '最近更新时间戳（epoch 毫秒，会话列表倒序排序依据）',
-    messages    LONGTEXT     DEFAULT NULL COMMENT '消息列表 JSON（与 Session 序列化一致）',
     PRIMARY KEY (id),
     UNIQUE KEY uk_session (tenant_id, user_id, session_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会话表：会话主体与消息 JSON';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会话表：会话元数据（消息逐条存 claw_session_message）';
 
 CREATE INDEX idx_session_update ON claw_session(tenant_id, user_id, update_time DESC);
+
+-- ==================== 会话消息表 ====================
+-- 逐条追加：每轮对话 INSERT 一条，消除 messages LONGTEXT 的写放大/读放大/并发覆盖
+-- msg_index 在会话内唯一（唯一键防并发重复），archived 标记是否已归档/摘要
+CREATE TABLE IF NOT EXISTS claw_session_message (
+    id            BIGINT       NOT NULL AUTO_INCREMENT COMMENT '自增主键（聚簇索引，非业务字段）',
+    tenant_id     VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '租户 id（空串=默认空间，冗余存储防 JOIN）',
+    user_id       VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '用户 id（空串=默认空间，冗余存储防 JOIN）',
+    session_id    VARCHAR(64)  NOT NULL COMMENT '所属会话 id',
+    msg_index     INT          NOT NULL COMMENT '会话内序号（从 0 起，唯一键防并发重复）',
+    role          VARCHAR(16)  NOT NULL COMMENT '消息角色：user | assistant | tool',
+    content       LONGTEXT     DEFAULT NULL COMMENT '消息文本内容',
+    parts_json    LONGTEXT     DEFAULT NULL COMMENT '多模态内容片段 JSON（非空时优先于 content）',
+    tool_calls    LONGTEXT     DEFAULT NULL COMMENT 'assistant 消息携带的工具调用列表 JSON',
+    tool_call_id  VARCHAR(64)  DEFAULT NULL COMMENT 'tool 消息关联的工具调用 ID',
+    archived      TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '是否已归档/摘要（1=已归档，readContext 默认跳过）',
+    create_time   BIGINT       NOT NULL COMMENT '消息创建时间戳（epoch 毫秒）',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_session_msg (tenant_id, user_id, session_id, msg_index),
+    KEY idx_session_msg_unarchived (tenant_id, user_id, session_id, archived, msg_index)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会话消息表：逐条追加，消除写放大与并发覆盖';
 
 -- ==================== 事实表 ====================
 -- 结构化事实，跨会话检索；同 key 合并去重落在 DB 层（version 自增）
@@ -137,6 +158,7 @@ CREATE TABLE IF NOT EXISTS claw_trace (
     tenant_id     VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '租户 id（空串=默认空间）',
     user_id       VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '用户 id（空串=默认空间）',
     trace_id      VARCHAR(64)  NOT NULL COMMENT '链路 id（与 /trace/{traceId} 对应）',
+    parent_trace_id VARCHAR(64) DEFAULT NULL COMMENT '父 trace id（跨实例/嵌套编排链路聚合，expand=true 用）',
     session_id    VARCHAR(64)  DEFAULT NULL COMMENT '会话 id',
     agent_id      VARCHAR(64)  DEFAULT NULL COMMENT 'Agent id',
     orchestration VARCHAR(32)  DEFAULT NULL COMMENT '编排 id',

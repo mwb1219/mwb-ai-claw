@@ -16,9 +16,9 @@ import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher;
-import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher.Kind;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
+import com.mwb.ai.claw.domain.memory.layered.spi.MemorySynthesisDispatcher;
+import com.mwb.ai.claw.domain.memory.layered.spi.MemorySynthesisDispatcher.Kind;
+import com.mwb.ai.claw.domain.util.JsonUtils;
 
 /**
  * RocketMqSynthesisConsumer 单元测试（Phase 3 MQ 消费端）：

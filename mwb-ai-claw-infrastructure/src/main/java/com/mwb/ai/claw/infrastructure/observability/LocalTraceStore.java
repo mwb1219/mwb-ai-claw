@@ -13,7 +13,7 @@ import com.mwb.ai.claw.domain.observability.TraceRun;
 import com.mwb.ai.claw.domain.observability.TraceStore;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
+import com.mwb.ai.claw.domain.util.JsonUtils;
 
 /**
  * 本地文件版步骤级 trace 存储（默认，零依赖）：每个 traceId 一个 JSON 文件。

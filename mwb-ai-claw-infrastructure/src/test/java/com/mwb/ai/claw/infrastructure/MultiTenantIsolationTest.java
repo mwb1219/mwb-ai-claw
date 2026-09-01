@@ -13,7 +13,7 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 import com.mwb.ai.claw.domain.core.Session;
-import com.mwb.ai.claw.domain.memory.model.MemoryPage;
+import com.mwb.ai.claw.domain.memory.layered.model.MemoryPage;
 import com.mwb.ai.claw.domain.rag.access.RagAccessPolicy;
 import com.mwb.ai.claw.domain.rag.config.RagConfig;
 import com.mwb.ai.claw.domain.rag.model.RagIndexEntry;

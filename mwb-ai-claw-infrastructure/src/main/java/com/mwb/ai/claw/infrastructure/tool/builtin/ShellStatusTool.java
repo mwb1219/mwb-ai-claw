@@ -5,7 +5,7 @@ import com.mwb.ai.claw.domain.tool.ToolResult;
 import com.mwb.ai.claw.domain.tool.ToolSpec;
 import com.mwb.ai.claw.infrastructure.tool.ToolSecurity;
 import com.mwb.ai.claw.infrastructure.tool.builtin.dto.ShellStatusParams;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
+import com.mwb.ai.claw.domain.util.JsonUtils;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;

@@ -88,6 +88,9 @@ nav_order: 3
 | `vector-enabled` | `true` | 是否启用向量索引 |
 | `embedding-model` / `-base-url` / `-api-key` | 继承默认 | Embedding 配置 |
 | `archive-enabled` | `true` | 会话结束归档原文 |
+| `archive-keep-recent` | `0` | 每次会话保留最近 N 条原文不归档不标记（0=使用 `hot-window-size` 兜底；会话进行中热窗始终保留未归档） |
+| `archive-idle-timeout` | `30m` | 会话闲置多久后收敛剩余热窗（如 `30m`；`null`/0 表示不启用空闲收敛） |
+| `archive-min-tokens` | `0` | 块 token 数低于该值时只保留摘要不归档全文（0=不限制，始终归档） |
 | `shared-retrieve` | `true` | 多 Agent 共享检索 |
 | `synthesizer-model` / `-base-url` / `-api-key` | 继承默认 | 提炼专用小模型 |
 | `synthesis-cache-size` | `50` | 提炼缓存容量（≤0 关闭） |

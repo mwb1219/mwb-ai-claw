@@ -17,7 +17,7 @@ import com.mwb.ai.claw.domain.core.Agent;
 import com.mwb.ai.claw.domain.core.ModelConfig;
 import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.llm.LlmRequest;
-import com.mwb.ai.claw.domain.memory.gateway.LongTermMemoryGateway;
+import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
 import com.mwb.ai.claw.domain.rag.config.RagConfig;
 import com.mwb.ai.claw.domain.rag.context.RagContextProvider;
 import com.mwb.ai.claw.domain.rag.context.RagRequestContext;

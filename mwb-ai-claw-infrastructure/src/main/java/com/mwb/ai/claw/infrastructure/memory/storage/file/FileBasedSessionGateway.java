@@ -14,14 +14,16 @@ import java.util.stream.Stream;
 
 import javax.annotation.PostConstruct;
 
+import com.mwb.ai.claw.infrastructure.memory.storage.memory.MemorySessionGatewayImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.mwb.ai.claw.domain.core.Session;
-import com.mwb.ai.claw.domain.memory.gateway.MemoryGateway;
+import com.mwb.ai.claw.domain.core.Message;
+import com.mwb.ai.claw.domain.core.SessionGateway;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
+import com.mwb.ai.claw.domain.util.JsonUtils;
 
 /**
  * 文件持久化版会话存储：每个会话保存为 .agent/sessions/[tenant/user/]<sessionId>.json。
@@ -29,9 +31,9 @@ import com.mwb.ai.claw.infrastructure.util.JsonUtils;
  * 内存缓存 + 文件持久化，实现跨重启的会话隔离与持久化。
  * 目录按租户/用户维度隔离：scope 化后会话文件位于 &lt;namespace&gt;/&lt;sessionId&gt;.json，
  * 未启用多租户（legacy 模式）时仍位于 sessions/&lt;sessionId&gt;.json，保持向后兼容。
- * 替代原先纯内存的 {@link com.mwb.ai.claw.infrastructure.memory.gateway.MemoryGatewayImpl}。
+ * 替代原先纯内存的 {@link MemorySessionGatewayImpl}。
  */
-public class FileBasedSessionGateway implements MemoryGateway {
+public class FileBasedSessionGateway implements SessionGateway {
 
     private static final Logger log = LoggerFactory.getLogger(FileBasedSessionGateway.class);
 
@@ -142,6 +144,34 @@ public class FileBasedSessionGateway implements MemoryGateway {
         } catch (IOException e) {
             log.warn("删除会话文件失败: {}", sessionId, e.getMessage());
         }
+    }
+
+    @Override
+    public List<Message> loadRecentMessages(AgentScope scope, String sessionId, int limit) {
+        Session session = getSession(scope, sessionId);
+        if (session == null || session.getMessages() == null) {
+            return new ArrayList<>();
+        }
+        List<Message> all = session.getMessages();
+        if (limit <= 0 || all.size() <= limit) {
+            return new ArrayList<>(all);
+        }
+        return new ArrayList<>(all.subList(all.size() - limit, all.size()));
+    }
+
+    @Override
+    public List<Message> loadAllMessages(AgentScope scope, String sessionId) {
+        Session session = getSession(scope, sessionId);
+        if (session == null || session.getMessages() == null) {
+            return new ArrayList<>();
+        }
+        return new ArrayList<>(session.getMessages());
+    }
+
+    @Override
+    public void markArchived(AgentScope scope, String sessionId, int fromIndex, int toIndex) {
+        // 文件模式不支持归档标记（文件模式本身无读放大问题，按需加载暂通过 loadRecentMessages 截取实现）
+        log.debug("文件模式暂不支持 markArchived: sessionId={}, [{},{})", sessionId, fromIndex, toIndex);
     }
 
     // ==================== 工具方法 ====================

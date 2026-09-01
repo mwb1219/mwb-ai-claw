@@ -25,8 +25,8 @@
     <properties>
         <java.version>1.8</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <!-- 框架版本：Central 正式版（升级框架后同步修改） -->
-        <mwb-ai-claw.version>1.0.4</mwb-ai-claw.version>
+        <!-- 框架版本：本地开发用 1.0.5-SNAPSHOT；正式发布切回 Maven Central 版本 -->
+        <mwb-ai-claw.version>1.0.5-SNAPSHOT</mwb-ai-claw.version>
     </properties>
 
     <dependencies>

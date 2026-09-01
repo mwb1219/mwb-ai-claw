@@ -21,4 +21,7 @@ public class MessageDTO {
 
     /** assistant 消息携带的工具调用 */
     private List<ToolCallDTO> toolCalls;
+
+    /** 是否已归档：true 表示已滚出热窗、进入跨会话档案（前端据此展示「归档历史」分隔线） */
+    private boolean archived;
 }

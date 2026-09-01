@@ -8,16 +8,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.mwb.ai.claw.domain.core.Message;
-import com.mwb.ai.claw.domain.memory.model.LayeredMemoryConfig;
-import com.mwb.ai.claw.domain.memory.model.MemoryPage;
-import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher;
-import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher.Kind;
-import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesisDispatcher.SynthesisEvent;
-import com.mwb.ai.claw.domain.memory.synthesize.MemorySynthesizer;
-import com.mwb.ai.claw.domain.memory.store.MemoryPageStore;
+import com.mwb.ai.claw.domain.memory.layered.LayeredMemoryConfig;
+import com.mwb.ai.claw.domain.memory.layered.model.MemoryPage;
+import com.mwb.ai.claw.domain.memory.layered.spi.MemorySynthesisDispatcher;
+import com.mwb.ai.claw.domain.memory.layered.spi.MemorySynthesizer;
+import com.mwb.ai.claw.domain.memory.layered.spi.MemoryPageStore;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.infrastructure.observability.MetricsRecorder;
-import com.mwb.ai.claw.infrastructure.util.TokenEstimator;
+import com.mwb.ai.claw.domain.util.TokenEstimator;
 
 /**
  * 无锁 CAS 提炼事件派发器（Phase 2，显式 lockfree）：
@@ -30,7 +28,7 @@ import com.mwb.ai.claw.infrastructure.util.TokenEstimator;
  *   <li>consume：确保快照就绪 → event.execute()（handler 内部执行 CAS claim + 提炼循环）</li>
  * </ul>
  * 与 Phase 1 的关键区别：handler 是 Dispatcher 内部绑定的 <b>带 CAS claim 循环</b> 的执行体，
- * 覆盖调用方（LayeredMemoryGatewayImpl）传入的简单 doAfterTurn。
+ * 覆盖调用方（LayeredSessionGatewayImpl）传入的简单 doAfterTurn。
  * <p>
  * DB 层兜底：
  * - {@code uk_scope_session_type_start} 唯一键防摘要/归档块重叠

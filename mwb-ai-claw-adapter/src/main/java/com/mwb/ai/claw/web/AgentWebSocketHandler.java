@@ -36,7 +36,7 @@ import com.mwb.ai.claw.dto.SingleResponse;
 import com.mwb.ai.claw.dto.data.ChatResponseDTO;
 import com.mwb.ai.claw.dto.data.PendingApprovalDTO;
 import com.mwb.ai.claw.dto.data.SessionDTO;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
+import com.mwb.ai.claw.domain.util.JsonUtils;
 import com.mwb.ai.claw.web.dto.WsEvent;
 import com.mwb.ai.claw.web.dto.WsRequest;
 

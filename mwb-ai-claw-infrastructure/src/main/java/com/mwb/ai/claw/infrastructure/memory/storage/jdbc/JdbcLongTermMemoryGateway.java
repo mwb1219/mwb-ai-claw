@@ -5,7 +5,7 @@ import java.util.List;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 
-import com.mwb.ai.claw.domain.memory.gateway.LongTermMemoryGateway;
+import com.mwb.ai.claw.domain.memory.LongTermMemoryGateway;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 
 /**
@@ -39,6 +39,11 @@ public class JdbcLongTermMemoryGateway implements LongTermMemoryGateway {
         upsert(scope, NAME_MEMORY, content);
     }
 
+    @Override
+    public void saveAgentInstructions(AgentScope scope, String content) {
+        upsert(scope, NAME_AGENT, content);
+    }
+
     private String load(AgentScope scope, String name) {
         ScopeClause where = scopeWhere(scope);
         String sql = "SELECT content FROM claw_long_term WHERE name = ? AND " + where.sql;
@@ -49,25 +54,16 @@ public class JdbcLongTermMemoryGateway implements LongTermMemoryGateway {
         return rows.isEmpty() || rows.get(0) == null ? "" : rows.get(0);
     }
 
+    /**
+     * T8/T9 并发安全：单条 INSERT ... ON DUPLICATE KEY UPDATE，消除「SELECT COUNT + INSERT/UPDATE」竞态窗口。
+     * 依赖 uk_scope_name(tenant_id,user_id,name) 唯一键：两个实例同时入库同一 (scope,name) 时，
+     * MySQL 合并为一次写入（存在则更新），后写者不会报错也不会覆盖丢数据。
+     */
     private void upsert(AgentScope scope, String name, String content) {
-        ScopeClause where = scopeWhere(scope);
-        String countSql = "SELECT COUNT(*) FROM claw_long_term WHERE name = ? AND " + where.sql;
-        List<Object> countArgs = new ArrayList<>();
-        countArgs.add(name);
-        countArgs.addAll(where.args);
-        Integer cnt = jdbc.queryForObject(countSql, Integer.class, countArgs.toArray());
-        if (cnt != null && cnt > 0) {
-            String sql = "UPDATE claw_long_term SET content=?, update_time=? WHERE name = ? AND " + where.sql;
-            List<Object> args = new ArrayList<>();
-            args.add(content);
-            args.add(System.currentTimeMillis());
-            args.add(name);
-            args.addAll(where.args);
-            jdbc.update(sql, args.toArray());
-        } else {
-            jdbc.update("INSERT INTO claw_long_term (tenant_id, user_id, name, content, update_time) VALUES (?,?,?,?,?)",
-                    tid(scope), uid(scope), name, content, System.currentTimeMillis());
-        }
+        jdbc.update(
+                "INSERT INTO claw_long_term (tenant_id, user_id, name, content, update_time) VALUES (?,?,?,?,?) "
+                        + "ON DUPLICATE KEY UPDATE content=VALUES(content), update_time=VALUES(update_time)",
+                tid(scope), uid(scope), name, content, System.currentTimeMillis());
     }
 
     private String tid(AgentScope scope) {

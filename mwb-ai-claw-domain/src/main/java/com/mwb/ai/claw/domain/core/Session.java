@@ -30,6 +30,9 @@ public class Session {
     /** 乐观版本号，save 时 +1 */
     private long version;
 
+    /** 消息总数（含已归档，与 DB msg_count 同步） */
+    private int msgCount;
+
     /** 创建时间戳 */
     private long createTime = System.currentTimeMillis();
 

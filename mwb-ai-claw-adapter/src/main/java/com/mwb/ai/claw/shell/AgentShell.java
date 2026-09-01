@@ -51,11 +51,11 @@ import com.mwb.ai.claw.domain.core.Session;
 import com.mwb.ai.claw.domain.llm.ContentPart;
 import com.mwb.ai.claw.domain.llm.LlmResponse;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
-import com.mwb.ai.claw.domain.memory.gateway.LayeredMemoryGateway;
-import com.mwb.ai.claw.domain.memory.gateway.MemoryGateway;
-import com.mwb.ai.claw.domain.memory.model.LayeredMemoryConfig;
-import com.mwb.ai.claw.domain.memory.model.MemoryPage;
-import com.mwb.ai.claw.domain.memory.store.MemoryPageStore;
+import com.mwb.ai.claw.domain.memory.layered.LayeredMemoryGateway;
+import com.mwb.ai.claw.domain.core.SessionGateway;
+import com.mwb.ai.claw.domain.memory.layered.LayeredMemoryConfig;
+import com.mwb.ai.claw.domain.memory.layered.model.MemoryPage;
+import com.mwb.ai.claw.domain.memory.layered.spi.MemoryPageStore;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.domain.tool.McpServerConfig;
 import com.mwb.ai.claw.domain.tool.ToolApproval;
@@ -68,13 +68,13 @@ import com.mwb.ai.claw.dto.data.PendingApprovalDTO;
 import com.mwb.ai.claw.dto.data.SessionDTO;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.memory.synthesis.MemorySynthesisExecutor;
-import com.mwb.ai.claw.infrastructure.memory.synthesis.SynthesisCache;
-import com.mwb.ai.claw.infrastructure.memory.strategy.LlmMemorySynthesizer;
+import com.mwb.ai.claw.domain.memory.layered.spi.SynthesisCache;
+import com.mwb.ai.claw.domain.memory.layered.synthesize.LlmMemorySynthesizer;
 import com.mwb.ai.claw.infrastructure.observability.MetricsRecorder;
 import com.mwb.ai.claw.infrastructure.tool.ToolSecurity;
 import com.mwb.ai.claw.infrastructure.tool.mcp.McpClientManager;
-import com.mwb.ai.claw.infrastructure.util.JsonUtils;
-import com.mwb.ai.claw.infrastructure.util.TokenEstimator;
+import com.mwb.ai.claw.domain.util.JsonUtils;
+import com.mwb.ai.claw.domain.util.TokenEstimator;
 import com.mwb.ai.claw.shell.util.MultimodalInputParser;
 import com.mwb.ai.claw.shell.util.TemplateEngine;
 
@@ -120,7 +120,7 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
     private MemorySynthesisExecutor synthesisExecutor;
 
     @Resource
-    private MemoryGateway memoryGateway;
+    private SessionGateway sessionGateway;
 
     @Resource
     private LlmMemorySynthesizer llmMemorySynthesizer;
@@ -420,7 +420,7 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
             return 0;
         }
         try {
-            Session session = memoryGateway.getSession(SHELL_SCOPE, sessionId);
+            Session session = sessionGateway.getSession(SHELL_SCOPE, sessionId);
             if (session == null) {
                 return 0;
             }
@@ -614,9 +614,9 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
                 println(STYLE_WARN, "会话不存在: " + target);
                 return;
             }
-            Session session = memoryGateway.getSession(SHELL_SCOPE, resolvedId);
+            Session session = sessionGateway.getSession(SHELL_SCOPE, resolvedId);
             session.setTitle(title);
-            memoryGateway.saveSession(session);
+            sessionGateway.saveSession(session);
             println(STYLE_INFO, "已重命名会话 " + resolvedId + " → " + title);
         } catch (Exception e) {
             println(STYLE_ERROR, "重命名会话失败: " + e.getMessage());
@@ -625,11 +625,11 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
 
     /** 会话 ID 解析：支持精确 ID 或前缀模糊匹配 */
     private String resolveSessionId(String targetId) {
-        Session direct = memoryGateway.getSession(SHELL_SCOPE, targetId);
+        Session direct = sessionGateway.getSession(SHELL_SCOPE, targetId);
         if (direct != null) {
             return targetId;
         }
-        for (Session s : memoryGateway.listSessions(SHELL_SCOPE)) {
+        for (Session s : sessionGateway.listSessions(SHELL_SCOPE)) {
             if (s.getSessionId().startsWith(targetId)) {
                 return s.getSessionId();
             }
@@ -866,7 +866,7 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
                 println(STYLE_WARN, "会话不存在: " + target);
                 return;
             }
-            Session session = memoryGateway.getSession(SHELL_SCOPE, resolvedId);
+            Session session = sessionGateway.getSession(SHELL_SCOPE, resolvedId);
             String json = JsonUtils.toJson(session);
             File out = path == null
                     ? new File(System.getProperty("user.home") + File.separator + ".claw/exports", resolvedId + ".json")
@@ -898,14 +898,14 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
                 println(STYLE_WARN, "会话不存在: " + srcId);
                 return;
             }
-            Session src = memoryGateway.getSession(SHELL_SCOPE, resolvedId);
+            Session src = sessionGateway.getSession(SHELL_SCOPE, resolvedId);
             Session copy = new Session();
             copy.setSessionId(UUID.randomUUID().toString());
             copy.setAgentId(src.getAgentId());
             String baseTitle = src.getTitle() == null || src.getTitle().isEmpty() ? "分叉会话" : src.getTitle();
             copy.setTitle(baseTitle.length() > 24 ? baseTitle.substring(0, 24) + "…" : baseTitle + " (fork)");
             copy.setMessages(new ArrayList<>(src.getMessages()));
-            memoryGateway.saveSession(copy);
+            sessionGateway.saveSession(copy);
             sessionId = copy.getSessionId();
             ctxCacheSessionId = null; // 清理上下文估算缓存
             println(STYLE_INFO, "已从会话 " + resolvedId + " 分叉出新会话: " + copy.getSessionId()
@@ -932,7 +932,7 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
             println(STYLE_WARN, "当前无会话，请先发起对话");
             return;
         }
-        Session session = memoryGateway.getSession(SHELL_SCOPE, sessionId);
+        Session session = sessionGateway.getSession(SHELL_SCOPE, sessionId);
         if (session == null) {
             println(STYLE_WARN, "会话不存在: " + sessionId);
             return;
@@ -955,7 +955,7 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
         newMessages.add(Message.of(MessageRole.SYSTEM, "以下是本会话早前对话的压缩摘要，之后的对话应在此基础上继续：\n" + summary));
         newMessages.addAll(kept);
         session.setMessages(newMessages);
-        memoryGateway.saveSession(session);
+        sessionGateway.saveSession(session);
         int before = TokenEstimator.estimate(messages);
         int after = TokenEstimator.estimate(newMessages);
         println(STYLE_INFO, "已压缩: " + messages.size() + " 条 → 摘要 + 最近 " + kept.size() + " 条，估算 tokens "
@@ -975,7 +975,7 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
             }
             sid = sessionId;
         }
-        Session session = memoryGateway.getSession(SHELL_SCOPE, sid);
+        Session session = sessionGateway.getSession(SHELL_SCOPE, sid);
         if (session == null) {
             println(STYLE_WARN, "会话不存在: " + sid);
             return;
@@ -1354,7 +1354,7 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
             return;
         }
         try {
-            Session session = memoryGateway.getSession(SHELL_SCOPE, sessionId);
+            Session session = sessionGateway.getSession(SHELL_SCOPE, sessionId);
             if (session == null) {
                 return;
             }
@@ -1366,7 +1366,7 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
                 if (MessageRole.USER == m.getRole() && m.getContent() != null && !m.getContent().trim().isEmpty()) {
                     String content = m.getContent().trim().replace('\n', ' ');
                     session.setTitle(content.length() > 20 ? content.substring(0, 20) + "…" : content);
-                    memoryGateway.saveSession(session);
+                    sessionGateway.saveSession(session);
                     return;
                 }
             }
@@ -1947,7 +1947,7 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
             // 会话 ID 补全：/session switch|delete|rename <前缀>
             if (buffer.startsWith("/session") && (buffer.contains("switch") || buffer.contains("delete") || buffer.contains("rename"))) {
                 try {
-                    for (Session s : memoryGateway.listSessions(SHELL_SCOPE)) {
+                    for (Session s : sessionGateway.listSessions(SHELL_SCOPE)) {
                         if (s.getSessionId().startsWith(word)) {
                             candidates.add(new Candidate(s.getSessionId()));
                         }

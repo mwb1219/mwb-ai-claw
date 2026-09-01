@@ -34,7 +34,7 @@ import com.mwb.ai.claw.dto.SingleResponse;
 import com.mwb.ai.claw.dto.data.AgentErrorCode;
 import com.mwb.ai.claw.dto.data.ChatResponseDTO;
 import com.mwb.ai.claw.exception.BizException;
-import com.mwb.ai.claw.infrastructure.collaboration.registry.OrchestratorRegistry;
+import com.mwb.ai.claw.infrastructure.collaboration.common.OrchestratorRegistry;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.config.OrchestrationConfigLoader;
 import com.mwb.ai.claw.infrastructure.llm.RunTokenBudget;
@@ -204,6 +204,7 @@ public class ChatCmdExe {
             }
             TraceRun run = new TraceRun();
             run.setTraceId(resolveTraceId());
+            run.setParentTraceId(resolveParentTraceId());
             run.setTenantId(scopeField(0));
             run.setUserId(scopeField(1));
             run.setSessionId(result != null ? result.getSessionId() : cmd.getSessionId());
@@ -262,6 +263,12 @@ public class ChatCmdExe {
             return UUID.randomUUID().toString().replace("-", "");
         }
         return traceId;
+    }
+
+    /** 解析父 trace id：跨实例/嵌套编排时由上层调用方在 MDC 注入 parentTraceId（无则返回 null） */
+    private String resolveParentTraceId() {
+        String parent = MDC.get("parentTraceId");
+        return (parent == null || parent.trim().isEmpty()) ? null : parent.trim();
     }
 
     /** 0=tenantId，1=userId；取当前请求 scope，cope 为空时返回空串 */
