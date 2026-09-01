@@ -19,7 +19,7 @@ nav_order: 6
 <dependency>
     <groupId>io.github.mwb1219</groupId>
     <artifactId>mwb-ai-claw-app</artifactId>
-    <version>1.0.4</version>
+    <version>1.0.5</version>
 </dependency>
 ```
 
@@ -29,7 +29,7 @@ nav_order: 6
 <dependency>
     <groupId>io.github.mwb1219</groupId>
     <artifactId>mwb-ai-claw-spring-boot-starter</artifactId>
-    <version>1.0.4</version>
+    <version>1.0.5</version>
 </dependency>
 ```
 
