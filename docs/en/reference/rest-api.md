@@ -15,6 +15,7 @@ nav_order: 1
 | --- | --- | --- | --- |
 | `POST` | `/agent/chat` | Synchronous chat | body: `ChatCmd` (message / sessionId / agentId / orchestrationId / responseFormat / jsonSchema / parts) |
 | `GET` | `/agent/chat/stream` | SSE streaming chat | `message`, `sessionId?`, `agentId?` |
+| `POST` | `/agent/run/{runId}/resume` | Resume a suspended orchestration run | body: `ResumeCmd`? (sessionId? / orchestrationId?) + path `runId` |
 | `POST` | `/agent/session` | Create a session | body: `CreateSessionCmd` (agentId?) |
 | `PUT` | `/agent/session/{sessionId}` | Update a session (title) | body: `UpdateSessionCmd` |
 | `POST` | `/agent/session/{sessionId}/duplicate` | Duplicate a session | - |

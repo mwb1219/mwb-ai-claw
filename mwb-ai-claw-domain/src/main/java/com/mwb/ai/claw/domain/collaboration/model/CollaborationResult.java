@@ -36,4 +36,10 @@ public class CollaborationResult {
 
     /** 执行轨迹（Thought / Action / Observation / 阶段 / 讨论轮次摘要） */
     private List<String> traceSteps = new ArrayList<>();
+
+    /** 本次编排的运行记录 id（启用编排运行持久化时有值，供 resume 续跑） */
+    private String runId;
+
+    /** 是否在人工门禁处挂起（true=未完成，需凭 runId 调用 resume 续跑；reply 为空） */
+    private boolean suspended;
 }

@@ -15,9 +15,11 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import org.junit.Before;
 import org.junit.Test;
+import org.springframework.beans.factory.support.StaticListableBeanFactory;
 
 import com.mwb.ai.claw.domain.collaboration.model.CollaborationResult;
 import com.mwb.ai.claw.domain.collaboration.spi.ExecutionUnit;
@@ -37,6 +39,10 @@ import com.mwb.ai.claw.exception.BizException;
 import com.mwb.ai.claw.infrastructure.collaboration.delegate.approval.ApprovalRegistry;
 import com.mwb.ai.claw.infrastructure.collaboration.delegate.approval.PendingApproval;
 import com.mwb.ai.claw.infrastructure.collaboration.delegate.TodoStatus;
+import com.mwb.ai.claw.infrastructure.collaboration.delegate.run.InMemoryOrchestrationRunStore;
+import com.mwb.ai.claw.infrastructure.collaboration.delegate.run.OrchestrationRun;
+import com.mwb.ai.claw.infrastructure.collaboration.delegate.run.OrchestrationRunStore;
+import org.springframework.beans.factory.ObjectProvider;
 
 /**
  * 委托编排单元测试：通过 fake AgentGateway / ExecutionUnit 验证
@@ -409,6 +415,56 @@ public class TodoDelegateOrchestratorTest {
         assertFalse(executionUnit.executed.contains("子任务 t1"));
     }
 
+    @Test
+    public void testH1P1_durableGateResume_deliversAfterApproval() throws Exception {
+        // H1-P1 可中断恢复：启用运行持久化（store=local）后，根层人工门禁不再阻塞线程，
+        // 而是落 GATE 记录挂起返回 suspended；审批批准写入决策后凭 runId resume 续跑至完成。
+        InMemoryOrchestrationRunStore runStore = new InMemoryOrchestrationRunStore();
+        StaticListableBeanFactory bf = new StaticListableBeanFactory();
+        bf.addBean("runStore", runStore);
+        Field rp = TodoDelegateOrchestrator.class.getDeclaredField("runStoreProvider");
+        rp.setAccessible(true);
+        ObjectProvider<OrchestrationRunStore> provider = bf.getBeanProvider(OrchestrationRunStore.class);
+        rp.set(orchestrator, provider);
+        executionUnit.rootPlan = "{ \"todos\": ["
+                + "{ \"todoId\": \"t1\", \"title\": \"任务A\", \"description\": \"子任务 t1\", \"agentId\": \"coder\", \"dependsOn\": [] },"
+                + "{ \"todoId\": \"t2\", \"title\": \"任务B\", \"description\": \"子任务 t2\", \"agentId\": \"researcher\", \"dependsOn\": [\"t1\"] } ] }";
+
+        try {
+            OrchestrationContext ctx = buildCtx(1, "abort", "根层审批", "root", 0, 3, 0);
+            CollaborationResult gated = orchestrator.orchestrate(ctx);
+
+            // 根层门禁挂起（不阻塞线程）：suspended=true 并返回 runId，未执行任何子任务
+            assertTrue("启用持久化后根层门禁应挂起而非阻塞", gated.isSuspended());
+            assertNotNull("挂起时应返回 runId 供 resume 续跑", gated.getRunId());
+            assertTrue("挂起阶段不应执行任何子任务", executionUnit.executed.isEmpty());
+
+            OrchestrationRun run = runStore.get(AgentScope.defaultScope(), gated.getRunId())
+                    .orElseThrow(AssertionError::new);
+            assertEquals("挂起记录 phase 应为 GATE", OrchestrationRun.PHASE_GATE, run.getPhase());
+            assertEquals("挂起层应为根层", "root", run.getGateLayer());
+            assertTrue("门禁决策未决前应视为待审批", run.isGatePending());
+
+            // 人工审批批准 → 决策入库（ApprovalService 同路径）→ resume 续跑
+            run.setGateDecision(OrchestrationRun.DECISION_APPROVED);
+            runStore.update(run);
+
+            CollaborationResult resumed = orchestrator.resume(ctx, gated.getRunId());
+
+            assertFalse("批准后续跑应最终完成，不再挂起", resumed.isSuspended());
+            assertEquals("最终答复: 已汇总", resumed.getReply());
+            assertTrue("批准续跑后应委派子任务 t1", executionUnit.executed.contains("子任务 t1"));
+            assertTrue("批准续跑后应委派子任务 t2", executionUnit.executed.contains("子任务 t2"));
+            OrchestrationRun done = runStore.get(AgentScope.defaultScope(), gated.getRunId())
+                    .orElseThrow(AssertionError::new);
+            assertEquals("完成记录 phase 应为 DONE", OrchestrationRun.PHASE_DONE, done.getPhase());
+        } finally {
+            // 恢复 store=none，避免影响同实例后续调用（本类每例 @Before 已重建 orchestrator，此处兜底）
+            StaticListableBeanFactory noneBf = new StaticListableBeanFactory();
+            rp.set(orchestrator, noneBf.getBeanProvider(OrchestrationRunStore.class));
+        }
+    }
+
     // ==================== 辅助 ====================
 
     private CollaborationResult orchestrate(int maxDepth, String onFailure, String message) {
@@ -423,6 +479,15 @@ public class TodoDelegateOrchestratorTest {
     private CollaborationResult orchestrate(int maxDepth, String onFailure, String message,
                                             String approvalGate, long approvalTimeoutMs, int topK,
                                             int replanRounds) {
+        OrchestrationContext ctx = buildCtx(maxDepth, onFailure, message, approvalGate,
+                approvalTimeoutMs, topK, replanRounds);
+        return orchestrator.orchestrate(ctx);
+    }
+
+    /** 构造委托编排上下文（含 delegate 定义，注册到 fake ExecutionUnit 索引） */
+    private OrchestrationContext buildCtx(int maxDepth, String onFailure, String message,
+                                          String approvalGate, long approvalTimeoutMs, int topK,
+                                          int replanRounds) {
         OrchestrationDefinition def = new OrchestrationDefinition();
         def.setId("todo-delegate");
         def.setType("delegate");
@@ -451,11 +516,11 @@ public class TodoDelegateOrchestratorTest {
         ctx.setDefinition(def);
         ctx.setAgentGateway(new FakeAgentGateway());
         ctx.setExecutionUnit(executionUnit);
-        return orchestrator.orchestrate(ctx);
+        return ctx;
     }
 
     /** fake ExecutionUnit：按 prompt 特征返回「规划 / 直执行 / 汇总」三类回复，记录直执行任务与落盘文件 */
-    private static class FakeExecutionUnit implements ExecutionUnit {
+    static class FakeExecutionUnit implements ExecutionUnit {
         String rootPlan;
         String subPlan;
         /** P2 re-plan 输出（含「请根据已得结果调整剩余子任务」的 prompt 返回） */
@@ -466,6 +531,8 @@ public class TodoDelegateOrchestratorTest {
         final List<String> nestedOrchestrations = new CopyOnWriteArrayList<>();
         /** agentId → 直执行回复（缺省为 name+已完成） */
         final Map<String, String> directReplies = new HashMap<>();
+        /** 规划（「你是任务规划者」）被调用的次数：断言 durable 续跑不重复规划已完成的层 */
+        int planCalls;
         /** 最近一次汇总 prompt（top-k 压缩断言用） */
         String lastSummaryPrompt;
         final List<String> executed = new CopyOnWriteArrayList<>();
@@ -494,6 +561,7 @@ public class TodoDelegateOrchestratorTest {
                 return replanReply; // P2 re-plan
             }
             if (prompt.contains("你是任务规划者")) {
+                planCalls++;
                 return "architect".equals(agent.getAgentId()) ? rootPlan : subPlan;
             }
             if (prompt.contains("请直接完成上述任务")) {
@@ -513,6 +581,18 @@ public class TodoDelegateOrchestratorTest {
             nestedOrchestrations.add(orchestrationId);
             if ("todo-delegate".equals(orchestrationId) && orchestrator != null) {
                 // 模拟嵌套 delegate：真实进入 orchestrate，ThreadLocal 嵌套调用链应检测到 A→A 循环引用
+                OrchestrationDefinition nestedDef = defs.get(orchestrationId);
+                OrchestrationContext nestedCtx = new OrchestrationContext();
+                nestedCtx.setScope(scope);
+                nestedCtx.setMessage(message);
+                nestedCtx.setSessionId("test-session");
+                nestedCtx.setDefinition(nestedDef);
+                nestedCtx.setAgentGateway(new FakeAgentGateway());
+                nestedCtx.setExecutionUnit(this);
+                return orchestrator.orchestrate(nestedCtx);
+            }
+            if ("sub-delegate".equals(orchestrationId) && orchestrator != null) {
+                // 模拟「父等待子」的独立子编排：真正进入 durable orchestrate，子 run 在共享 store 挂起/续跑
                 OrchestrationDefinition nestedDef = defs.get(orchestrationId);
                 OrchestrationContext nestedCtx = new OrchestrationContext();
                 nestedCtx.setScope(scope);
@@ -565,7 +645,7 @@ public class TodoDelegateOrchestratorTest {
     }
 
     /** fake 分层记忆：记录 saveFact 调用（topic → content），其余能力空实现 */
-    private static class FakeLayeredMemoryGateway implements LayeredMemoryGateway {
+    static class FakeLayeredMemoryGateway implements LayeredMemoryGateway {
         final Map<String, String> savedFacts = new HashMap<>();
 
         @Override
@@ -603,7 +683,7 @@ public class TodoDelegateOrchestratorTest {
     }
 
     /** fake AgentGateway：返回架构师 / 编码专家 / 信息检索专家，未知 id 回退默认 */
-    private static class FakeAgentGateway implements AgentGateway {
+    static class FakeAgentGateway implements AgentGateway {
 
         @Override
         public Agent getAgent(String agentId) {

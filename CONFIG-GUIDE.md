@@ -215,6 +215,25 @@ mwb-ai-claw --agent.collaboration.lock.type=redis \
             --agent.collaboration.lock.redis-uri=redis://:password@redis.internal:6379/0
 ```
 
+### 8.2 编排运行持久化（agent.collaboration.orchestration-run.*，H1-P1 可中断恢复）
+
+委托编排默认同步单请求执行；开启运行持久化后，降低为「请求推进到暂停点即返回」的可恢复模型——命中人工门禁（`approvalGate=root` 或 `all` 的任意层）或等待嵌套子编排（父 `SUSPENDED`）时落库挂起返回 `suspended=true` 与 `runId`，不再阻塞线程，客户端可凭 `runId` 调用 `POST /agent/run/{runId}/resume` 从暂停点续跑（Frame 栈精确恢复，已推进部分不重跑）。
+
+| 配置 | 说明 | 默认 |
+| --- | --- | --- |
+| `agent.collaboration.orchestration-run.store` | 运行存储：`none`（默认，无运行记录，同步执行）\| `local`（JVM 内，支持门禁/嵌套子编排跨请求续跑，重启丢失）\| `file`（本地文件，单实例重启不丢）\| `db`（JDBC 持久化，分布式续跑） | `none` |
+| `agent.collaboration.orchestration-run.dir` | `store=file` 生效：运行记录 JSON 落盘根目录（空用 `${memory-dir}/orchestration-runs`） | 空 |
+| `agent.collaboration.orchestration-run.cleanup-enabled` | 悬挂 run 定时清理开关 | `true` |
+| `agent.collaboration.orchestration-run.cleanup-interval-hours` | 悬挂 run 清理周期（小时） | `24` |
+| `agent.collaboration.orchestration-run.stale-ttl-ms` | 悬挂 run 清理 TTL（毫秒）：`updateTime < now - ttl` 且 phase 仍为 GATE/SUSPENDED/RUNNING 的记录被清除 | `86400000` |
+
+> 默认 `none` 保持原同步路径与旧行为完全一致；`store=local` 无需额外依赖，适合单实例快速体验续跑；`store=file` 单实例重启不丢、零依赖；`store=db` 需业务方自行管理 `claw_orchestration_run` 表（见 `framework-schema.sql`），用于多实例分布式续跑。悬挂 run 清理任务在 store ∈ {file, local, db} 时随运行存储一并装配。
+
+```bash
+# 单实例启用人工门禁跨请求续跑示例
+mwb-ai-claw --agent.collaboration.orchestration-run.store=local
+```
+
 ## 9. 数据与运行目录
 
 - 会话 / 记忆数据落在**运行目录** `.agent/` 下（按项目隔离）；

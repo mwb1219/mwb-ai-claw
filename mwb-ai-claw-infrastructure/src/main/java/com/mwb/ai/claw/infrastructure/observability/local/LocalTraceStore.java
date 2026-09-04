@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.infrastructure.observability;
+package com.mwb.ai.claw.infrastructure.observability.local;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;

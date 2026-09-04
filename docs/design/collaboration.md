@@ -118,6 +118,17 @@ nav_order: 3
 - **记忆沉淀**：叶子 Todo 结论以 `delegate-todo:{path}` 为 key 沉淀 FACT 记忆（重要度 1.0，失败仅告警）；
 - **产物落盘**：规划 / 结果按层路径落盘到 `{workdir}/{namespace}/{sessionId}/{时间戳}` 隔离目录（多租户产物互不可见）。
 
+### 2.3.1 委托编排可中断恢复（H1-P1）
+
+默认（`agent.collaboration.orchestration-run.store=none`）委托编排为同步单请求执行，人工门禁命中时在 JVM 内阻塞等待决策。开启运行持久化（`store=local|file|db`）后，执行权移交给**持久化的 Frame 栈推进机**（DelegateMachine），降低为「请求推进到暂停点即返回」的可恢复模型：
+
+- 递归调用栈被显式化为可落库的 `List<DelegateFrame>`（每层 PLAN→GATE→WAVE→SUMMARIZE 步进 + 结果/游标现场）；命中人工门禁（`approvalGate=root` 或 `all` 的**任意层**）或等待嵌套子编排（父 phase=`SUSPENDED` wait_child）时落库挂起，返回 `suspended=true` 与 `runId`，**不阻塞线程**；
+- 审批决策（approve/reject）写入运行记录，客户端凭 `runId` 调用 `POST /agent/run/{runId}/resume` 从暂停点精确续跑（Frame 栈重建现场，已推进/已批准层不重跑）：批准 → 继续推进；拒绝/超时 → 该层降级直执行；
+- **父等待子**：Todo 引用子编排且子 run 在门禁处挂起时，父记录挂 `pendingChildRunId` 置 phase=`SUSPENDED`；子完成后 resume 父自动回填子 reply 并继续；
+- 完成时 phase 转为 `DONE` 并落最终 reply。`store=local` 单实例内存续跑、`store=file` 单实例重启不丢（JSON 落盘）、`store=db` 走 JDBC 支持分布式续跑（表见 `claw_orchestration_run`，含 `stack_json` 现场列）。悬挂 run 由 `OrchestrationRunCleanupScheduler` 按 `stale-ttl-ms` 周期清理（store ∈ {file, local, db} 时装配，多实例可抢分布式锁）。
+
+> 该机制是后续 workflow 编排（预定义拓扑 + 精确人工门禁）的基础，运行记录模型对 workflow 复用。
+
 ## 3. 协作工具（自主发起）
 
 - [ ] `invoke_discussion` / `invoke_delegate` 为全局工具（global=true），无需在配置中声明，由主 Agent 在 ReAct 中根据任务性质自主决定发起

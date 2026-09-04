@@ -209,3 +209,32 @@ CREATE TABLE IF NOT EXISTS claw_memory_boundary (
     update_time BIGINT       NOT NULL COMMENT '最近更新时间戳（epoch 毫秒）',
     PRIMARY KEY (tenant_id, user_id, session_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会话记忆提炼边界游标';
+
+-- ==================== 委托编排运行记录表（MySQL 版） ====================
+-- 一次 delegate 编排的可恢复执行现场，在人工门禁（gate_layer）处挂起并落库，凭 run_id 可跨请求续跑
+-- （agent.collaboration.orchestration-run.store=db 时使用；plan 与 trace 存 JSON 文本，避免依赖具体 Todo 类型）
+CREATE TABLE IF NOT EXISTS claw_orchestration_run (
+    id                BIGINT       NOT NULL AUTO_INCREMENT COMMENT '自增主键（聚簇索引，非业务字段）',
+    tenant_id         VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '租户 id（空串=默认空间，对齐 AgentScope）',
+    user_id           VARCHAR(64)  NOT NULL DEFAULT '' COMMENT '用户 id（空串=默认空间，对齐 AgentScope）',
+    run_id            VARCHAR(64)  NOT NULL COMMENT '运行记录 id（全局唯一，配合 scope 定位）',
+    session_id        VARCHAR(64)  DEFAULT NULL COMMENT '会话 id',
+    orchestration_id  VARCHAR(64)  DEFAULT NULL COMMENT '编排定义 id',
+    phase             VARCHAR(16)  NOT NULL DEFAULT 'CREATED' COMMENT '运行状态：CREATED|RUNNING|GATE|SUSPENDED|DONE|FAILED',
+    version           BIGINT       NOT NULL DEFAULT 0 COMMENT '乐观锁版本号（续跑认领 CAS）',
+    task              TEXT         DEFAULT NULL COMMENT '根任务描述',
+    planner_agent_id  VARCHAR(64)  DEFAULT NULL COMMENT '根规划 Agent id',
+    plan_json         LONGTEXT     DEFAULT NULL COMMENT '根层 plan 快照（List<TodoDefinition> JSON）',
+    trace_json        LONGTEXT     DEFAULT NULL COMMENT '已累积执行轨迹（List<String> JSON）',
+    artifact_dir      VARCHAR(255) DEFAULT NULL COMMENT '产物根目录（本 run 的隔离目录）',
+    reply             LONGTEXT     DEFAULT NULL COMMENT '最终回复（phase=DONE 时有值）',
+    agent_id          VARCHAR(64)  DEFAULT NULL COMMENT '主导 Agent id',
+    gate_layer        VARCHAR(64)  DEFAULT NULL COMMENT '挂起的门禁层（根层=root；非挂起态为空）',
+    gate_decision     VARCHAR(16)  DEFAULT NULL COMMENT '门禁决策：NULL=待审批|APPROVED|REJECTED|TIMEOUT',
+    stack_json        LONGTEXT     DEFAULT NULL COMMENT 'Frame 栈序列化（DelegateMachine 现场，跨请求重建执行现场）',
+    create_time       BIGINT       NOT NULL DEFAULT 0 COMMENT '创建时间戳（epoch 毫秒）',
+    update_time       BIGINT       NOT NULL DEFAULT 0 COMMENT '最近更新时间戳（epoch 毫秒）',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_run_scope (tenant_id, user_id, run_id),
+    KEY idx_run_gated (tenant_id, user_id, session_id, phase, gate_decision)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='委托编排运行记录（agent.collaboration.orchestration-run.store=db）';

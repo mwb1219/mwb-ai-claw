@@ -4,6 +4,7 @@ import com.mwb.ai.claw.domain.core.ProgressCallback;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
 import com.mwb.ai.claw.dto.SingleResponse;
 import com.mwb.ai.claw.dto.ChatCmd;
+import com.mwb.ai.claw.dto.ResumeCmd;
 import com.mwb.ai.claw.dto.CreateSessionCmd;
 import com.mwb.ai.claw.dto.UpdateSessionCmd;
 import com.mwb.ai.claw.dto.data.ChatResponseDTO;
@@ -29,6 +30,13 @@ public interface AgentServiceI {
      * @param llmStreamCallback LLM流式回调
      */
     SingleResponse<ChatResponseDTO> chat(ChatCmd cmd, ProgressCallback progressCallback, LlmStreamCallback llmStreamCallback);
+
+    /**
+     * 续跑已挂起的编排运行（H1-P1 可中断恢复）：凭 runId 从人工门禁处继续推进。
+     * 返回结果若 {@code suspended=true} 仍等待下次续跑；否则本次编排已最终完成。
+     * @param cmd 续跑命令（runId 必填，须属于当前 scope）
+     */
+    SingleResponse<ChatResponseDTO> resume(ResumeCmd cmd);
 
     /**
      * 创建新会话

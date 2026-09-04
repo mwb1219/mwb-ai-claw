@@ -82,6 +82,8 @@ The interfaces below are defined in the domain layer, with default implementatio
 | Extension point | Interface | Default implementation | How to override |
 | --- | --- | --- | --- |
 | Orchestration plugin | `AgentOrchestrator` | routing / conversational / delegate | implement + register Bean + define in `orchestrations.json` |
+| Orchestration resume | `ResumableOrchestrator` (extends `AgentOrchestrator`) | resumable orchestrations ("suspend → resume") | implement `resume(ctx, runId)`, resume from an `OrchestrationRun` |
+| Orchestration run store | `OrchestrationRunStore` | built-in `InMemoryOrchestrationRunStore` (local) / `LocalFileOrchestrationRunStore` (file, JSON on disk) / `JdbcOrchestrationRunStore` (db) | implement the interface + register a Bean (no Bean when `store=none`); the SPI exposes `create/get/update/listGated/findGated/claimForResume/delete/deleteStale` (the last is used by the built-in `OrchestrationRunCleanupScheduler` to sweep stale GATE/SUSPENDED/RUNNING runs) |
 | Execution unit | `ExecutionUnit` | `ExecutionUnitImpl` | implement the interface |
 
 See [Multi-Agent Orchestration](collaboration.md).

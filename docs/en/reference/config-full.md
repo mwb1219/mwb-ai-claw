@@ -182,6 +182,11 @@ nav_order: 3
 | `agent.collaboration.lock.type` | `local` | Session lock: `local` (JVM lock, single instance) \| `redis` (SET NX distributed lock, shared across instances) |
 | `agent.collaboration.lock.redis-uri` | `redis://localhost:6379` | Redis URI (active when `type=redis`; may include password `redis://:pass@host:port`) |
 | `agent.collaboration.lock.key-prefix` | `claw:lock:` | Lock-key prefix (namespace isolation when sharing Redis) |
+| `agent.collaboration.orchestration-run.store` | `none` | Delegated-orchestration run persistence: `none` (default, no run record, synchronous single-request execution) \| `local` (JVM-in-memory, supports cross-request resume at gates / nested child orchestrations, lost on instance restart) \| `file` (local JSON files, single-instance survives restart) \| `db` (JDBC persistence, distributed resume) |
+| `agent.collaboration.orchestration-run.dir` | empty | Effective with `store=file`: root dir where run records are stored as JSON (empty → `${memory-dir}/orchestration-runs`) |
+| `agent.collaboration.orchestration-run.cleanup-enabled` | `true` | Toggle for the stale suspended-run scheduled cleanup (false → cleanup task is not started) |
+| `agent.collaboration.orchestration-run.cleanup-interval-hours` | `24` | Stale suspended-run cleanup interval (hours) |
+| `agent.collaboration.orchestration-run.stale-ttl-ms` | `86400000` | Stale suspended-run cleanup TTL (ms): records with `updateTime < now - ttl` and phase still GATE/SUSPENDED/RUNNING are removed |
 
 > `agent.storage.type=db` (retrieval) and `agent.collaboration.lock.type=redis` (lock) share the same Redis
 > connection: it reuses the `RedisConnectionFactory` auto-configured by `spring.data.redis.*`, or falls back

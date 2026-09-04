@@ -2,11 +2,12 @@ package com.mwb.ai.claw.infrastructure.autoconfigure;
 
 import java.util.List;
 
-import com.mwb.ai.claw.infrastructure.memory.synthesis.LocalMemorySynthesisDispatcher;
-import com.mwb.ai.claw.infrastructure.memory.synthesis.LockFreeMemorySynthesisDispatcher;
-import com.mwb.ai.claw.infrastructure.memory.synthesis.LockMemorySynthesisDispatcher;
+import com.mwb.ai.claw.infrastructure.memory.synthesis.dispatcher.LocalMemorySynthesisDispatcher;
+import com.mwb.ai.claw.infrastructure.memory.synthesis.dispatcher.LockFreeMemorySynthesisDispatcher;
+import com.mwb.ai.claw.infrastructure.memory.synthesis.dispatcher.LockMemorySynthesisDispatcher;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -59,6 +60,11 @@ import com.mwb.ai.claw.domain.tool.ToolPermissionChecker;
 import com.mwb.ai.claw.infrastructure.auth.ConfigToolPermissionChecker;
 import com.mwb.ai.claw.infrastructure.collaboration.common.lock.LocalSessionLockManager;
 import com.mwb.ai.claw.infrastructure.collaboration.common.lock.RedisSessionLockManager;
+import com.mwb.ai.claw.infrastructure.collaboration.delegate.run.InMemoryOrchestrationRunStore;
+import com.mwb.ai.claw.infrastructure.collaboration.delegate.run.JdbcOrchestrationRunStore;
+import com.mwb.ai.claw.infrastructure.collaboration.delegate.run.LocalFileOrchestrationRunStore;
+import com.mwb.ai.claw.infrastructure.collaboration.delegate.run.OrchestrationRunCleanupScheduler;
+import com.mwb.ai.claw.infrastructure.collaboration.delegate.run.OrchestrationRunStore;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.lock.DistributedLock;
 import com.mwb.ai.claw.infrastructure.lock.RedisDistributedLock;
@@ -86,14 +92,14 @@ import com.mwb.ai.claw.infrastructure.memory.storage.jdbc.JdbcSessionGateway;
 import com.mwb.ai.claw.infrastructure.memory.storage.redis.RedisMemoryIndexer;
 import com.mwb.ai.claw.infrastructure.memory.storage.redis.RedisMemorySearchable;
 import com.mwb.ai.claw.domain.memory.layered.synthesize.LlmMemorySynthesizer;
-import com.mwb.ai.claw.infrastructure.memory.synthesis.LocalSynthesisCache;
+import com.mwb.ai.claw.infrastructure.memory.synthesis.cache.LocalSynthesisCache;
 import com.mwb.ai.claw.infrastructure.memory.synthesis.MemorySynthesisExecutor;
-import com.mwb.ai.claw.infrastructure.memory.synthesis.RedisSynthesisCache;
+import com.mwb.ai.claw.infrastructure.memory.synthesis.cache.RedisSynthesisCache;
 import com.mwb.ai.claw.domain.memory.layered.spi.SynthesisCache;
-import com.mwb.ai.claw.infrastructure.observability.JdbcRunUsageStore;
-import com.mwb.ai.claw.infrastructure.observability.JdbcTraceStore;
-import com.mwb.ai.claw.infrastructure.observability.LocalRunUsageStore;
-import com.mwb.ai.claw.infrastructure.observability.LocalTraceStore;
+import com.mwb.ai.claw.infrastructure.observability.jdbc.JdbcRunUsageStore;
+import com.mwb.ai.claw.infrastructure.observability.jdbc.JdbcTraceStore;
+import com.mwb.ai.claw.infrastructure.observability.local.LocalRunUsageStore;
+import com.mwb.ai.claw.infrastructure.observability.local.LocalTraceStore;
 import com.mwb.ai.claw.infrastructure.observability.MetricsRecorder;
 import com.mwb.ai.claw.infrastructure.rag.access.AllowAllRagAccessPolicy;
 import com.mwb.ai.claw.infrastructure.redis.RedisSearchTemplate;
@@ -191,6 +197,61 @@ public class ClawCoreAutoConfiguration {
         public LocalRunUsageStore localRunUsageStore(AgentProperties properties) {
             return new LocalRunUsageStore(properties);
         }
+    }
+
+    // ==================== 委托编排运行记录存储（none | local | db） ====================
+    // agent.collaboration.orchestration-run.store 控制是否启用可中断续跑：
+    //   none（默认）  → 不装配任何 OrchestrationRunStore，delegate 走原同步单请求路径，行为与旧版一致；
+    //   local        → 单 JVM 内存存储（跨请求可续跑，实例重启不保留）；
+    //   db           → MySQL 持久化（跨请求 + 跨实例），依赖 schema.sql 中 claw_orchestration_run 表。
+
+    @Configuration
+    @ConditionalOnProperty(prefix = "agent.collaboration.orchestration-run", name = "store", havingValue = "db")
+    @ConditionalOnClass(JdbcTemplate.class)
+    public static class JdbcOrchestrationRunStoreConfiguration {
+
+        @Bean
+        @ConditionalOnMissingBean(OrchestrationRunStore.class)
+        public JdbcOrchestrationRunStore jdbcOrchestrationRunStore(JdbcTemplate jdbc) {
+            return new JdbcOrchestrationRunStore(jdbc);
+        }
+    }
+
+    @Configuration
+    @ConditionalOnProperty(prefix = "agent.collaboration.orchestration-run", name = "store", havingValue = "local")
+    public static class InMemoryOrchestrationRunStoreConfiguration {
+
+        @Bean
+        @ConditionalOnMissingBean(OrchestrationRunStore.class)
+        public InMemoryOrchestrationRunStore inMemoryOrchestrationRunStore() {
+            return new InMemoryOrchestrationRunStore();
+        }
+    }
+
+    @Configuration
+    @ConditionalOnProperty(prefix = "agent.collaboration.orchestration-run", name = "store", havingValue = "file")
+    public static class LocalFileOrchestrationRunStoreConfiguration {
+
+        @Bean
+        @ConditionalOnMissingBean(OrchestrationRunStore.class)
+        public LocalFileOrchestrationRunStore localFileOrchestrationRunStore(AgentProperties properties) {
+            return new LocalFileOrchestrationRunStore(properties);
+        }
+    }
+
+    /** 悬挂编排运行记录清理定时任务（store ∈ file/local/db 时随 OrchestrationRunStore Bean 一并装配；none 无 Store Bean 不装配）。 */
+    @Bean
+    @ConditionalOnMissingBean(OrchestrationRunCleanupScheduler.class)
+    @ConditionalOnBean(OrchestrationRunStore.class)
+    public OrchestrationRunCleanupScheduler orchestrationRunCleanupScheduler(
+            ObjectProvider<OrchestrationRunStore> store, ObjectProvider<DistributedLock> lock,
+            AgentProperties properties) {
+        OrchestrationRunStore runStore = store.getIfAvailable();
+        if (runStore == null) {
+            return null;
+        }
+        return new OrchestrationRunCleanupScheduler(runStore,
+                properties.getCollaboration().getOrchestrationRun(), lock.getIfAvailable());
     }
 
     // ==================== 权限 ====================
@@ -740,9 +801,11 @@ public class ClawCoreAutoConfiguration {
         @ConditionalOnMissingBean(MemoryPageCleanupScheduler.class)
         public MemoryPageCleanupScheduler memoryPageCleanupScheduler(JdbcMemoryPageStore jdbcMemoryPageStore,
                                                                      ObjectProvider<RedisMemoryIndexer> indexer,
+                                                                     ObjectProvider<DistributedLock> lock,
                                                                      AgentProperties properties) {
+            // 分布式锁可选注入：Redis 锁形态启用时让清理任务跨实例互斥，避免多实例并发删除
             return new MemoryPageCleanupScheduler(jdbcMemoryPageStore,
-                    indexer.getIfAvailable(), properties.getMemory());
+                    indexer.getIfAvailable(), properties.getMemory(), lock.getIfAvailable());
         }
     }
 

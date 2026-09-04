@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.infrastructure.observability;
+package com.mwb.ai.claw.infrastructure.observability.jdbc;
 
 import java.time.Instant;
 import java.time.LocalDate;

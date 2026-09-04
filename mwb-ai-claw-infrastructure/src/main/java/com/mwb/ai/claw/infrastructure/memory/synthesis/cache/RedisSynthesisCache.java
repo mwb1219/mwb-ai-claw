@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.infrastructure.memory.synthesis;
+package com.mwb.ai.claw.infrastructure.memory.synthesis.cache;
 
 import java.util.LinkedHashMap;
 import java.util.Map;

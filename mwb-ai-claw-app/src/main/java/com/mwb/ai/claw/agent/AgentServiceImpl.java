@@ -13,6 +13,7 @@ import com.mwb.ai.claw.agent.executor.SessionQueryExe;
 import com.mwb.ai.claw.agent.executor.SessionUpdateCmdExe;
 import com.mwb.ai.claw.dto.ChatCmd;
 import com.mwb.ai.claw.dto.CreateSessionCmd;
+import com.mwb.ai.claw.dto.ResumeCmd;
 import com.mwb.ai.claw.dto.UpdateSessionCmd;
 import com.mwb.ai.claw.dto.data.ChatResponseDTO;
 import com.mwb.ai.claw.dto.data.SessionDTO;
@@ -56,6 +57,11 @@ public class AgentServiceImpl implements AgentServiceI {
     @Override
     public SingleResponse<ChatResponseDTO> chat(ChatCmd cmd, ProgressCallback progressCallback, LlmStreamCallback llmStreamCallback) {
         return chatCmdExe.execute(cmd, progressCallback, llmStreamCallback);
+    }
+
+    @Override
+    public SingleResponse<ChatResponseDTO> resume(ResumeCmd cmd) {
+        return chatCmdExe.resume(cmd);
     }
 
     @Override

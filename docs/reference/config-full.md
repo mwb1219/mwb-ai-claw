@@ -184,6 +184,11 @@ nav_order: 3
 | `agent.collaboration.lock.type` | `local` | 会话并发锁：`local`（JVM 内锁，单实例）\| `redis`（SET NX 分布式锁，多实例共享） |
 | `agent.collaboration.lock.redis-uri` | `redis://localhost:6379` | Redis 连接串（type=redis 时生效，可带密码 `redis://:pass@host:port`） |
 | `agent.collaboration.lock.key-prefix` | `claw:lock:` | 锁 key 前缀（多租户/多环境共享 Redis 时隔离命名空间） |
+| `agent.collaboration.orchestration-run.store` | `none` | 委托编排运行持久化：`none`（默认，无运行记录，同步单请求执行）\| `local`（JVM 内存储，支持门禁/嵌套子编排跨请求续跑，实例重启丢失）\| `file`（本地文件，单实例重启不丢）\| `db`（JDBC 持久化，分布式续跑） |
+| `agent.collaboration.orchestration-run.dir` | 空 | `store=file` 生效：运行记录 JSON 落盘根目录（空则用 `${memory-dir}/orchestration-runs`） |
+| `agent.collaboration.orchestration-run.cleanup-enabled` | `true` | 悬挂 run 定时清理开关（false 时清理任务不启动） |
+| `agent.collaboration.orchestration-run.cleanup-interval-hours` | `24` | 悬挂 run 清理周期（小时） |
+| `agent.collaboration.orchestration-run.stale-ttl-ms` | `86400000` | 悬挂 run 清理 TTL（毫秒）：`updateTime < now - ttl` 且 phase 仍为 GATE/SUSPENDED/RUNNING 的记录被清除 |
 
 > `agent.storage.type=db`（召回）与 `agent.collaboration.lock.type=redis`（锁）共用同一 Redis 连接：
 > 优先复用业务方 `spring.data.redis.*` 自动装配的 `RedisConnectionFactory`，未配置时以

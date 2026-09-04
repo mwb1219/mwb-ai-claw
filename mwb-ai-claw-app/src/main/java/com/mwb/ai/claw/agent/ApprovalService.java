@@ -9,8 +9,11 @@ import com.mwb.ai.claw.dto.data.PendingApprovalDTO;
 import com.mwb.ai.claw.infrastructure.collaboration.delegate.approval.ApprovalRegistry;
 import com.mwb.ai.claw.infrastructure.collaboration.delegate.approval.PendingApproval;
 import com.mwb.ai.claw.infrastructure.collaboration.delegate.TodoDefinition;
+import com.mwb.ai.claw.infrastructure.collaboration.delegate.run.OrchestrationRun;
+import com.mwb.ai.claw.infrastructure.collaboration.delegate.run.OrchestrationRunStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -32,11 +35,23 @@ public class ApprovalService {
     @Resource
     private ApprovalRegistry approvalRegistry;
 
+    /** 编排运行记录存储（H1-P1 可中断恢复）：store=none 时无 Bean，审批决策只写内存注册表 */
+    @Resource
+    private ObjectProvider<OrchestrationRunStore> runStoreProvider;
+
     /** 列出待审批节点（可按会话过滤；空=全部；仅当前请求 scope 维度下的节点） */
     public SingleResponse<List<PendingApprovalDTO>> pendingTasks(String sessionId) {
         List<PendingApprovalDTO> result = new ArrayList<>();
-        for (PendingApproval pa : approvalRegistry.listPending(AgentScopeContext.get(), sessionId)) {
+        AgentScope scope = AgentScopeContext.get();
+        for (PendingApproval pa : approvalRegistry.listPending(scope, sessionId)) {
             result.add(toDTO(pa));
+        }
+        // 启用运行持久化的挂起 run（根层门禁）并入待审批列表
+        OrchestrationRunStore store = runStoreProvider.getIfAvailable();
+        if (store != null) {
+            for (OrchestrationRun run : store.listGated(scope, sessionId == null ? "" : sessionId)) {
+                result.add(toDTO(run));
+            }
         }
         return SingleResponse.of(result);
     }
@@ -58,15 +73,30 @@ public class ApprovalService {
         }
         String sessionId = cmd.getSessionId() == null ? "" : cmd.getSessionId();
         AgentScope scope = AgentScopeContext.get();
+        String layerKey = cmd.getLayerKey().trim();
         boolean done = approved
-                ? approvalRegistry.approve(scope, sessionId, cmd.getLayerKey().trim())
-                : approvalRegistry.reject(scope, sessionId, cmd.getLayerKey().trim());
+                ? approvalRegistry.approve(scope, sessionId, layerKey)
+                : approvalRegistry.reject(scope, sessionId, layerKey);
+        // 内存注册表无此节点且运行持久化已启用 → 落到挂起的 run（根层门禁）持久化解锁
+        if (!done) {
+            OrchestrationRunStore store = runStoreProvider.getIfAvailable();
+            if (store != null) {
+                java.util.Optional<OrchestrationRun> opt = store.findGated(scope, sessionId, layerKey);
+                if (opt.isPresent()) {
+                    OrchestrationRun run = opt.get();
+                    run.setGateDecision(approved ? OrchestrationRun.DECISION_APPROVED
+                            : OrchestrationRun.DECISION_REJECTED);
+                    store.update(run);
+                    done = true;
+                }
+            }
+        }
         if (!done) {
             return SingleResponse.buildFailure(AgentErrorCode.B_AGENT_CONFIG_ERROR.getErrCode(),
-                    "待审批节点不存在或已处理: " + sessionId + "/" + cmd.getLayerKey());
+                    "待审批节点不存在或已处理: " + sessionId + "/" + layerKey);
         }
         log.info("审批决策完成: action={}, session={}, layer={}", approved ? "approve" : "reject",
-                sessionId, cmd.getLayerKey());
+                sessionId, layerKey);
         return SingleResponse.buildSuccess();
     }
 
@@ -82,6 +112,31 @@ public class ApprovalService {
         }
         dto.setTodoTitles(titles);
         dto.setCreatedAt(pa.getCreatedAt());
+        return dto;
+    }
+
+    /** 运行持久化的挂起 run → 待审批 DTO（任务取 run 根任务，plan 取根层 plan 快照） */
+    private PendingApprovalDTO toDTO(OrchestrationRun run) {
+        PendingApprovalDTO dto = new PendingApprovalDTO();
+        dto.setSessionId(run.getSessionId());
+        dto.setLayerKey(run.getGateLayer() == null ? "root" : run.getGateLayer());
+        dto.setTask(run.getTask());
+        dto.setTodoCount(0);
+        dto.setTodoTitles(new ArrayList<>());
+        dto.setCreatedAt(run.getCreateTime());
+        if (run.getPlanJson() != null && !run.getPlanJson().isEmpty()) {
+            List<String> titles = new ArrayList<>();
+            try {
+                for (TodoDefinition t : com.mwb.ai.claw.domain.util.JsonUtils
+                        .fromJsonList(run.getPlanJson(), TodoDefinition.class)) {
+                    titles.add(t.getTitle() == null ? t.getTodoId() : t.getTitle());
+                }
+            } catch (Exception ignore) {
+                // 快照解析失败则仅展示任务描述
+            }
+            dto.setTodoTitles(titles);
+            dto.setTodoCount(titles.size());
+        }
         return dto;
     }
 }

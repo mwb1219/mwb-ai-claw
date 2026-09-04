@@ -1,9 +1,10 @@
-package com.mwb.ai.claw.infrastructure.memory.synthesis;
+package com.mwb.ai.claw.infrastructure.memory.synthesis.dispatcher;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
+import com.mwb.ai.claw.infrastructure.memory.synthesis.MemorySynthesisExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

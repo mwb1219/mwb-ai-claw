@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.mwb.ai.claw.infrastructure.observability.jdbc.JdbcTraceStore;
 import org.junit.Before;
 import org.junit.Test;
 import static org.junit.Assert.assertEquals;

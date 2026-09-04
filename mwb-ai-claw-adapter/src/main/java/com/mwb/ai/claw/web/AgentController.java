@@ -31,6 +31,7 @@ import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.dto.ChatCmd;
 import com.mwb.ai.claw.dto.CreateSessionCmd;
+import com.mwb.ai.claw.dto.ResumeCmd;
 import com.mwb.ai.claw.dto.SingleResponse;
 import com.mwb.ai.claw.dto.UpdateSessionCmd;
 import com.mwb.ai.claw.dto.data.ChatResponseDTO;
@@ -67,6 +68,28 @@ public class AgentController {
         }
         try {
             return agentService.chat(cmd);
+        } finally {
+            MDC.clear();
+        }
+    }
+
+    /**
+     * 续跑已挂起的编排运行（H1-P1 可中断恢复）：凭 runId 从人工门禁处继续推进。
+     * 返回结果 {@code suspended=true} 表示本次运行仍挂起（等待下次续跑）；否则已最终完成。
+     */
+    @PostMapping("/run/{runId}/resume")
+    public SingleResponse<ChatResponseDTO> resume(@PathVariable String runId,
+                                                  @RequestBody(required = false) ResumeCmd cmd) {
+        MDC.put("traceId", UUID.randomUUID().toString().replace("-", ""));
+        try {
+            if (cmd == null) {
+                cmd = new ResumeCmd();
+            }
+            cmd.setRunId(runId);
+            if (cmd.getSessionId() != null) {
+                MDC.put("sessionId", cmd.getSessionId());
+            }
+            return agentService.resume(cmd);
         } finally {
             MDC.clear();
         }

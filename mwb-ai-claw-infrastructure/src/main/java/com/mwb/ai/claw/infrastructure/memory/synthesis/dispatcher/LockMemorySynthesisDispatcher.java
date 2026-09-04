@@ -1,7 +1,8 @@
-package com.mwb.ai.claw.infrastructure.memory.synthesis;
+package com.mwb.ai.claw.infrastructure.memory.synthesis.dispatcher;
 
 import java.time.Duration;
 
+import com.mwb.ai.claw.infrastructure.memory.synthesis.MemorySynthesisExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

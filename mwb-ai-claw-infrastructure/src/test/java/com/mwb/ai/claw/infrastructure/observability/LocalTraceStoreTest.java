@@ -2,6 +2,7 @@ package com.mwb.ai.claw.infrastructure.observability;
 
 import java.util.Arrays;
 
+import com.mwb.ai.claw.infrastructure.observability.local.LocalTraceStore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;

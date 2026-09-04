@@ -11,7 +11,9 @@ public enum AgentErrorCode {
     B_AGENT_MAX_STEPS("B_AGENT_MAX_STEPS", "达到最大推理步数限制"),
     B_AGENT_SESSION_NOT_FOUND("B_AGENT_SESSION_NOT_FOUND", "会话不存在"),
     B_AGENT_CONFIG_ERROR("B_AGENT_CONFIG_ERROR", "Agent 配置缺失"),
-    B_AGENT_LOCK_TIMEOUT("B_AGENT_LOCK_TIMEOUT", "获取会话锁超时");
+    B_AGENT_LOCK_TIMEOUT("B_AGENT_LOCK_TIMEOUT", "获取会话锁超时"),
+    B_AGENT_RUN_NOT_FOUND("B_AGENT_RUN_NOT_FOUND", "编排运行记录不存在"),
+    B_AGENT_RUN_CONFLICT("B_AGENT_RUN_CONFLICT", "编排运行状态冲突");
 
     private final String errCode;
     private final String errDesc;
