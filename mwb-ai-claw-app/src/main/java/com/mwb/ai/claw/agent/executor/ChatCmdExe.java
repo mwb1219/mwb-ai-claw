@@ -112,6 +112,8 @@ public class ChatCmdExe {
         ctx.setSessionId(cmd.getSessionId() != null && !cmd.getSessionId().trim().isEmpty()
                 ? cmd.getSessionId() : run.getSessionId());
         ctx.setMessage(run.getTask());
+        // H1-P2：续跑承载工作流 human 节点的人工答复（仅 workflow 读取；delegate 忽略）
+        ctx.setResumeInput(cmd.getInput());
         ctx.setExplicitOrchestrationId(orchestrationId);
         ctx.setDefinition(definition);
         ctx.setAgentGateway(agentGateway);

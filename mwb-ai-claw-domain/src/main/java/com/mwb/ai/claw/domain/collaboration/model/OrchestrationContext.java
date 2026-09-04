@@ -51,4 +51,7 @@ public class OrchestrationContext {
     /** LLM 流式回调（routing 全链路支持；conversational 串行轮与收敛支持；
      *  conversational 并行首轮传 null，避免多线程交错输出终端） */
     private LlmStreamCallback streamCallback;
+
+    /** 续跑时携带的补充输入（H1-P2 workflow human 节点的人工答复；仅 resume 路径由 ChatCmdExe 设入，delegate 忽略） */
+    private String resumeInput;
 }

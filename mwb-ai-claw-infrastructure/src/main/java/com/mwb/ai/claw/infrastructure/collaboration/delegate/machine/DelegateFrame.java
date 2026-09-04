@@ -24,9 +24,10 @@ public class DelegateFrame {
     public static final String STEP_WAVE = "WAVE";
     public static final String STEP_SUMMARIZE = "SUMMARIZE";
 
-    /** 等待来源：null=推进中 | child_frame=等待内层 Frame | child_run=等待子编排 run */
+    /** 等待来源：null=推进中 | child_frame=等待内层 Frame | child_run=等待子编排 run | human_input=等待人工输入（H1-P2 工作流 human 节点） */
     public static final String PENDING_CHILD_FRAME = "child_frame";
     public static final String PENDING_CHILD_RUN = "child_run";
+    public static final String PENDING_HUMAN_INPUT = "human_input";
 
     /** 当前层深度（根=0） */
     private int depth;

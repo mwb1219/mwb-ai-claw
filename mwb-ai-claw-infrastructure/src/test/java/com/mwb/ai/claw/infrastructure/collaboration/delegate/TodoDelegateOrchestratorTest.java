@@ -520,7 +520,7 @@ public class TodoDelegateOrchestratorTest {
     }
 
     /** fake ExecutionUnit：按 prompt 特征返回「规划 / 直执行 / 汇总」三类回复，记录直执行任务与落盘文件 */
-    static class FakeExecutionUnit implements ExecutionUnit {
+    public static class FakeExecutionUnit implements ExecutionUnit {
         String rootPlan;
         String subPlan;
         /** P2 re-plan 输出（含「请根据已得结果调整剩余子任务」的 prompt 返回） */
@@ -530,14 +530,14 @@ public class TodoDelegateOrchestratorTest {
         final Map<String, OrchestrationDefinition> defs = new HashMap<>();
         final List<String> nestedOrchestrations = new CopyOnWriteArrayList<>();
         /** agentId → 直执行回复（缺省为 name+已完成） */
-        final Map<String, String> directReplies = new HashMap<>();
+        public final Map<String, String> directReplies = new HashMap<>();
         /** 规划（「你是任务规划者」）被调用的次数：断言 durable 续跑不重复规划已完成的层 */
         int planCalls;
         /** 最近一次汇总 prompt（top-k 压缩断言用） */
-        String lastSummaryPrompt;
-        final List<String> executed = new CopyOnWriteArrayList<>();
+        public String lastSummaryPrompt;
+        public final List<String> executed = new CopyOnWriteArrayList<>();
         /** fileName → content（writeFile / writeArtifact 落盘记录） */
-        final Map<String, String> writtenFiles = new HashMap<>();
+        public final Map<String, String> writtenFiles = new HashMap<>();
 
         @Override
         public Session getOrCreateSession(AgentScope scope, String sessionId, Agent agent) {
@@ -645,7 +645,7 @@ public class TodoDelegateOrchestratorTest {
     }
 
     /** fake 分层记忆：记录 saveFact 调用（topic → content），其余能力空实现 */
-    static class FakeLayeredMemoryGateway implements LayeredMemoryGateway {
+    public static class FakeLayeredMemoryGateway implements LayeredMemoryGateway {
         final Map<String, String> savedFacts = new HashMap<>();
 
         @Override
@@ -683,7 +683,7 @@ public class TodoDelegateOrchestratorTest {
     }
 
     /** fake AgentGateway：返回架构师 / 编码专家 / 信息检索专家，未知 id 回退默认 */
-    static class FakeAgentGateway implements AgentGateway {
+    public static class FakeAgentGateway implements AgentGateway {
 
         @Override
         public Agent getAgent(String agentId) {

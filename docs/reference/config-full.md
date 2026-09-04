@@ -195,6 +195,12 @@ nav_order: 3
 > `agent.collaboration.lock.redis-uri` 兜底创建；redis 依赖在框架中为 optional，需业务方显式引入
 > `spring-boot-starter-data-redis`（`@ConditionalOnClass` 门控，未引入时 db 召回退化为空结果、锁回退本地）。
 
+> **workflow 编排**（`orchestrations.json` 中 `type: "workflow"`）：拓扑/依赖/条件分支由 `config.workflow` 预先定义
+> （节点 `llm|tool|human|route|nest` + `dependsOn` + `condition`）。复用「可中断恢复」推进机，故**要求**
+> `agent.collaboration.orchestration-run.store=local|file|db`（`none` 时执行抛业务异常）；`human` 节点在
+> `pendingKind=human_input` 挂起，由 `POST /agent/run/{runId}/resume` 携带 `ResumeCmd.input` 人工答复续跑；
+> `route` 节点由 LLM 判官读 `condition` + 已产出节点结果选分支。完整配置示例见 `docs/design/collaboration.md §2.4`。
+
 ## 10. 外部 JSON 配置
 
 | 文件 | 说明 |

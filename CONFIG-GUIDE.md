@@ -108,8 +108,14 @@
 | `routing` | 单专家独立处理，按意图路由（默认兜底） |
 | `conversational` | 多方专家对话式讨论（如方案对比、技术选型），`config.conversation` 控制轮数/主持/收敛 |
 | `delegate` | 主 Agent 拆解 Todo 委托子 Agent 执行，`config.delegate` 控制深度/并行/失败策略 |
+| `workflow` | 预定义静态图（`config.workflow`：`llm/tool/human/route/nest` 节点 + `dependsOn` + `condition`），拓扑确定、条件路由、人工门禁；复用「可中断恢复」推进机 |
 
 可增删编排，或调整 `keywords` 改变自动触发条件。
+
+> **workflow（确定性情编）**：节点/依赖/条件分支在 `config.workflow` 预先定义，LLM 仅填充执行与条件判官。
+> `human` 节点在人工门禁挂起，`route` 由 LLM 判官按 `condition` + 已产出节点结果选分支；执行依赖跨请求续跑，
+> 因此需启用持久化（§8.2，`store=local|file|db`），`store=none` 时执行抛业务异常。示例见
+> `docs/design/collaboration.md §2.4`。
 
 ## 6. RAG 知识库（agent.rag.*）
 

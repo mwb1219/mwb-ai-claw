@@ -18,4 +18,7 @@ public class ResumeCmd {
 
     /** 编排定义 id（可选；缺省从运行记录解析） */
     private String orchestrationId;
+
+    /** 补充输入（H1-P2 workflow human 节点的人工答复；为空白/null 时忽略；delegate 续跑忽略） */
+    private String input;
 }
