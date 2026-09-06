@@ -45,11 +45,11 @@ Once in the interactive interface, just type a question to chat, for example:
 ```bash
 # 1. Download the latest package from GitHub Releases (no Maven / source needed, only JDK 8+)
 #    Download page: https://github.com/mwb1219/mwb-ai-claw/releases
-#    Asset: mwb-ai-claw-<version>-bin.tar.gz (current v1.0.5, about 26MB)
+#    Asset: mwb-ai-claw-<version>-bin.tar.gz (current v1.0.6, about 26MB)
 
 # 2. Extract and install as a global command (the package already contains a prebuilt jar; install.sh installs directly, no mvn needed)
-tar -xzf mwb-ai-claw-1.0.5-bin.tar.gz
-cd mwb-ai-claw-1.0.5-bin
+tar -xzf mwb-ai-claw-1.0.6-bin.tar.gz
+cd mwb-ai-claw-1.0.6-bin
 ./install.sh
 
 # 3. Edit ~/.mwb-ai-claw/.env to fill in DEFAULT_API_KEY, then start the Agent Shell
@@ -59,11 +59,11 @@ mwb-ai-claw
 **Windows (PowerShell)**:
 
 ```powershell
-# 1. Download mwb-ai-claw-1.0.5-bin.tar.gz (Windows 10+ has a built-in tar to extract, or use 7-Zip)
+# 1. Download mwb-ai-claw-1.0.6-bin.tar.gz (Windows 10+ has a built-in tar to extract, or use 7-Zip)
 
 # 2. Extract, then run the install script from the package root (-ExecutionPolicy Bypass to bypass policy restrictions)
-tar -xzf mwb-ai-claw-1.0.5-bin.tar.gz
-cd mwb-ai-claw-1.0.5-bin
+tar -xzf mwb-ai-claw-1.0.6-bin.tar.gz
+cd mwb-ai-claw-1.0.6-bin
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 
 # 3. Edit %USERPROFILE%\.mwb-ai-claw\.env to fill in DEFAULT_API_KEY, then start the Agent Shell
