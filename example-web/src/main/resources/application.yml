@@ -361,7 +361,7 @@ agent:
       - "unlink "
       - "truncate "
     # 单个工具执行超时（秒）
-    tool-timeout-seconds: 30
+    tool-timeout-seconds: 90
     # 工具输出最大长度（字符数），超出截断
     max-output-length: 10000
     # HTTP 请求允许的 host 模式（空列表表示全部允许）

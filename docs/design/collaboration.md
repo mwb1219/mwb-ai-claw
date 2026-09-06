@@ -43,13 +43,14 @@ nav_order: 3
 
 > 多 Agent 协作编排（conversational / delegate）通常不由消息前置路由触发，而是主 Agent 在 ReAct 循环中通过 `invoke_*` 全局工具自主发起。
 
-## 2. 三种内置编排
+## 2. 四种内置编排
 
 | 类型 | 说明 | 适用 |
 | --- | --- | --- |
 | `routing` | 单专家独立处理（意图路由选 Agent） | 默认兜底 |
 | `conversational` | 多方专家多轮讨论 + 收敛（共识/主持/择优） | 选型、方案对比 |
 | `delegate` | 主 Agent 规划 Todo → 委托子 Agent 并行/递归执行 | 复杂多步骤任务 |
+| `workflow` | 预定义静态图（确定性拓扑 + 人工门禁 + 条件路由），复用可恢复推进机 | 审批流转、风控条件路由、合规顺序保证 |
 
 ### 2.1 routing（专家路由）
 
@@ -117,6 +118,48 @@ nav_order: 3
 - **防环**：同线程维护嵌套调用链，A→B→A 循环引用立即抛异常终止；
 - **记忆沉淀**：叶子 Todo 结论以 `delegate-todo:{path}` 为 key 沉淀 FACT 记忆（重要度 1.0，失败仅告警）；
 - **产物落盘**：规划 / 结果按层路径落盘到 `{workdir}/{namespace}/{sessionId}/{时间戳}` 隔离目录（多租户产物互不可见）。
+
+### 2.3.1 委托编排可中断恢复（H1-P1）
+
+默认（`agent.collaboration.orchestration-run.store=none`）委托编排为同步单请求执行，人工门禁命中时在 JVM 内阻塞等待决策。开启运行持久化（`store=local|file|db`）后，执行权移交给**持久化的 Frame 栈推进机**（DelegateMachine），降低为「请求推进到暂停点即返回」的可恢复模型：
+
+- 递归调用栈被显式化为可落库的 `List<DelegateFrame>`（每层 PLAN→GATE→WAVE→SUMMARIZE 步进 + 结果/游标现场）；命中人工门禁（`approvalGate=root` 或 `all` 的**任意层**）或等待嵌套子编排（父 phase=`SUSPENDED` wait_child）时落库挂起，返回 `suspended=true` 与 `runId`，**不阻塞线程**；
+- 审批决策（approve/reject）写入运行记录，客户端凭 `runId` 调用 `POST /agent/run/{runId}/resume` 从暂停点精确续跑（Frame 栈重建现场，已推进/已批准层不重跑）：批准 → 继续推进；拒绝/超时 → 该层降级直执行；
+- **父等待子**：Todo 引用子编排且子 run 在门禁处挂起时，父记录挂 `pendingChildRunId` 置 phase=`SUSPENDED`；子完成后 resume 父自动回填子 reply 并继续；
+- 完成时 phase 转为 `DONE` 并落最终 reply。`store=local` 单实例内存续跑、`store=file` 单实例重启不丢（JSON 落盘）、`store=db` 走 JDBC 支持分布式续跑（表见 `claw_orchestration_run`，含 `stack_json` 现场列）。悬挂 run 由 `OrchestrationRunCleanupScheduler` 按 `stale-ttl-ms` 周期清理（store ∈ {file, local, db} 时装配，多实例可抢分布式锁）。
+
+> 该机制是后续 workflow 编排（预定义拓扑 + 精确人工门禁）的基础，运行记录模型对 workflow 复用。
+
+### 2.4 workflow（预定义静态图编排）
+
+确定性编排：拓扑、依赖与条件分支由 `orchestrations.json` 的 `config.workflow` **预先定义**，LLM 只填充关键环节（llm/tool 节点执行、route 条件判官）。复用 2.3.1 的可恢复 Frame 栈推进机（`DelegateMachine`）——仅替换「规划来源」为静态图。
+
+- 节点类型：`llm`（纯对话）\| `tool`（工具型 Agent，直接执行）\| `human`（人工门禁，挂起等待）\| `route`（条件分支，LLM 判官选路）\| `nest`（委托子编排，复用父等子 run）；
+- `dependsOn` 声明依赖，`condition` 描述 route 分支条件；`WorkflowParser` 在启动期 fail-fast 校验（缺配置 / 重复 id / 未知类型 / 引用不存在 / 依赖环 Kahn 检测 / agent 存在性），并把节点重排为 **Kahn 拓扑序** 交给推进机线性消费；
+- `human` 节点复用 `SUSPENDED`：执行时挂起（`pendingKind=human_input`），客户端凭 `runId` 调 `resume` 并携带 `ResumeCmd.input` 人工答复（`ctx.resumeInput`）后继续，不进审批待办列表，与 delegate 层级门禁正交；
+- `route` 节点运行时由 LLM 判官读 `condition` + 已产出节点结果选择分支，`chooseBranch` 裁剪为所选分支仍可达的下游（未走分支整个依赖子树跳过）；
+- `nest` 节点配置 `orchestrationId`，复用 `runOrchestration` + 父挂起等待子 run（`SUSPENDED` wait_child）。
+
+```json
+{
+  "id": "compliance-flow",
+  "type": "workflow",
+  "config": {
+    "workflow": {
+      "plannerAgentId": "architect",
+      "nodes": [
+        { "id": "collect", "type": "tool", "agentId": "data-fetcher", "dependsOn": [] },
+        { "id": "review",  "type": "human", "title": "合规审核", "description": "确认方案", "dependsOn": ["collect"] },
+        { "id": "risk",    "type": "route", "condition": "按风险结果分流", "dependsOn": ["review"] },
+        { "id": "approve", "type": "llm", "agentId": "architect", "dependsOn": ["risk"] },
+        { "id": "reject",  "type": "llm", "agentId": "architect", "dependsOn": ["risk"] }
+      ]
+    }
+  }
+}
+```
+
+workflow 依赖跨请求续跑（human/route），因此**要求**启用 `agent.collaboration.orchestration-run.store=local|file|db`，`store=none` 时执行直接抛业务异常（无同步回退路径）。
 
 ## 3. 协作工具（自主发起）
 

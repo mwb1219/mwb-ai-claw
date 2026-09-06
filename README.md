@@ -34,6 +34,7 @@ mwb-ai-claw **不是**一个模型集成库（同类的 LangChain4j / Spring AI 
 - **多租户** —— 基于 AgentScope 的数据隔离
 - **存储后端** —— file（零依赖），或 db = MySQL 存储 + Redis Stack 召回（关键词 + 向量 KNN）
 - **可观测性与韧性** —— 指标、JSONL 运行记录、重试/降级
+- **Agent 评测（Eval）** —— 数据集驱动的回归评测：定义 JSON/YAML 数据集 → 执行 → 判定（`rule`/`llm`/`both`）→ 产出 JSON/Markdown 报告 → 回归对比（diff）；支持 LLM 自动生成数据集，Shell `/eval` 与 Web 可视化页面双入口（详见 [Agent 评测系统](docs/guide/eval.md)）
 - **可嵌入** —— 在你自己的 Java 应用中嵌入 `ClawRuntime`（流式对话、多租户 scope）
 
 ## 为扩展而生

@@ -34,4 +34,10 @@ public class TodoDefinition {
 
     /** 嵌套编排 id（P2：可空；配置后该 Todo 委托给指定编排执行——conversational / delegate 自身，结果回传参与本层汇总） */
     private String orchestrationId;
+
+    /** 节点种类（H1-P2：工作流源填充，delegate 规划源不产该字段=null）。llm | tool | human | route | nest；推进机据此新增 human/route 处理器 */
+    private String kind;
+
+    /** 路由条件（H1-P2：route 节点填充；由源校验，推进机透传给 source.chooseBranch 裁决） */
+    private String condition;
 }

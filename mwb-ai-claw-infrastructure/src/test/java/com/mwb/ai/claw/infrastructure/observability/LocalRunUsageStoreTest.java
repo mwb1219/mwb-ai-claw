@@ -3,6 +3,7 @@ package com.mwb.ai.claw.infrastructure.observability;
 import java.util.List;
 import java.util.Map;
 
+import com.mwb.ai.claw.infrastructure.observability.local.LocalRunUsageStore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;

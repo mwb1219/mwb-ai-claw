@@ -125,11 +125,16 @@ else
     fi
 fi
 
-# 定位构建产物（spring-boot-maven-plugin repackage 产出 start-<ver>.jar，
-# 排除 javadoc / sources / .original 附属 jar）
-JAR="$(ls "$PROJECT_ROOT"/start/target/start-*.jar 2>/dev/null | grep -vE '(-javadoc\.jar$|-sources\.jar$|\.original$)' | head -1 || true)"
+# 定位构建产物（spring-boot-maven-plugin repackage 产出 start-<ver>.jar）。
+# 优先按当前版本的 pom revision 精确匹配，避免 target 下残留旧版本 fat jar（如 start-1.0.5.jar）
+# 因字母序排在 start-<version>.jar 之前而被 head -1 误选，导致打包/安装到旧代码。
+# 精确版本不存在时，再回退取最新的可执行 jar（排除 javadoc / sources / .original 附属 jar）。
+JAR="$(ls "$PROJECT_ROOT"/start/target/start-${VERSION}.jar 2>/dev/null | head -1 || true)"
 if [[ -z "${JAR:-}" || ! -f "$JAR" ]]; then
-    err "未找到构建产物 start/target/start-*.jar"
+    JAR="$(ls -t "$PROJECT_ROOT"/start/target/start-*.jar 2>/dev/null | grep -vE '(-javadoc\.jar$|-sources\.jar$|\.original$)' | head -1 || true)"
+fi
+if [[ -z "${JAR:-}" || ! -f "$JAR" ]]; then
+    err "未找到构建产物 start/target/start-${VERSION}.jar"
     err "请先执行 ./package.sh 或去掉 --skip-build"
     exit 1
 fi

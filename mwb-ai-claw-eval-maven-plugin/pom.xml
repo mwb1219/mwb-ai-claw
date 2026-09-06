@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>io.github.mwb1219</groupId>
+        <artifactId>mwb-ai-claw-parent</artifactId>
+        <version>${revision}</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>mwb-ai-claw-eval-maven-plugin</artifactId>
+    <packaging>maven-plugin</packaging>
+    <name>mwb-ai-claw-eval-maven-plugin</name>
+    <description>mwb-ai-claw-eval-maven-plugin: 构建期评测回归门（eval:diff 对比 baseline/current 报告，回归即失败；eval:report 打印报告摘要）。</description>
+    <url>https://github.com/mwb1219/mwb-ai-claw</url>
+
+    <properties>
+        <!-- 不发布到 Maven Central：仅作为 CI / 本地回归门使用，需解析真实版本号以避免发布。/deploy 时通过 inherit-maven-plugin 校验 -->
+        <maven.skipDeploy>true</maven.skipDeploy>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.apache.maven</groupId>
+            <artifactId>maven-plugin-api</artifactId>
+            <version>3.8.5</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.maven.plugin-tools</groupId>
+            <artifactId>maven-plugin-annotations</artifactId>
+            <version>3.8.2</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.maven</groupId>
+            <artifactId>maven-core</artifactId>
+            <version>3.8.5</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- eval 能力：报告读取与回归对比复用 EvalService / EvalDiffBuilder -->
+        <dependency>
+            <groupId>io.github.mwb1219</groupId>
+            <artifactId>mwb-ai-claw-eval</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-plugin-plugin</artifactId>
+                <version>3.8.2</version>
+                <configuration>
+                    <goalPrefix>eval</goalPrefix>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

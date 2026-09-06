@@ -28,6 +28,10 @@ nav_order: 4
 | `/compact` | Compact the current session history (keep the latest 10 entries + LLM summary) |
 | `/cost [id]` | Token usage estimate for the current (or specified) session |
 | `/clear` | Clear the screen and reset the context (create a new session) |
+| `/eval run <datasetPath> [agentId] [judge] [judgeModel]` | Run an evaluation: load the dataset → execute the agent → judge → write JSON/Markdown reports; `judge` is `rule` \| `llm` \| `both` (default `both`), `judgeModel` overrides the judge model |
+| `/eval report <reportPath>` | Print a summary of an existing JSON report (pass rate / latency / tokens / cost and meta) |
+| `/eval diff <baseline> <current>` | Compare two reports, showing regression / improvement / new / missing details and the pass-rate delta |
+| `/eval ls [datasetDir]` | List usable datasets in a directory (including parse-failure annotations) |
 
 ## 3. Session Management
 

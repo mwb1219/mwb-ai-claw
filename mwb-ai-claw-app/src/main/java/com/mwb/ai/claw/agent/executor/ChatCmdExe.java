@@ -28,15 +28,20 @@ import com.mwb.ai.claw.domain.observability.TraceRun;
 import com.mwb.ai.claw.domain.observability.TraceStep;
 import com.mwb.ai.claw.domain.observability.TraceStore;
 import com.mwb.ai.claw.domain.rag.context.RagRequestContext;
+import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.dto.ChatCmd;
+import com.mwb.ai.claw.dto.ResumeCmd;
 import com.mwb.ai.claw.dto.SingleResponse;
 import com.mwb.ai.claw.dto.data.AgentErrorCode;
 import com.mwb.ai.claw.dto.data.ChatResponseDTO;
 import com.mwb.ai.claw.exception.BizException;
 import com.mwb.ai.claw.infrastructure.collaboration.common.OrchestratorRegistry;
+import com.mwb.ai.claw.infrastructure.collaboration.delegate.run.OrchestrationRun;
+import com.mwb.ai.claw.infrastructure.collaboration.delegate.run.OrchestrationRunStore;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.config.OrchestrationConfigLoader;
+import com.mwb.ai.claw.domain.collaboration.spi.ResumableOrchestrator;
 import com.mwb.ai.claw.infrastructure.llm.RunTokenBudget;
 
 /**
@@ -74,8 +79,63 @@ public class ChatCmdExe {
     @Resource
     private ObjectProvider<TraceStore> traceStoreProvider;
 
+    /** 编排运行记录存储（H1-P1 可中断恢复）：store=none 时为空，resume 不可用 */
+    @Resource
+    private ObjectProvider<OrchestrationRunStore> runStoreProvider;
+
     public SingleResponse<ChatResponseDTO> execute(ChatCmd cmd) {
         return execute(cmd, null);
+    }
+
+    /**
+     * 续跑已挂起的编排运行（H1-P1）：凭 runId 加载运行记录 → 解析定义与可恢复编排器 → resume 推进。
+     */
+    public SingleResponse<ChatResponseDTO> resume(ResumeCmd cmd) {
+        if (cmd == null || cmd.getRunId() == null || cmd.getRunId().trim().isEmpty()) {
+            throw new BizException(AgentErrorCode.B_AGENT_CONFIG_ERROR.getErrCode(), "runId 不能为空");
+        }
+        OrchestrationRunStore store = runStoreProvider.getIfAvailable();
+        if (store == null) {
+            throw new BizException(AgentErrorCode.B_AGENT_CONFIG_ERROR.getErrCode(),
+                    "未启用编排运行持久化（agent.collaboration.orchestration-run.store），无法续跑");
+        }
+        AgentScope scope = AgentScopeContext.get();
+        OrchestrationRun run = store.get(scope, cmd.getRunId().trim())
+                .orElseThrow(() -> new BizException(AgentErrorCode.B_AGENT_RUN_NOT_FOUND.getErrCode(),
+                        "编排运行记录不存在或不属于当前空间: " + cmd.getRunId()));
+        String orchestrationId = (cmd.getOrchestrationId() != null && !cmd.getOrchestrationId().trim().isEmpty())
+                ? cmd.getOrchestrationId().trim() : run.getOrchestrationId();
+
+        OrchestrationDefinition definition = orchestrationLoader.get(orchestrationId);
+        OrchestrationContext ctx = new OrchestrationContext();
+        ctx.setScope(scope);
+        ctx.setSessionId(cmd.getSessionId() != null && !cmd.getSessionId().trim().isEmpty()
+                ? cmd.getSessionId() : run.getSessionId());
+        ctx.setMessage(run.getTask());
+        // H1-P2：续跑承载工作流 human 节点的人工答复（仅 workflow 读取；delegate 忽略）
+        ctx.setResumeInput(cmd.getInput());
+        ctx.setExplicitOrchestrationId(orchestrationId);
+        ctx.setDefinition(definition);
+        ctx.setAgentGateway(agentGateway);
+        ctx.setExecutionUnit(executionUnit);
+        AgentOrchestrator orchestrator = orchestratorRegistry.resolve(definition);
+        if (!(orchestrator instanceof ResumableOrchestrator)) {
+            throw new BizException(AgentErrorCode.B_AGENT_CONFIG_ERROR.getErrCode(),
+                    "编排剩余: " + orchestrationId + " 不支持续跑");
+        }
+        CollaborationResult result = ((ResumableOrchestrator) orchestrator)
+                .resume(ctx, cmd.getRunId().trim());
+        log.info("编排续跑完成: runId={}, orchestrationId={}, suspended={}", cmd.getRunId(),
+                orchestrationId, result.isSuspended());
+        ChatResponseDTO dto = new ChatResponseDTO();
+        dto.setSessionId(result.getSessionId());
+        dto.setAgentId(result.getAgentId());
+        dto.setOrchestrationId(result.getOrchestrationId());
+        dto.setReply(result.getReply());
+        dto.setTraceSteps(result.getTraceSteps());
+        dto.setRunId(result.getRunId());
+        dto.setSuspended(result.isSuspended());
+        return SingleResponse.of(dto);
     }
 
     /**
@@ -145,6 +205,9 @@ public class ChatCmdExe {
             dto.setOrchestrationId(result.getOrchestrationId());
             dto.setReply(result.getReply());
             dto.setTraceSteps(result.getTraceSteps());
+            // H1-P1 可中断恢复：透出运行记录 id 与挂起标记，供客户端对「挂起在人工门禁」的运行续跑
+            dto.setRunId(result.getRunId());
+            dto.setSuspended(result.isSuspended());
 
             recordUsage(cmd, orchestrationId, result, true, null, start);
             recordTrace(cmd, orchestrationId, result, true, null, start);

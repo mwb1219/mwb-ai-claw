@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>io.github.mwb1219</groupId>
+        <artifactId>mwb-ai-claw-parent</artifactId>
+        <version>${revision}</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>mwb-ai-claw-eval</artifactId>
+    <packaging>jar</packaging>
+    <name>mwb-ai-claw-eval</name>
+    <description>mwb-ai-claw-eval: Agent 评测体系（数据集→执行→判定→量化报告），独立模块，核心运行时零依赖。</description>
+    <url>https://github.com/mwb1219/mwb-ai-claw</url>
+
+    <dependencies>
+        <!-- 领域模型与核心抽象（ExecutionUnit / AgentScope / TraceRun / RunUsage / LlmResponse 等） -->
+        <dependency>
+            <groupId>io.github.mwb1219</groupId>
+            <artifactId>mwb-ai-claw-domain</artifactId>
+        </dependency>
+        <!-- LLM 网关（ProviderRoutingGateway / LlmGateway）、MetricsRecorder 等基础设施实现 -->
+        <dependency>
+            <groupId>io.github.mwb1219</groupId>
+            <artifactId>mwb-ai-claw-infrastructure</artifactId>
+        </dependency>
+
+        <!-- lombok 编译器 -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>javax.annotation</groupId>
+            <artifactId>javax.annotation-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <!-- 数据集 YAML 解析（版本由 spring-boot-dependencies BOM 管理） -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.dataformat</groupId>
+            <artifactId>jackson-dataformat-yaml</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- JUnit 4 测试运行所需（与 infrastructure 一致，沿用既有测试风格） -->
+        <dependency>
+            <groupId>org.junit.vintage</groupId>
+            <artifactId>junit-vintage-engine</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

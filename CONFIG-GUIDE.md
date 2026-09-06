@@ -108,8 +108,14 @@
 | `routing` | 单专家独立处理，按意图路由（默认兜底） |
 | `conversational` | 多方专家对话式讨论（如方案对比、技术选型），`config.conversation` 控制轮数/主持/收敛 |
 | `delegate` | 主 Agent 拆解 Todo 委托子 Agent 执行，`config.delegate` 控制深度/并行/失败策略 |
+| `workflow` | 预定义静态图（`config.workflow`：`llm/tool/human/route/nest` 节点 + `dependsOn` + `condition`），拓扑确定、条件路由、人工门禁；复用「可中断恢复」推进机 |
 
 可增删编排，或调整 `keywords` 改变自动触发条件。
+
+> **workflow（确定性情编）**：节点/依赖/条件分支在 `config.workflow` 预先定义，LLM 仅填充执行与条件判官。
+> `human` 节点在人工门禁挂起，`route` 由 LLM 判官按 `condition` + 已产出节点结果选分支；执行依赖跨请求续跑，
+> 因此需启用持久化（§8.2，`store=local|file|db`），`store=none` 时执行抛业务异常。示例见
+> `docs/design/collaboration.md §2.4`。
 
 ## 6. RAG 知识库（agent.rag.*）
 
@@ -213,6 +219,47 @@ mwb-ai-claw --agent.security.shell-approval-mode=auto  # 工具审批自动放�
 # 多实例部署示例：切换到 Redis 分布式锁
 mwb-ai-claw --agent.collaboration.lock.type=redis \
             --agent.collaboration.lock.redis-uri=redis://:password@redis.internal:6379/0
+```
+
+### 8.2 编排运行持久化（agent.collaboration.orchestration-run.*，H1-P1 可中断恢复）
+
+委托编排默认同步单请求执行；开启运行持久化后，降低为「请求推进到暂停点即返回」的可恢复模型——命中人工门禁（`approvalGate=root` 或 `all` 的任意层）或等待嵌套子编排（父 `SUSPENDED`）时落库挂起返回 `suspended=true` 与 `runId`，不再阻塞线程，客户端可凭 `runId` 调用 `POST /agent/run/{runId}/resume` 从暂停点续跑（Frame 栈精确恢复，已推进部分不重跑）。
+
+| 配置 | 说明 | 默认 |
+| --- | --- | --- |
+| `agent.collaboration.orchestration-run.store` | 运行存储：`none`（默认，无运行记录，同步执行）\| `local`（JVM 内，支持门禁/嵌套子编排跨请求续跑，重启丢失）\| `file`（本地文件，单实例重启不丢）\| `db`（JDBC 持久化，分布式续跑） | `none` |
+| `agent.collaboration.orchestration-run.dir` | `store=file` 生效：运行记录 JSON 落盘根目录（空用 `${memory-dir}/orchestration-runs`） | 空 |
+| `agent.collaboration.orchestration-run.cleanup-enabled` | 悬挂 run 定时清理开关 | `true` |
+| `agent.collaboration.orchestration-run.cleanup-interval-hours` | 悬挂 run 清理周期（小时） | `24` |
+| `agent.collaboration.orchestration-run.stale-ttl-ms` | 悬挂 run 清理 TTL（毫秒）：`updateTime < now - ttl` 且 phase 仍为 GATE/SUSPENDED/RUNNING 的记录被清除 | `86400000` |
+
+> 默认 `none` 保持原同步路径与旧行为完全一致；`store=local` 无需额外依赖，适合单实例快速体验续跑；`store=file` 单实例重启不丢、零依赖；`store=db` 需业务方自行管理 `claw_orchestration_run` 表（见 `framework-schema.sql`），用于多实例分布式续跑。悬挂 run 清理任务在 store ∈ {file, local, db} 时随运行存储一并装配。
+
+```bash
+# 单实例启用人工门禁跨请求续跑示例
+mwb-ai-claw --agent.collaboration.orchestration-run.store=local
+```
+
+### 8.3 评测系统（agent.eval.*，H2 评测回归门）
+
+评测系统用「数据集 → 执行 → 判定 → 报告 → 回归对比」量化 Agent 表现，执行与判定核心在 `mwb-ai-claw-eval` 模块。
+
+| 配置 | 说明 | 默认 |
+| --- | --- | --- |
+| `agent.eval.enabled` | 评测引擎总开关 | `true` |
+| `agent.eval.dataset-path` | 默认数据集文件（JSON/YAML）路径；命令未指定时使用 | 空 |
+| `agent.eval.agent-id` | 跑评测的主导 Agent id | `default` |
+| `agent.eval.judge` | 判定策略：`rule` \| `llm` \| `both`（`both` = 规则先过、LLM 兜底） | `both` |
+| `agent.eval.judge-model` | LLM 裁判模型（缺省继承全局 / 目标 Agent 模型） | 空 |
+| `agent.eval.output` | 报告输出目录 | `./eval-report` |
+| `agent.eval.concurrency` | 并行执行 case 数（1=串行，避免打爆本地令牌/配额） | `1` |
+
+- **交互式触发**：Shell 内 `/eval run/report/diff/ls`（见 `docs` 的 shell-commands）。
+- **构建期回归门**：`mwb-ai-claw-eval-maven-plugin` 的 `eval:diff` goal 对比 baseline/current 报告，回归即失败；CI 中通过 `EVAL_BASELINE`/`EVAL_CURRENT` 环境变量启用（`tools/ci.sh` 阶段 3）。
+
+```bash
+# 单场景快速评测（judge 走 rule，不依赖 LLM）
+mwb-ai-claw --agent.eval.judge=rule --agent.eval.dataset-path=./dataset/qa.json
 ```
 
 ## 9. 数据与运行目录

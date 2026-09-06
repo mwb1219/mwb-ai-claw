@@ -16,7 +16,7 @@ import com.mwb.ai.claw.domain.observability.RunUsageStore;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.domain.scope.AgentScopeContext;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
-import com.mwb.ai.claw.infrastructure.observability.LocalRunUsageStore;
+import com.mwb.ai.claw.infrastructure.observability.local.LocalRunUsageStore;
 
 /**
  * 每次运行用量记录器（门面）：一次 Agent 执行结束后记录一条 JSONL/DB 运行摘要。

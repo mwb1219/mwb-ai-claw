@@ -10,6 +10,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.mwb.ai.claw.infrastructure.memory.synthesis.dispatcher.LocalMemorySynthesisDispatcher;
+import com.mwb.ai.claw.infrastructure.memory.synthesis.dispatcher.LockMemorySynthesisDispatcher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;

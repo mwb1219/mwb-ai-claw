@@ -381,6 +381,31 @@ public class AgentProperties {
     public static class CollaborationConfig {
         /** 会话锁配置（agent.collaboration.lock.*） */
         private LockConfig lock = new LockConfig();
+
+        /** 委托编排运行持久化配置（agent.collaboration.orchestration-run.*） */
+        private OrchestrationRunConfig orchestrationRun = new OrchestrationRunConfig();
+    }
+
+    /**
+     * 委托编排运行持久化配置（H1-P1 可中断恢复）：
+     * store=none 时 delegate 走原同步单请求路径，无运行记录（默认，行为与旧版一致）。
+     */
+    @Data
+    public static class OrchestrationRunConfig {
+        /** 存储模式：none（默认，无运行记录）| local（单 JVM 内存）| file（本地文件）| db（JDBC） */
+        private String store = "none";
+
+        /** file 存储的根目录（store=file 生效；空则用 ${user.dir}/.agent/orchestration-runs） */
+        private String dir = "";
+
+        /** 悬挂 run 清理开关（默认 true；false 时定时清理不启动） */
+        private boolean cleanupEnabled = true;
+
+        /** 悬挂 run 清理周期（小时，默认 24） */
+        private long cleanupIntervalHours = 24;
+
+        /** 悬挂 run 清理 TTL（毫秒），超期且 phase 仍为 GATE/SUSPENDED/RUNNING 的记录被清除（默认 24h） */
+        private long staleTtlMs = 86_400_000L;
     }
 
     /**

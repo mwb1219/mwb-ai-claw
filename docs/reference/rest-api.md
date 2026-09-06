@@ -15,6 +15,7 @@ nav_order: 1
 | --- | --- | --- | --- |
 | `POST` | `/agent/chat` | 同步对话 | body: `ChatCmd`（message / sessionId / agentId / orchestrationId / responseFormat / jsonSchema / parts） |
 | `GET` | `/agent/chat/stream` | SSE 流式对话 | `message`、`sessionId?`、`agentId?` |
+| `POST` | `/agent/run/{runId}/resume` | 续跑已挂起的编排运行 | body: `ResumeCmd`?（sessionId? / orchestrationId?）+ 路径 `runId` |
 | `POST` | `/agent/session` | 创建会话 | body: `CreateSessionCmd`（agentId?） |
 | `PUT` | `/agent/session/{sessionId}` | 更新会话（标题） | body: `UpdateSessionCmd` |
 | `POST` | `/agent/session/{sessionId}/duplicate` | 复制会话 | - |

@@ -184,11 +184,22 @@ nav_order: 3
 | `agent.collaboration.lock.type` | `local` | 会话并发锁：`local`（JVM 内锁，单实例）\| `redis`（SET NX 分布式锁，多实例共享） |
 | `agent.collaboration.lock.redis-uri` | `redis://localhost:6379` | Redis 连接串（type=redis 时生效，可带密码 `redis://:pass@host:port`） |
 | `agent.collaboration.lock.key-prefix` | `claw:lock:` | 锁 key 前缀（多租户/多环境共享 Redis 时隔离命名空间） |
+| `agent.collaboration.orchestration-run.store` | `none` | 委托编排运行持久化：`none`（默认，无运行记录，同步单请求执行）\| `local`（JVM 内存储，支持门禁/嵌套子编排跨请求续跑，实例重启丢失）\| `file`（本地文件，单实例重启不丢）\| `db`（JDBC 持久化，分布式续跑） |
+| `agent.collaboration.orchestration-run.dir` | 空 | `store=file` 生效：运行记录 JSON 落盘根目录（空则用 `${memory-dir}/orchestration-runs`） |
+| `agent.collaboration.orchestration-run.cleanup-enabled` | `true` | 悬挂 run 定时清理开关（false 时清理任务不启动） |
+| `agent.collaboration.orchestration-run.cleanup-interval-hours` | `24` | 悬挂 run 清理周期（小时） |
+| `agent.collaboration.orchestration-run.stale-ttl-ms` | `86400000` | 悬挂 run 清理 TTL（毫秒）：`updateTime < now - ttl` 且 phase 仍为 GATE/SUSPENDED/RUNNING 的记录被清除 |
 
 > `agent.storage.type=db`（召回）与 `agent.collaboration.lock.type=redis`（锁）共用同一 Redis 连接：
 > 优先复用业务方 `spring.data.redis.*` 自动装配的 `RedisConnectionFactory`，未配置时以
 > `agent.collaboration.lock.redis-uri` 兜底创建；redis 依赖在框架中为 optional，需业务方显式引入
 > `spring-boot-starter-data-redis`（`@ConditionalOnClass` 门控，未引入时 db 召回退化为空结果、锁回退本地）。
+
+> **workflow 编排**（`orchestrations.json` 中 `type: "workflow"`）：拓扑/依赖/条件分支由 `config.workflow` 预先定义
+> （节点 `llm|tool|human|route|nest` + `dependsOn` + `condition`）。复用「可中断恢复」推进机，故**要求**
+> `agent.collaboration.orchestration-run.store=local|file|db`（`none` 时执行抛业务异常）；`human` 节点在
+> `pendingKind=human_input` 挂起，由 `POST /agent/run/{runId}/resume` 携带 `ResumeCmd.input` 人工答复续跑；
+> `route` 节点由 LLM 判官读 `condition` + 已产出节点结果选分支。完整配置示例见 `docs/design/collaboration.md §2.4`。
 
 ## 10. 外部 JSON 配置
 
@@ -217,3 +228,28 @@ nav_order: 3
 ---
 
 相关：[配置详解](../guide/configuration.md) ｜ 源码模板：`start/src/main/resources/application.yml`、`.env.example`
+
+---
+
+## 12. 评测系统（agent.eval.*）
+
+评测系统用于量化 Agent 表现：定义数据集 → 执行 → 判定 → 产出报告 → 回归对比。执行与判定核心在
+`mwb-ai-claw-eval` 模块，配置前缀 `agent.eval.*`（对应 `EvalProperties`）。
+
+| 配置 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `agent.eval.enabled` | boolean | `true` | 评测引擎总开关；`false` 时暂停评测能力 |
+| `agent.eval.dataset-path` | string | - | 默认数据集文件（JSON/YAML）路径；命令未指定时使用 |
+| `agent.eval.agent-id` | string | `default` | 跑评测的主导 Agent id |
+| `agent.eval.judge` | string | `both` | 判定策略：`rule` \| `llm` \| `both`（`both` = 规则先过、LLM 兜底） |
+| `agent.eval.judge-model` | string | - | LLM 裁判模型（缺省继承全局模型 / 目标 Agent 模型） |
+| `agent.eval.output` | string | `./eval-report` | 报告输出目录 |
+| `agent.eval.concurrency` | int | `1` | 并行执行 case 数（1=串行，避免打爆本地令牌/配额） |
+
+**触发方式与回归门：**
+
+- 交互式：Shell 内 `/eval run/report/diff/ls` 命令族（见 [shell-commands](shell-commands.md)）。
+- 构建期回归门：`mwb-ai-claw-eval-maven-plugin` 的 `eval:diff` goal，对比
+  baseline/current 两份报告，回归即构建失败（见 [评测指南](../guide/eval.md)）。
+
+---

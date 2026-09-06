@@ -34,6 +34,7 @@ If LangChain4j / Spring AI are the **parts** for building a harness, mwb-ai-claw
 - **Multi-tenancy** — AgentScope-based data isolation
 - **Storage backends** — file (zero dependency), or `db` = MySQL storage + Redis Stack retrieval (keyword + vector KNN)
 - **Observability & resilience** — metrics, JSONL run logs, retry / degradation
+- **Agent evaluation (Eval)** — dataset-driven regression evaluation: define JSON/YAML datasets → execute → judge (`rule` / `llm` / `both`) → produce JSON/Markdown reports → regression diff; supports LLM-automatic dataset generation, with Shell `/eval` and a Web UI as entry points (see [Agent Evaluation](docs/guide/eval.md))
 - **Embeddable** — embed `ClawRuntime` in your own Java app (streaming chat, multi-tenant scope)
 
 ## Extensible by design

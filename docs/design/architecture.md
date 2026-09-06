@@ -64,6 +64,8 @@ nav_order: 1
 | `mwb-ai-claw-adapter` | 适配层：REST / SSE / WebSocket / Shell 终端 |
 | `mwb-ai-claw-app` | 应用层：用例执行器（ChatCmdExe 等）、`ClawRuntime` 嵌入式入口 |
 | `mwb-ai-claw-spring-boot-starter` | Starter 自动装配入口（`ClawAutoConfiguration`） |
+| `mwb-ai-claw-eval` | 评测能力（独立，零运行时污染）：`DatasetLoader` 数据集合 + `EvalRunner` 执行 + `RuleEvaluator`/`LlmJudgeEvaluator` 判定 + 报告/回归 diff |
+| `mwb-ai-claw-eval-maven-plugin` | 构建期评测回归门（`eval:diff` / `eval:report`），对比报告、回归即失败，供 CI 使用 |
 | `start` | 服务端示例：Web / Shell 双模式可执行应用 |
 | `example-embed` / `example-web` | 嵌入式 / Web 独立示例 |
 

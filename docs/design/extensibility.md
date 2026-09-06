@@ -82,6 +82,8 @@ nav_order: 8
 | 扩展点 | 接口 | 默认实现 | 覆盖方式 |
 | --- | --- | --- | --- |
 | 编排插件 | `AgentOrchestrator` | routing / conversational / delegate | 实现接口 + 注册 Bean + `orchestrations.json` 定义 |
+| 编排续跑 | `ResumableOrchestrator`（extends `AgentOrchestrator`） | 支持横向「挂起→续跑」的可恢复编排 | 实现 `resume(ctx, runId)`，从 `OrchestrationRun` 续跑 |
+| 编排运行存储 | `OrchestrationRunStore` | 内置 `InMemoryOrchestrationRunStore` / `JdbcOrchestrationRunStore` | 实现接口 + 注册 Bean（`store=none` 时无此 Bean） |
 | 执行单元 | `ExecutionUnit` | `ExecutionUnitImpl` | 实现接口 |
 
 详见 [多 Agent 编排](collaboration.md)。

@@ -157,6 +157,7 @@ services:
     volumes:
       - example_web_agent:/app/.agent
       - example_web_logs:/app/logs
+      - example_web_datasets:/app/generated-datasets
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080'"]
       interval: 10s
@@ -182,3 +183,4 @@ volumes:
   mysql_data:
   example_web_agent:
   example_web_logs:
+  example_web_datasets:

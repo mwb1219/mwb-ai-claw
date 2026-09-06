@@ -28,6 +28,10 @@ nav_order: 4
 | `/compact` | 压缩当前会话历史（保留最近 10 条 + LLM 摘要） |
 | `/cost [id]` | 当前（或指定）会话 token 用量估算 |
 | `/clear` | 清屏并重置上下文（新建会话） |
+| `/eval run <datasetPath> [agentId] [judge] [judgeModel]` | 运行评测：加载数据集 → 执行 Agent → 判定 → 落盘 JSON/Markdown 报告；`judge` 取 `rule` \| `llm` \| `both`（默认 `both`），`judgeModel` 覆盖裁判模型 |
+| `/eval report <reportPath>` | 查看既有 JSON 报告摘要（通过率/耗时/token/cost 与 meta） |
+| `/eval diff <baseline> <current>` | 对比两张报告，输出回归/修复/新增/缺失明细与通过率 delta |
+| `/eval ls [datasetDir]` | 列举数据集目录中的可用数据集（含解析失败标注） |
 
 ## 3. 会话管理
 

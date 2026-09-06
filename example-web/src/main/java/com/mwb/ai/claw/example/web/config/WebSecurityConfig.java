@@ -24,6 +24,7 @@ public class WebSecurityConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(authInterceptor).addPathPatterns("/user/**");
+        // 接入方用户管理接口（/user/**）与评测接口（/eval/**）走框架 AuthInterceptor 保护
+        registry.addInterceptor(authInterceptor).addPathPatterns("/user/**", "/eval/**");
     }
 }

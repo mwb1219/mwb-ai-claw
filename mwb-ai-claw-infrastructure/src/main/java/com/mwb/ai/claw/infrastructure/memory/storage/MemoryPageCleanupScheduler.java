@@ -1,5 +1,6 @@
 package com.mwb.ai.claw.infrastructure.memory.storage;
 
+import java.time.Duration;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -10,6 +11,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.mwb.ai.claw.domain.memory.layered.LayeredMemoryConfig;
+import com.mwb.ai.claw.infrastructure.lock.DistributedLock;
+import com.mwb.ai.claw.infrastructure.lock.LockOptions;
+import com.mwb.ai.claw.infrastructure.lock.LockResult;
 import com.mwb.ai.claw.infrastructure.memory.storage.jdbc.JdbcMemoryPageStore;
 import com.mwb.ai.claw.infrastructure.memory.storage.redis.RedisMemoryIndexer;
 
@@ -30,18 +34,31 @@ public class MemoryPageCleanupScheduler {
     private static final Logger log = LoggerFactory.getLogger(MemoryPageCleanupScheduler.class);
     private static final long HOUR_MILLIS = 60 * 60 * 1000L;
 
+    /** 跨实例全局互斥的清理锁 key（清理无租户维度，全局一把锁）。 */
+    private static final String CLEANUP_LOCK_KEY = "claw:memory:cleanup";
+
+    /**
+     * 清理锁租约。清理虽应快速完成，但数据量大时可能耗时较长，
+     * 使用 RedisDistributedLock 的 watchdog 自动续期，避免执行期间锁过期被并发实例抢占。
+     */
+    private static final Duration CLEANUP_LOCK_TTL = Duration.ofMinutes(30);
+
     private final JdbcMemoryPageStore pageStore;
     private final RedisMemoryIndexer indexer;
     private final LayeredMemoryConfig config;
+    private final DistributedLock distributedLock;
 
     private volatile ScheduledExecutorService scheduler;
 
     public MemoryPageCleanupScheduler(JdbcMemoryPageStore pageStore,
                                       RedisMemoryIndexer indexer,
-                                      LayeredMemoryConfig config) {
+                                      LayeredMemoryConfig config,
+                                      DistributedLock distributedLock) {
         this.pageStore = pageStore;
         this.indexer = indexer;
         this.config = config;
+        // 分布式锁为可选：classpath 无 spring-data-redis 或未启用 Redis 锁形态时保持原有本机执行（单实例）。
+        this.distributedLock = distributedLock;
         if (config.isCleanupEnabled()) {
             start();
         } else {
@@ -63,8 +80,30 @@ public class MemoryPageCleanupScheduler {
                 intervalHours, config.getCleanupOlderThanDays());
     }
 
-    /** 单次清理执行体：DB 权威删除 + Redis 派生索引失效。 */
+    /** 单次清理执行体：多实例下先抢分布式锁，仅持有者执行 DB 权威删除 + Redis 派生索引失效。 */
     public void runCleanup() {
+        if (distributedLock == null) {
+            // 无分布式锁基建（单实例 / 未启用 Redis 锁形态）：退化为本机直接执行
+            doCleanup();
+            return;
+        }
+        try {
+            LockResult<Void> result = distributedLock.execute(CLEANUP_LOCK_KEY,
+                    LockOptions.tryLockWithRenew(CLEANUP_LOCK_TTL, Duration.ZERO),
+                    this::doCleanup);
+            if (!result.isAcquired()) {
+                // tryLock 不等待：被其他实例持有则本轮直接跳过，等待下个调度周期再尝试
+                log.info("记忆页过期清理已被其他实例执行，本轮跳过: key={}, reason={}",
+                        CLEANUP_LOCK_KEY, result.getFailReason());
+            }
+        } catch (Exception e) {
+            // 抢锁异常（如 Redis 抖动）：fail-open 跳过本轮，避免阻塞调度线程，下周期重试
+            log.warn("记忆页过期清理获取分布式锁异常，本轮跳过: {}", e.getMessage());
+        }
+    }
+
+    /** 实际清理动作（被分布式锁或本机直接调用）：DB 权威删除 + Redis 派生索引失效。 */
+    private Void doCleanup() {
         try {
             long cutoff = System.currentTimeMillis()
                     - Math.max(0, config.getCleanupOlderThanDays()) * 24 * HOUR_MILLIS;
@@ -77,6 +116,7 @@ public class MemoryPageCleanupScheduler {
         } catch (Exception e) {
             log.warn("记忆页过期清理失败，将在下一周期重试: {}", e.getMessage());
         }
+        return null;
     }
 
     @PreDestroy

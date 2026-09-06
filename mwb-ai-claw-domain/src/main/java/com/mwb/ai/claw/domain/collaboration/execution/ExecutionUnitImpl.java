@@ -103,6 +103,20 @@ public class ExecutionUnitImpl implements ExecutionUnit {
     }
 
     @Override
+    public ReActResult runAgentResult(String prompt, Agent agent, ProgressCallback callback,
+                                      LlmStreamCallback streamCallback) {
+        // 与 runAgent 相同的临时会话载体，但返回完整 ReActResult（含步骤级轨迹），供评测等场景采集 trace
+        Session session = new Session();
+        session.setSessionId(UUID.randomUUID().toString().replace("-", ""));
+        session.setAgentId(agent.getAgentId());
+        session.addUserMessage(prompt);
+        if (streamCallback != null) {
+            return reActLoopService.streamRun(session, agent, callback, streamCallback);
+        }
+        return reActLoopService.run(session, agent, callback);
+    }
+
+    @Override
     public Path writeArtifact(String workdir, String stageId, String content) {
         try {
             Path dir = Paths.get(workdir).toAbsolutePath().normalize();

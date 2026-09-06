@@ -45,6 +45,22 @@ public interface ExecutionUnit {
     String runAgent(String prompt, Agent agent, ProgressCallback callback, LlmStreamCallback streamCallback);
 
     /**
+     * 用一段提示词驱动单个 Agent 执行一次 ReAct（临时会话，不入库），返回完整执行结果
+     * （最终回复 + 步骤级轨迹 traceSteps + success/errorMessage），供评测等需要轨迹的场景使用。
+     * <p>
+     * 默认实现委托 {@link #runAgent}，返回仅含 reply 的 {@link ReActResult}（向后兼容）；
+     * 需要返回真实轨迹的（如 {@code ExecutionUnitImpl}）覆盖此方法。
+     */
+    default ReActResult runAgentResult(String prompt, Agent agent,
+                                       ProgressCallback callback, LlmStreamCallback streamCallback) {
+        String reply = runAgent(prompt, agent, callback, streamCallback);
+        ReActResult result = new ReActResult();
+        result.setReply(reply);
+        result.setSuccess(reply != null);
+        return result;
+    }
+
+    /**
      * 将阶段产物落盘到工作目录，返回文件路径。
      */
     Path writeArtifact(String workdir, String stageId, String content);

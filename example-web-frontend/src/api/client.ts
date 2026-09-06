@@ -3,6 +3,13 @@ import type {
   ApprovalCmd,
   AuthRequest,
   CreateSessionCmd,
+  DatasetInfo,
+  EvalConfig,
+  EvalDiff,
+  EvalReport,
+  EvalRunResult,
+  GenerateDatasetCommand,
+  GenerateDatasetResult,
   MemoryOverview,
   MemoryPage,
   PendingApprovalDTO,
@@ -257,5 +264,50 @@ export const observabilityApi = {
   /** 按 traceId 还原一次执行的逐步明细（Thought / Action / Observation） */
   getTrace(traceId: string): Promise<TraceRun> {
     return request<TraceRun>(`/trace/${encodeURIComponent(traceId)}`);
+  },
+};
+
+// ==================== Agent 评测（/eval/**，@Profile("web") 的 EvalController） ====================
+
+export const evalApi = {
+  /** 用 LLM 按主题自动生成评测数据集，并落盘为 JSON 文件（可直接用于 run） */
+  generateDataset(cmd: GenerateDatasetCommand): Promise<GenerateDatasetResult> {
+    return request<GenerateDatasetResult>('/eval/dataset/generate', {
+      method: 'POST',
+      body: JSON.stringify(cmd),
+    });
+  },
+  /** 运行评测：加载数据集 → 执行 Agent → 判定 → 落盘 JSON/Markdown 报告 */
+  run(config: EvalConfig): Promise<EvalRunResult> {
+    return request<EvalRunResult>('/eval/run', {
+      method: 'POST',
+      body: JSON.stringify({
+        // 仅携带已填字段；concurrency/filters 等缺省由后端兜底
+        datasetPath: config.datasetPath,
+        agentId: config.agentId,
+        judge: config.judge,
+        judgeModel: config.judgeModel,
+        output: config.output,
+        concurrency: config.concurrency,
+        filters: config.filters,
+        pricePerKToken: config.pricePerKToken,
+        recordTraces: config.recordTraces,
+      }),
+    });
+  },
+  /** 读取既有 JSON 报告摘要 */
+  report(path: string): Promise<EvalReport> {
+    return request<EvalReport>(`/eval/report?path=${encodeURIComponent(path)}`);
+  },
+  /** 对比两份报告，返回回归差异 */
+  diff(baseline: string, current: string): Promise<EvalDiff> {
+    return request<EvalDiff>(
+      `/eval/diff?baseline=${encodeURIComponent(baseline)}&current=${encodeURIComponent(current)}`,
+    );
+  },
+  /** 列出数据集目录中的可用数据集 */
+  ls(dir?: string): Promise<DatasetInfo[]> {
+    const qs = dir ? `?dir=${encodeURIComponent(dir)}` : '';
+    return request<DatasetInfo[]>(`/eval/ls${qs}`);
   },
 };

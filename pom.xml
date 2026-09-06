@@ -32,6 +32,8 @@
         <module>mwb-ai-claw-app</module>
         <module>mwb-ai-claw-domain</module>
         <module>mwb-ai-claw-infrastructure</module>
+        <module>mwb-ai-claw-eval</module>
+        <module>mwb-ai-claw-eval-maven-plugin</module>
         <module>mwb-ai-claw-spring-boot-starter</module>
         <module>start</module>
     </modules>
@@ -80,6 +82,16 @@
             <dependency>
                 <groupId>io.github.mwb1219</groupId>
                 <artifactId>mwb-ai-claw-infrastructure</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.mwb1219</groupId>
+                <artifactId>mwb-ai-claw-eval</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.mwb1219</groupId>
+                <artifactId>mwb-ai-claw-eval-maven-plugin</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

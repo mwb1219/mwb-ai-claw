@@ -116,6 +116,17 @@ Key mechanisms:
 - **Memory distillation**: leaf-todo conclusions are distilled into FACT memory keyed by `delegate-todo:{path}` (importance 1.0; failures only warn);
 - **Artifact persistence**: plans / results are written per layer path into the isolated `{workdir}/{namespace}/{sessionId}/{timestamp}` directory (tenant artifacts are mutually invisible).
 
+### 2.3.1 Delegated-Orchestration Interruptible Recovery (H1-P1)
+
+By default (`agent.collaboration.orchestration-run.store=none`) a delegated orchestration runs synchronously in a single request, and a hit human gate blocks the JVM thread waiting for a decision. With run persistence enabled (`store=local|file|db`), execution is handed to a **persisted Frame-stack advancing machine** (DelegateMachine), reduced to a resumable "advance to the next pause and return" model:
+
+- The recursive invocation stack is made explicit as a persistable `List<DelegateFrame>` (each layer advances PLAN→GATE→WAVE→SUMMARIZE with result/cursor state). On hitting a human gate (`approvalGate=root` or the **arbitrary layer** for `all`), or when waiting for a nested child orchestration (parent phase=`SUSPENDED` wait_child), it persists and suspends, returning `suspended=true` with a `runId`, and **does not block the thread**;
+- The approval decision (approve/reject) is persisted onto the run; the client calls `POST /agent/run/{runId}/resume` to resume precisely from the pause point (the Frame stack rebuilds the scene; already-advanced/approved layers are not re-run): approved → continue; rejected/timeout → degrade to direct execution;
+- **Parent-waits-child**: when a Todo references a child orchestration that is suspended at a gate, the parent record sets `pendingChildRunId` and goes phase=`SUSPENDED`; once the child completes, resuming the parent injects the child reply and continues;
+- On completion the phase becomes `DONE` with the final reply. `store=local` resumes in-memory in a single instance; `store=file` persists JSON so a single instance survives restart; `store=db` goes through JDBC for distributed resume (see table `claw_orchestration_run`, including the `stack_json` scene column). Stale suspended runs are swept by `OrchestrationRunCleanupScheduler` on a `stale-ttl-ms` interval (assembled for store ∈ {file, local, db}; multi-instance can take a distributed lock).
+
+> This underpins the later workflow orchestration (predefined topology + precise human gates); the run model is reused by workflow.
+
 ## 3. Collaboration Tools (self-initiated)
 
 - [ ] `invoke_discussion` / `invoke_delegate` are global tools (global=true), no need to declare in config; the main Agent decides autonomously within ReAct based on the task nature
