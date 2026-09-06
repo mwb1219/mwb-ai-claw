@@ -240,6 +240,28 @@ mwb-ai-claw --agent.collaboration.lock.type=redis \
 mwb-ai-claw --agent.collaboration.orchestration-run.store=local
 ```
 
+### 8.3 评测系统（agent.eval.*，H2 评测回归门）
+
+评测系统用「数据集 → 执行 → 判定 → 报告 → 回归对比」量化 Agent 表现，执行与判定核心在 `mwb-ai-claw-eval` 模块。
+
+| 配置 | 说明 | 默认 |
+| --- | --- | --- |
+| `agent.eval.enabled` | 评测引擎总开关 | `true` |
+| `agent.eval.dataset-path` | 默认数据集文件（JSON/YAML）路径；命令未指定时使用 | 空 |
+| `agent.eval.agent-id` | 跑评测的主导 Agent id | `default` |
+| `agent.eval.judge` | 判定策略：`rule` \| `llm` \| `both`（`both` = 规则先过、LLM 兜底） | `both` |
+| `agent.eval.judge-model` | LLM 裁判模型（缺省继承全局 / 目标 Agent 模型） | 空 |
+| `agent.eval.output` | 报告输出目录 | `./eval-report` |
+| `agent.eval.concurrency` | 并行执行 case 数（1=串行，避免打爆本地令牌/配额） | `1` |
+
+- **交互式触发**：Shell 内 `/eval run/report/diff/ls`（见 `docs` 的 shell-commands）。
+- **构建期回归门**：`mwb-ai-claw-eval-maven-plugin` 的 `eval:diff` goal 对比 baseline/current 报告，回归即失败；CI 中通过 `EVAL_BASELINE`/`EVAL_CURRENT` 环境变量启用（`tools/ci.sh` 阶段 3）。
+
+```bash
+# 单场景快速评测（judge 走 rule，不依赖 LLM）
+mwb-ai-claw --agent.eval.judge=rule --agent.eval.dataset-path=./dataset/qa.json
+```
+
 ## 9. 数据与运行目录
 
 - 会话 / 记忆数据落在**运行目录** `.agent/` 下（按项目隔离）；

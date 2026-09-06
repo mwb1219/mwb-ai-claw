@@ -33,6 +33,7 @@ export default defineConfig({
               { text: 'Agent 注册表与编排配置', link: '/guide/agents-config.html' },
               { text: '技能系统（Skill）', link: '/guide/skills.html' },
               { text: 'MCP 工具接入', link: '/guide/mcp.html' },
+              { text: 'Agent 评测系统', link: '/guide/eval.html' },
             ],
           },
           {
@@ -89,6 +90,7 @@ export default defineConfig({
               { text: 'Agents & Orchestrations Configuration', link: '/en/guide/agents-config.html' },
               { text: 'Skills System (Skill)', link: '/en/guide/skills.html' },
               { text: 'MCP Tools Integration', link: '/en/guide/mcp.html' },
+              { text: 'Agent Evaluation System', link: '/en/guide/eval.html' },
             ],
           },
           {

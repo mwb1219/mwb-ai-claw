@@ -1764,3 +1764,150 @@
   font-size: 12.5px;
 }
 
+/* ==================== Agent 评测（/eval/**） ==================== */
+.eval-page {
+  background: var(--bg);
+}
+
+.eval-gen-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.eval-gen-grid .form-field-wide {
+  grid-column: 1 / -1;
+}
+
+.form-field select {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+}
+
+.form-field select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-bg);
+}
+
+.eval-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.gen-result {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gen-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+}
+
+.gen-cases {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gen-case {
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-muted);
+}
+
+.gen-case-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.gen-case-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.gen-case-prompt {
+  font-size: 12.5px;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.gen-case-expected {
+  font-size: 11.5px;
+}
+
+.dataset-row {
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.dataset-row:hover {
+  border-color: var(--primary);
+}
+
+.dataset-row.selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+.run-result {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.run-result-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+
+.case-verdict {
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--bg-input);
+  font-size: 12px;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.case-reply {
+  margin-top: 6px;
+  font-size: 11.5px;
+  word-break: break-word;
+}
+
+.report-detail,
+.diff-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.eval-diff-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+

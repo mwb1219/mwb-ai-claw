@@ -73,6 +73,8 @@ nav_order: 1
 | `mwb-ai-claw-adapter` | Adapter layer: REST / SSE / WebSocket / Shell terminal |
 | `mwb-ai-claw-app` | Application layer: use-case executors (ChatCmdExe, etc.), `ClawRuntime` embedded entry |
 | `mwb-ai-claw-spring-boot-starter` | Starter auto-configuration entry (`ClawAutoConfiguration`) |
+| `mwb-ai-claw-eval` | Evaluation capability (standalone, zero runtime pollution): `DatasetLoader` datasets + `EvalRunner` execution + `RuleEvaluator`/`LlmJudgeEvaluator` judging + report/regression diff |
+| `mwb-ai-claw-eval-maven-plugin` | Build-time evaluation regression gate (`eval:diff` / `eval:report`) comparing reports, failing the build on regression, for CI |
 | `start` | Server example: Web / Shell dual-mode executable application |
 | `example-embed` / `example-web` | Embedded / standalone Web examples |
 

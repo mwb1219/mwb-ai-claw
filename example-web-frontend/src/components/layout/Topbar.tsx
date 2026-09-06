@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Bot, BookOpen, Database, Eye, LogOut, MessageSquare, ShieldCheck, User } from 'lucide-react';
+import { Bot, BookOpen, Database, Eye, FlaskConical, LogOut, MessageSquare, ShieldCheck, User } from 'lucide-react';
 
 import { ThemeSwitch } from '../common/ThemeSwitch';
 import { userApi } from '../../api/client';
@@ -58,6 +58,9 @@ export function Topbar() {
         </NavLink>
         <NavLink to="/observability" className="nav-link">
           <Eye size={16} /> 观测
+        </NavLink>
+        <NavLink to="/eval" className="nav-link">
+          <FlaskConical size={16} /> 评测
         </NavLink>
       </nav>
 

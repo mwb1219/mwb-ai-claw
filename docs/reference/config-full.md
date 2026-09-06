@@ -228,3 +228,28 @@ nav_order: 3
 ---
 
 相关：[配置详解](../guide/configuration.md) ｜ 源码模板：`start/src/main/resources/application.yml`、`.env.example`
+
+---
+
+## 12. 评测系统（agent.eval.*）
+
+评测系统用于量化 Agent 表现：定义数据集 → 执行 → 判定 → 产出报告 → 回归对比。执行与判定核心在
+`mwb-ai-claw-eval` 模块，配置前缀 `agent.eval.*`（对应 `EvalProperties`）。
+
+| 配置 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `agent.eval.enabled` | boolean | `true` | 评测引擎总开关；`false` 时暂停评测能力 |
+| `agent.eval.dataset-path` | string | - | 默认数据集文件（JSON/YAML）路径；命令未指定时使用 |
+| `agent.eval.agent-id` | string | `default` | 跑评测的主导 Agent id |
+| `agent.eval.judge` | string | `both` | 判定策略：`rule` \| `llm` \| `both`（`both` = 规则先过、LLM 兜底） |
+| `agent.eval.judge-model` | string | - | LLM 裁判模型（缺省继承全局模型 / 目标 Agent 模型） |
+| `agent.eval.output` | string | `./eval-report` | 报告输出目录 |
+| `agent.eval.concurrency` | int | `1` | 并行执行 case 数（1=串行，避免打爆本地令牌/配额） |
+
+**触发方式与回归门：**
+
+- 交互式：Shell 内 `/eval run/report/diff/ls` 命令族（见 [shell-commands](shell-commands.md)）。
+- 构建期回归门：`mwb-ai-claw-eval-maven-plugin` 的 `eval:diff` goal，对比
+  baseline/current 两份报告，回归即构建失败（见 [评测指南](../guide/eval.md)）。
+
+---

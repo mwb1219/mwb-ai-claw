@@ -207,3 +207,26 @@ All support run-directory overrides + `${VAR:default}` placeholders. See [Config
 ---
 
 See also: [Configuration Guide](../guide/configuration.md) | Source templates: `start/src/main/resources/application.yml`, `.env.example`
+
+---
+
+## 12. Evaluation System (`agent.eval.*`)
+
+The evaluation system quantifies agent performance: define a dataset → execute → judge → produce a report → compare for regressions. Execution and judging live in the `mwb-ai-claw-eval` module; the config prefix is `agent.eval.*` (mapped to `EvalProperties`).
+
+| Config | Type | Default | Description |
+| --- | --- | --- | --- |
+| `agent.eval.enabled` | boolean | `true` | Master switch for the evaluation engine; `false` disables it |
+| `agent.eval.dataset-path` | string | - | Default dataset file (JSON/YAML) path; used when a command does not specify one |
+| `agent.eval.agent-id` | string | `default` | Primary agent id to evaluate |
+| `agent.eval.judge` | string | `both` | Judge strategy: `rule` \| `llm` \| `both` (`both` = rule first, LLM fallback) |
+| `agent.eval.judge-model` | string | - | LLM judge model (defaults to the global / target agent model) |
+| `agent.eval.output` | string | `./eval-report` | Report output directory |
+| `agent.eval.concurrency` | int | `1` | Concurrent cases (1 = sequential, to avoid exhausting local tokens/quota) |
+
+**Triggers and the regression gate:**
+
+- Interactive: the `/eval run/report/diff/ls` command family in the shell (see [shell-commands](shell-commands.md)).
+- Build-time regression gate: the `eval:diff` goal of `mwb-ai-claw-eval-maven-plugin` compares a baseline and a current report, failing the build on regression (see the [Eval Guide](../guide/eval.md)).
+
+---

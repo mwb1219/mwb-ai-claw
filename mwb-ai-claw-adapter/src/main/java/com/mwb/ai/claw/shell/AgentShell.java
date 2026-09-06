@@ -48,17 +48,21 @@ import com.mwb.ai.claw.domain.core.Message;
 import com.mwb.ai.claw.domain.core.MessageRole;
 import com.mwb.ai.claw.domain.core.ProgressCallback;
 import com.mwb.ai.claw.domain.core.Session;
+import com.mwb.ai.claw.domain.core.SessionGateway;
 import com.mwb.ai.claw.domain.llm.ContentPart;
 import com.mwb.ai.claw.domain.llm.LlmResponse;
 import com.mwb.ai.claw.domain.llm.LlmStreamCallback;
-import com.mwb.ai.claw.domain.memory.layered.LayeredMemoryGateway;
-import com.mwb.ai.claw.domain.core.SessionGateway;
 import com.mwb.ai.claw.domain.memory.layered.LayeredMemoryConfig;
+import com.mwb.ai.claw.domain.memory.layered.LayeredMemoryGateway;
 import com.mwb.ai.claw.domain.memory.layered.model.MemoryPage;
 import com.mwb.ai.claw.domain.memory.layered.spi.MemoryPageStore;
+import com.mwb.ai.claw.domain.memory.layered.spi.SynthesisCache;
+import com.mwb.ai.claw.domain.memory.layered.synthesize.LlmMemorySynthesizer;
 import com.mwb.ai.claw.domain.scope.AgentScope;
 import com.mwb.ai.claw.domain.tool.McpServerConfig;
 import com.mwb.ai.claw.domain.tool.ToolApproval;
+import com.mwb.ai.claw.domain.util.JsonUtils;
+import com.mwb.ai.claw.domain.util.TokenEstimator;
 import com.mwb.ai.claw.dto.ApprovalCmd;
 import com.mwb.ai.claw.dto.ChatCmd;
 import com.mwb.ai.claw.dto.CreateSessionCmd;
@@ -68,13 +72,9 @@ import com.mwb.ai.claw.dto.data.PendingApprovalDTO;
 import com.mwb.ai.claw.dto.data.SessionDTO;
 import com.mwb.ai.claw.infrastructure.config.AgentProperties;
 import com.mwb.ai.claw.infrastructure.memory.synthesis.MemorySynthesisExecutor;
-import com.mwb.ai.claw.domain.memory.layered.spi.SynthesisCache;
-import com.mwb.ai.claw.domain.memory.layered.synthesize.LlmMemorySynthesizer;
 import com.mwb.ai.claw.infrastructure.observability.MetricsRecorder;
 import com.mwb.ai.claw.infrastructure.tool.ToolSecurity;
 import com.mwb.ai.claw.infrastructure.tool.mcp.McpClientManager;
-import com.mwb.ai.claw.domain.util.JsonUtils;
-import com.mwb.ai.claw.domain.util.TokenEstimator;
 import com.mwb.ai.claw.shell.util.MultimodalInputParser;
 import com.mwb.ai.claw.shell.util.TemplateEngine;
 
@@ -139,6 +139,9 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
 
     @Resource
     private RunUsageRecorder runUsageRecorder;
+
+    @Resource
+    private EvalCommandService evalCommandService;
 
     private Terminal terminal;
     private LineReader reader;
@@ -535,6 +538,9 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
             case "/reject":
                 handleApprovalDecide(false, arg1, arg2);
                 break;
+            case "/eval":
+                handleEvalCommand(arg1, arg2);
+                break;
             case "/exit":
             case "/quit":
                 throw new EndOfFileException();
@@ -549,6 +555,70 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
                     println(STYLE_WARN, "未知命令: " + cmd + "，输入 /help 查看帮助");
                 }
         }
+    }
+
+    // ==================== 评测（/eval 命令族） ====================
+
+    /**
+     * /eval 命令族：run/report/diff/ls，委托给 {@link EvalCommandService}。
+     * 语法示例：
+     *   /eval run dataset.json [agentId] [rule|llm|both] [judgeModel]
+     *   /eval report report.json
+     *   /eval diff baseline.json current.json
+     *   /eval ls [datasetDir]
+     */
+    private void handleEvalCommand(String sub, String arg) {
+        if (evalCommandService == null) {
+            println(STYLE_WARN, "评测组件不可用");
+            return;
+        }
+        if (sub == null) {
+            println(STYLE_INFO, evalCommandService.help());
+            return;
+        }
+        switch (sub.toLowerCase()) {
+            case "run": {
+                String[] p = tokenize(arg);
+                if (p.length < 1) {
+                    println(STYLE_WARN, "用法: /eval run <datasetPath> [agentId] [judge=rule|llm|both] [judgeModel]");
+                    return;
+                }
+                String agentId = p.length > 1 ? p[1] : null;
+                String judge = p.length > 2 ? p[2] : null;
+                String model = p.length > 3 ? p[3] : null;
+                println(STYLE_INFO, evalCommandService.run(p[0], agentId, judge, model));
+                return;
+            }
+            case "report": {
+                String[] p = tokenize(arg);
+                if (p.length < 1) {
+                    println(STYLE_WARN, "用法: /eval report <reportPath>");
+                    return;
+                }
+                println(STYLE_INFO, evalCommandService.report(p[0]));
+                return;
+            }
+            case "diff": {
+                String[] p = tokenize(arg);
+                if (p.length < 2) {
+                    println(STYLE_WARN, "用法: /eval diff <baselineReport> <currentReport>");
+                    return;
+                }
+                println(STYLE_INFO, evalCommandService.diff(p[0], p[1]));
+                return;
+            }
+            case "ls": {
+                String[] p = tokenize(arg);
+                println(STYLE_INFO, evalCommandService.ls(p.length > 0 ? p[0] : null));
+                return;
+            }
+            default:
+                println(STYLE_WARN, "未知 eval 子命令: " + sub + "，支持: run, report, diff, ls");
+        }
+    }
+
+    private String[] tokenize(String s) {
+        return s == null || s.trim().isEmpty() ? new String[0] : s.trim().split("\\s+");
     }
 
     private void handleSessionCommand(String sub, String arg) {
@@ -1688,6 +1758,11 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
         println(STYLE_INFO, "  /memory search <q>     检索记忆召回调试");
         println(STYLE_INFO, "  /metrics               可观测性指标总览（claw.* 实时计数）");
         println(STYLE_INFO, "  /runs [yyyy-MM-dd]     运行用量记录（空参=今天）");
+        println(STYLE_INFO, "  /eval                  查看评测帮助");
+        println(STYLE_INFO, "  /eval run <数据集> [Agent] [rule|llm|both] [裁判模型] [true]   运行评测（末参 true 记录 golden baseline trace）");
+        println(STYLE_INFO, "  /eval report <报告>    查看评测摘要");
+        println(STYLE_INFO, "  /eval diff <基线报告> <当前报告>   回归对比");
+        println(STYLE_INFO, "  /eval ls [数据集目录]  列出可用数据集");
         println(STYLE_INFO, "  /clear                 清屏并重置上下文（新建会话）");
         println(STYLE_INFO, "  /pending [sessionId]   列出待审批节点（delegate 编排审批门禁）");
         println(STYLE_INFO, "  /approve <layerKey> [sessionId]  批准该层计划，继续委派执行");
@@ -1935,7 +2010,8 @@ public class AgentShell implements CommandLineRunner, ToolApproval {
             "/agent", "/agent list", "/agent attach ",
             "/memory", "/memory stats", "/memory facts", "/memory summaries",
             "/memory archive", "/memory search ", "/compact", "/cost", "/json ", "/clear",
-            "/metrics", "/runs ", "/pending", "/approve ", "/reject ", "/exit", "/quit");
+            "/metrics", "/runs ", "/pending", "/approve ", "/reject ", "/exit", "/quit",
+            "/eval", "/eval run ", "/eval report ", "/eval diff ", "/eval ls");
 
     /** 终端补全器：斜杠命令 / 会话 ID（switch/delete/rename 场景）/ 文件路径 */
     private final class ShellCompleter implements Completer {

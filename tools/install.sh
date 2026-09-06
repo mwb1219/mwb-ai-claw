@@ -187,12 +187,18 @@ resolve_jar() {
         mvn package -pl start -am -DskipTests -q
     ) || { err "构建失败，请检查 Maven 输出"; exit 1; }
 
-    # 定位构建产物（spring-boot-maven-plugin repackage 产出 start-<ver>.jar，
-    # 同时存在 start-<ver>.jar.original；这里取不含 .original 的可执行 jar）
-    local jar
-    jar="$(ls start/target/start-*.jar 2>/dev/null | grep -v '\.original$' | head -1 || true)"
+    # 定位构建产物（spring-boot-maven-plugin repackage 产出 start-<ver>.jar）。
+    # 优先按当前 pom revision 精确匹配，避免 target 下残留旧版本 fat jar（如 start-1.0.5.jar）
+    # 因字母序排在 start-<version>.jar 之前而被 head -1 误选，导致安装到旧代码。
+    # 精确版本不存在时，再回退取最新的可执行 jar（排除 javadoc/sources/original 附属 jar）。
+    local v jar
+    v="$(grep -m1 '<revision>' "$PROJECT_ROOT/pom.xml" | sed 's/.*<revision>\([^<]*\)<\/revision>.*/\1/' || true)"
+    jar="$(ls start/target/start-${v}.jar 2>/dev/null | head -1 || true)"
     if [[ -z "${jar:-}" || ! -f "$jar" ]]; then
-        err "未找到构建产物 start/target/start-*.jar"
+        jar="$(ls -t start/target/start-*.jar 2>/dev/null | grep -vE '(-javadoc\.jar$|-sources\.jar$|\.original$)' | head -1 || true)"
+    fi
+    if [[ -z "${jar:-}" || ! -f "$jar" ]]; then
+        err "未找到构建产物 start/target/start-${v}.jar"
         exit 1
     fi
     echo "$jar"

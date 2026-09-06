@@ -128,15 +128,22 @@ if ($SkipBuild) {
     }
 }
 
-# 定位构建产物
-$jars = Get-ChildItem -Path (Join-Path $ProjectRoot "start\target") -Filter "start-*.jar" -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -notlike "*.original" }
-if (-not $jars -or $jars.Count -eq 0) {
-    Write-Err "未找到构建产物 start\target\start-*.jar"
+# 定位构建产物：优先按当前版本精确匹配，避免 target 下残留旧版本 fat jar（如 start-1.0.5.jar）
+# 因被 $jars[0] 选中而导致打包到旧代码。精确版本不存在时回退取最新可执行 jar。
+$targetDir = Join-Path $ProjectRoot "start\target"
+$exact = Get-ChildItem -Path $targetDir -Filter "start-$Version.jar" -ErrorAction SilentlyContinue |
+         Where-Object { $_.Name -notlike "*.original" }
+if (-not $exact -or $exact.Count -eq 0) {
+    $exact = Get-ChildItem -Path $targetDir -Filter "start-*.jar" -ErrorAction SilentlyContinue |
+             Where-Object { $_.Name -notlike "*.original" -and $_.Name -notlike "*-javadoc.jar" -and $_.Name -notlike "*-sources.jar" } |
+             Sort-Object LastWriteTime -Descending
+}
+if (-not $exact -or $exact.Count -eq 0) {
+    Write-Err "未找到构建产物 start\target\start-$Version.jar"
     Write-Err "请先执行 .\package.ps1 或去掉 -SkipBuild"
     exit 1
 }
-$jar = $jars[0].FullName
+$jar = $exact[0].FullName
 Write-Info "构建产物: $jar"
 
 # ---------------- 组装分发目录 ----------------

@@ -260,3 +260,182 @@ export interface TraceRun {
   errorCode?: string;
   steps: TraceStep[];
 }
+
+// ==================== Agent 评测（@Profile("web") 的 EvalController /eval/**） ====================
+// 后端来源：mwb-ai-claw-eval（model/*、app/*）
+
+/** 判定策略：rule | llm | both（both = rule 先过、llm 兜底） */
+export type EvalJudgeType = 'rule' | 'llm' | 'both';
+
+/** 单个用例/数据集的判定方式（rule | llm） */
+export type JudgeType = 'rule' | 'llm';
+
+/** LLM 裁判返回格式（quote | number | boolean） */
+export type JudgeReplyMode = 'quote' | 'number' | 'boolean';
+
+/** 确定性规则类型（exact | contains | regex） */
+export type RuleType = 'exact' | 'contains' | 'regex';
+
+/** golden trace 对比回归状态 */
+export type TraceDiffStatus = 'OK' | 'REGRESSED' | 'NO_BASELINE' | 'DISABLED';
+
+/** 单用例回归状态（improved | regressed | unchanged | new | missing） */
+export type DiffStatus = 'improved' | 'regressed' | 'unchanged' | 'new' | 'missing';
+
+/** 确定性判定规则 */
+export interface EvalRule {
+  type: RuleType;
+  value: string;
+  ignoreCase?: boolean;
+}
+
+/** 数据集元信息 */
+export interface EvalTask {
+  id: string;
+  name?: string;
+  version?: string;
+  enabled?: boolean;
+  defaultJudge?: JudgeType;
+  mode?: JudgeReplyMode;
+  model?: string;
+}
+
+/** 单条评测用例 */
+export interface EvalCase {
+  id: string;
+  name?: string;
+  prompt: string;
+  expected: string;
+  judge?: JudgeType;
+  mode?: JudgeReplyMode;
+  rule?: EvalRule;
+  metadata?: Record<string, string>;
+}
+
+/** 一个评测数据集 */
+export interface EvalDataset {
+  task: EvalTask;
+  cases: EvalCase[];
+}
+
+/** 数据集条目摘要（GET /eval/ls） */
+export interface DatasetInfo {
+  taskId: string;
+  name?: string;
+  file: string;
+  caseCount: number;
+  loaded: boolean;
+  error?: string;
+}
+
+/** 评测运行配置（POST /eval/run） */
+export interface EvalConfig {
+  datasetPath: string;
+  agentId?: string;
+  judge?: EvalJudgeType;
+  judgeModel?: string;
+  output?: string;
+  concurrency?: number;
+  filters?: Record<string, string>;
+  pricePerKToken?: number;
+  recordTraces?: boolean;
+}
+
+/** 聚合摘要 */
+export interface EvalSummary {
+  total: number;
+  passed: number;
+  failed: number;
+  passRate: number;
+  avgDurationMs: number;
+  avgTokens: number;
+  totalTokens: number;
+  cost: number;
+}
+
+/** 运行元信息 */
+export interface EvalMeta {
+  agentId?: string;
+  model?: string;
+  judgeModel?: string;
+  judge?: string;
+  datasetVersion?: string;
+  envHash?: string;
+}
+
+/** 单条用例的执行 + 判定结果 */
+export interface CaseResult {
+  caseId: string;
+  name?: string;
+  passed: boolean;
+  judge?: JudgeType;
+  score?: number;
+  verdict?: string;
+  reply?: string;
+  durationMs: number;
+  tokens: number;
+  error?: string;
+  traceDiffStatus?: TraceDiffStatus;
+  traceDiffDetails?: string;
+}
+
+/** 一次评测的完整报告 */
+export interface EvalReport {
+  taskId: string;
+  taskName?: string;
+  runAt: number;
+  meta?: EvalMeta;
+  summary?: EvalSummary;
+  cases: CaseResult[];
+}
+
+/** 一次「评测运行」的产出（完整报告 + 落盘路径） */
+export interface EvalRunResult {
+  report: EvalReport;
+  jsonPath?: string;
+  mdPath?: string;
+}
+
+/** 单用例回归对比项 */
+export interface EvalDiffItem {
+  caseId: string;
+  name?: string;
+  status: DiffStatus;
+  baselinePassed: boolean;
+  currentPassed: boolean;
+  baselineScore?: number;
+  currentScore?: number;
+}
+
+/** 两份报告的回归对比结果（GET /eval/diff） */
+export interface EvalDiff {
+  taskId: string;
+  baselinePassRate: number;
+  currentPassRate: number;
+  passRateDelta: number;
+  regression: boolean;
+  regressedCount: number;
+  improvedCount: number;
+  items: EvalDiffItem[];
+}
+
+/** 自动生成评测数据集请求（POST /eval/dataset/generate） */
+export interface GenerateDatasetCommand {
+  topic: string;
+  type?: string;
+  count?: number;
+  agentId?: string;
+  model?: string;
+  taskId?: string;
+  name?: string;
+}
+
+/** 自动生成评测数据集结果 */
+export interface GenerateDatasetResult {
+  datasetPath: string;
+  taskId: string;
+  taskName?: string;
+  caseCount: number;
+  dataset: EvalDataset;
+  model?: string;
+}
