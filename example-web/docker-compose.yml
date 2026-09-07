@@ -158,6 +158,7 @@ services:
       - example_web_agent:/app/.agent
       - example_web_logs:/app/logs
       - example_web_datasets:/app/generated-datasets
+      - example_web_eval_reports:/app/eval-report
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080'"]
       interval: 10s
@@ -184,3 +185,4 @@ volumes:
   example_web_agent:
   example_web_logs:
   example_web_datasets:
+  example_web_eval_reports:

@@ -14,6 +14,7 @@ import { evalApi } from '../api/client';
 import type {
   DatasetInfo,
   EvalConfig,
+  EvalDataset,
   EvalDiff,
   EvalJudgeType,
   EvalReport,
@@ -23,6 +24,7 @@ import type {
 import { Button } from '../components/common/Button';
 import { Card } from '../components/common/Card';
 import { Empty } from '../components/common/Empty';
+import { FilterableSelect } from '../components/common/FilterableSelect';
 import { Loading } from '../components/common/Loading';
 import { Tag } from '../components/common/Tag';
 import { formatDateTime } from '../utils/format';
@@ -61,13 +63,19 @@ export function EvalPage() {
   const [datasets, setDatasets] = useState<DatasetInfo[] | null>(null);
   const [datasetsLoading, setDatasetsLoading] = useState(false);
 
+  // ============ 数据集用例详情（展开查看单个数据集的 cases） ============
+  const [detailFile, setDetailFile] = useState('');
+  const [detailDataset, setDetailDataset] = useState<EvalDataset | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  // ============ 报告列表（供 /eval/report、/eval/diff 路径下拉） ============
+  const [reports, setReports] = useState<string[]>([]);
+
   // ============ 生成数据集 ============
   const [genTopic, setGenTopic] = useState('');
   const [genType, setGenType] = useState('qa');
   const [genCount, setGenCount] = useState(5);
   const [genAgentId, setGenAgentId] = useState('');
-  const [genModel, setGenModel] = useState('');
-  const [genTaskId, setGenTaskId] = useState('');
   const [genName, setGenName] = useState('');
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState<GenerateDatasetResult | null>(null);
@@ -76,7 +84,6 @@ export function EvalPage() {
   const [runDatasetPath, setRunDatasetPath] = useState('');
   const [runAgentId, setRunAgentId] = useState('');
   const [runJudge, setRunJudge] = useState<EvalJudgeType>('both');
-  const [runJudgeModel, setRunJudgeModel] = useState('');
   const [running, setRunning] = useState(false);
   const [runResult, setRunResult] = useState<EvalRunResult | null>(null);
 
@@ -106,8 +113,39 @@ export function EvalPage() {
     }
   };
 
+  const loadReports = async () => {
+    try {
+      setReports(await evalApi.listReports());
+    } catch (err) {
+      // 透出失败原因（如认证失败 / 后端未挂载 /eval），避免下拉静默为空、用户莫名看不到路径
+      setReports([]);
+      setError((err as Error).message);
+    }
+  };
+
+  const toggleDatasetDetail = async (file: string) => {
+    // 再次点击同一项 → 收起
+    if (detailFile === file) {
+      setDetailFile('');
+      return;
+    }
+    setDetailLoading(true);
+    setError('');
+    try {
+      setDetailDataset(await evalApi.dataset(file));
+      setDetailFile(file);
+    } catch (err) {
+      setError((err as Error).message);
+      setDetailFile('');
+      setDetailDataset(null);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
   useEffect(() => {
     void loadDatasets();
+    void loadReports();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -125,8 +163,6 @@ export function EvalPage() {
         type: genType.trim() || undefined,
         count: genCount,
         agentId: genAgentId.trim() || undefined,
-        model: genModel.trim() || undefined,
-        taskId: genTaskId.trim() || undefined,
         name: genName.trim() || undefined,
       });
       setGenerated(res);
@@ -152,10 +188,13 @@ export function EvalPage() {
       datasetPath: path.trim(),
       agentId: runAgentId.trim() || 'default',
       judge: runJudge,
-      judgeModel: runJudgeModel.trim() || undefined,
     };
     try {
-      setRunResult(await evalApi.run(config));
+      const res = await evalApi.run(config);
+      setRunResult(res);
+      // 运行成功即把报告路径回填到查看框，并刷新下拉列表，让路径立即可见/可选
+      if (res.jsonPath) setReportPath(res.jsonPath);
+      void loadReports();
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -265,22 +304,6 @@ export function EvalPage() {
             />
           </div>
           <div className="form-field">
-            <label>生成模型（可选，覆盖 Agent 配置）</label>
-            <input
-              value={genModel}
-              placeholder="缺省取主 Agent 绑定模型"
-              onChange={(e) => setGenModel(e.target.value)}
-            />
-          </div>
-          <div className="form-field">
-            <label>数据集 id（可选）</label>
-            <input
-              value={genTaskId}
-              placeholder="缺省按主题生成 slug"
-              onChange={(e) => setGenTaskId(e.target.value)}
-            />
-          </div>
-          <div className="form-field">
             <label>数据集显示名（可选）</label>
             <input
               value={genName}
@@ -363,9 +386,38 @@ export function EvalPage() {
                   <span className="mono run-trace-id" title={info.taskId}>
                     {info.taskId}
                   </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    icon={FileText}
+                    disabled={!info.loaded || detailLoading}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void toggleDatasetDetail(info.file);
+                    }}
+                  >
+                    {detailFile === info.file ? '收起' : '查看用例'}
+                  </Button>
                 </div>
                 <div className="run-meta text-faint">file: {info.file}</div>
                 {!info.loaded && info.error ? <div className="doc-error">{info.error}</div> : null}
+
+                {detailFile === info.file && detailDataset ? (
+                  <div className="gen-cases">
+                    {detailDataset.cases.map((c) => (
+                      <div key={c.id} className="gen-case">
+                        <div className="gen-case-head">
+                          <span className="gen-case-name">{c.name || c.id}</span>
+                          <Tag tone={c.rule?.type === 'contains' ? 'info' : 'default'}>
+                            rule: {c.rule?.type} {c.rule?.value}
+                          </Tag>
+                        </div>
+                        <div className="gen-case-prompt">{c.prompt}</div>
+                        <div className="gen-case-expected text-faint">期望：{c.expected}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
@@ -377,11 +429,15 @@ export function EvalPage() {
         <div className="eval-gen-grid">
           <div className="form-field form-field-wide">
             <label>数据集文件路径（datasetPath）</label>
-            <input
+            <FilterableSelect
+              options={(datasets || []).map((d) => ({
+                value: d.file,
+                label: d.name ? `${d.name} · ${d.file}` : d.file,
+              }))}
               value={runDatasetPath}
-              placeholder="选择数据集或生成后会自动填入"
-              spellCheck={false}
-              onChange={(e) => setRunDatasetPath(e.target.value)}
+              onChange={setRunDatasetPath}
+              placeholder="点击选择数据集，或手动输入路径"
+              emptyText="暂无数据集，先在上方生成或配置数据集目录"
             />
           </div>
           <div className="form-field">
@@ -401,14 +457,6 @@ export function EvalPage() {
                 </option>
               ))}
             </select>
-          </div>
-          <div className="form-field">
-            <label>LLM 裁判模型（可选）</label>
-            <input
-              value={runJudgeModel}
-              placeholder="缺省继承全局 judge-model"
-              onChange={(e) => setRunJudgeModel(e.target.value)}
-            />
           </div>
         </div>
         <div className="eval-actions">
@@ -452,9 +500,21 @@ export function EvalPage() {
               {runResult.report.taskName || runResult.report.taskId} · {formatDateTime(runResult.report.runAt)} · agent{' '}
               {runResult.report.meta?.agentId || '-'} · 判定 {runResult.report.meta?.judge || '-'}
               {runResult.jsonPath ? (
-                <Button size="sm" variant="ghost" icon={FileText} onClick={() => setReportPath(runResult.jsonPath!)}>
-                  查看 JSON 报告
-                </Button>
+                <>
+                  <span className="mono" title={runResult.jsonPath}>
+                    报告：{runResult.jsonPath}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    icon={FileText}
+                    onClick={() => {
+                      setReportPath(runResult.jsonPath!);
+                    }}
+                  >
+                    查看 JSON 报告
+                  </Button>
+                </>
               ) : null}
             </div>
 
@@ -494,17 +554,21 @@ export function EvalPage() {
         <div className="eval-gen-grid">
           <div className="form-field form-field-wide">
             <label>报告 JSON 路径（path，运行后自动回填）</label>
-            <input
+            <FilterableSelect
+              options={reports.map((p) => ({ value: p, label: p }))}
               value={reportPath}
-              placeholder="运行报告生成的 JSON 路径"
-              spellCheck={false}
-              onChange={(e) => setReportPath(e.target.value)}
+              onChange={setReportPath}
+              placeholder="点击选择历史报告，或手动输入路径"
+              emptyText="暂无报告，运行一次评测后自动生成"
             />
           </div>
         </div>
         <div className="eval-actions">
           <Button size="sm" icon={FileText} disabled={!reportPath.trim() || reportLoading} onClick={() => void viewReport()}>
             读取报告
+          </Button>
+          <Button size="sm" variant="ghost" icon={RefreshCw} disabled={reportLoading} onClick={() => void loadReports()}>
+            刷新列表
           </Button>
         </div>
 
@@ -540,20 +604,22 @@ export function EvalPage() {
           <div className="eval-gen-grid">
             <div className="form-field">
               <label>baseline 报告路径</label>
-              <input
+              <FilterableSelect
+                options={reports.map((p) => ({ value: p, label: p }))}
                 value={diffBaseline}
-                placeholder="基线报告 JSON 路径"
-                spellCheck={false}
-                onChange={(e) => setDiffBaseline(e.target.value)}
+                onChange={setDiffBaseline}
+                placeholder="点击选择基线报告，或手动输入路径"
+                emptyText="暂无报告可作基线"
               />
             </div>
             <div className="form-field">
               <label>current 报告路径</label>
-              <input
+              <FilterableSelect
+                options={reports.map((p) => ({ value: p, label: p }))}
                 value={diffCurrent}
-                placeholder="当前报告 JSON 路径"
-                spellCheck={false}
-                onChange={(e) => setDiffCurrent(e.target.value)}
+                onChange={setDiffCurrent}
+                placeholder="点击选择当前报告，或手动输入路径"
+                emptyText="暂无报告可作当前"
               />
             </div>
           </div>

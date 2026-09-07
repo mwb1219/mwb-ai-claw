@@ -5,6 +5,7 @@ import type {
   CreateSessionCmd,
   DatasetInfo,
   EvalConfig,
+  EvalDataset,
   EvalDiff,
   EvalReport,
   EvalRunResult,
@@ -309,5 +310,14 @@ export const evalApi = {
   ls(dir?: string): Promise<DatasetInfo[]> {
     const qs = dir ? `?dir=${encodeURIComponent(dir)}` : '';
     return request<DatasetInfo[]>(`/eval/ls${qs}`);
+  },
+  /** 查看单个数据集的完整内容（task + cases，供前端展开查看用例详情） */
+  dataset(path: string): Promise<EvalDataset> {
+    return request<EvalDataset>(`/eval/dataset?path=${encodeURIComponent(path)}`);
+  },
+  /** 列出报告目录中的可用 JSON 报告文件路径（供下拉选择/回归对比） */
+  listReports(dir?: string): Promise<string[]> {
+    const qs = dir ? `?dir=${encodeURIComponent(dir)}` : '';
+    return request<string[]>(`/eval/reports${qs}`);
   },
 };

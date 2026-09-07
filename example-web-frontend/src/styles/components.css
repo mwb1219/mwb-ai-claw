@@ -1796,6 +1796,142 @@
   box-shadow: 0 0 0 3px var(--primary-bg);
 }
 
+/* ==================== 下拉筛选选择器（FilterableSelect，/eval/** 路径选择） ==================== */
+.fselect {
+  position: relative;
+  width: 100%;
+}
+
+.fselect-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.fselect .fselect-input {
+  width: 100%;
+  padding: 8px 32px 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+}
+
+.fselect .fselect-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-bg);
+}
+
+.fselect-toggle {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.fselect-toggle:hover {
+  background: var(--bg-muted);
+  color: var(--text);
+}
+
+.fselect-panel {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  min-width: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-input);
+  box-shadow: 0 6px 20px var(--shadow-strong);
+  overflow: hidden;
+}
+
+.fselect-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.fselect .fselect-filter input {
+  flex: 1;
+  padding: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 12.5px;
+  font-family: inherit;
+}
+
+.fselect-list {
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.fselect-option {
+  padding: 7px 8px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.fselect-option.active {
+  background: var(--primary-bg);
+}
+
+.fselect-option.selected {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.fselect-option-label {
+  word-break: break-all;
+}
+
+.fselect-empty {
+  padding: 10px 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.fselect-clear {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.fselect-clear:hover {
+  background: var(--bg-muted);
+  color: var(--danger, #d32f2f);
+}
+
 .eval-actions {
   display: flex;
   align-items: center;

@@ -28,6 +28,7 @@ import com.mwb.ai.claw.eval.app.EvalService;
 import com.mwb.ai.claw.eval.dataset.DatasetLoader;
 import com.mwb.ai.claw.eval.judge.LlmJudgeEvaluator;
 import com.mwb.ai.claw.eval.model.EvalConfig;
+import com.mwb.ai.claw.eval.model.EvalDataset;
 import com.mwb.ai.claw.eval.model.EvalDiff;
 import com.mwb.ai.claw.eval.model.EvalReport;
 import com.mwb.ai.claw.eval.report.ReportWriter;
@@ -76,6 +77,10 @@ public class EvalController {
     @Value("${example.eval.dataset-dir:./generated-datasets}")
     private String datasetDir;
 
+    /** 报告落盘目录（/eval/reports 未指定 dir 时作为默认，与 EvalService 默认输出一致） */
+    @Value("${example.eval.report-dir:./eval-report}")
+    private String reportDir;
+
     /** 运行评测：加载数据集 → 执行 Agent → 判定 → 落盘 JSON/Markdown 报告。 */
     @PostMapping("/run")
     public SingleResponse<EvalRunResult> run(@RequestBody EvalConfig config) {
@@ -113,6 +118,20 @@ public class EvalController {
             return SingleResponse.of(result);
         } catch (Exception e) {
             return SingleResponse.buildFailure("EVAL_GENERATE_FAILED", "生成数据集失败: " + e.getMessage());
+        }
+    }
+
+    /** 查看单个数据集的完整内容（task + cases，供前端展开查看用例详情）。 */
+    @GetMapping("/dataset")
+    public SingleResponse<EvalDataset> dataset(@RequestParam("path") String datasetPath) {
+        try {
+            if (datasetPath == null || datasetPath.trim().isEmpty()) {
+                return SingleResponse.buildFailure("EVAL_BAD_REQUEST", "请提供数据集路径（path）");
+            }
+            EvalDataset dataset = readService().loadDataset(datasetPath.trim());
+            return SingleResponse.of(dataset);
+        } catch (Exception e) {
+            return SingleResponse.buildFailure("EVAL_DATASET_FAILED", "读取数据集失败: " + e.getMessage());
         }
     }
 
@@ -156,6 +175,19 @@ public class EvalController {
             return SingleResponse.of(infos);
         } catch (Exception e) {
             return SingleResponse.buildFailure("EVAL_LS_FAILED", "列出数据集失败: " + e.getMessage());
+        }
+    }
+
+    /** 列出报告目录中的可用 JSON 报告文件路径（供前端下拉选择 / 回归对比）。 */
+    @GetMapping("/reports")
+    public SingleResponse<List<String>> reports(@RequestParam(value = "dir", required = false) String reportDir) {
+        try {
+            String resolvedDir = reportDir == null || reportDir.trim().isEmpty()
+                    ? this.reportDir : reportDir.trim();
+            List<String> files = readService().listReportFiles(resolvedDir);
+            return SingleResponse.of(files);
+        } catch (Exception e) {
+            return SingleResponse.buildFailure("EVAL_REPORTS_FAILED", "列出报告失败: " + e.getMessage());
         }
     }
 

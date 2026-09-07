@@ -65,6 +65,11 @@ public class EvalService {
         return JSON.readValue(Files.readAllBytes(Paths.get(reportPath)), EvalReport.class);
     }
 
+    /** 加载并返回单个数据集的完整内容（task + cases，供前端查看用例详情）。 */
+    public EvalDataset loadDataset(String datasetPath) {
+        return datasetLoader.load(datasetPath.trim());
+    }
+
     /** 对比两份 JSON 报告（baseline vs current），返回回归差异。 */
     public EvalDiff diff(String baselineReport, String currentReport) throws IOException {
         return EvalDiffBuilder.build(loadReport(baselineReport), loadReport(currentReport));
@@ -90,6 +95,27 @@ public class EvalService {
             infos.add(describe(f));
         }
         return infos;
+    }
+
+    /** 扫描报告目录，列出可用的 JSON 报告文件路径（升序，供下拉选择/回归对比）。 */
+    public List<String> listReportFiles(String reportDir) {
+        Path dir = reportDir == null || reportDir.trim().isEmpty()
+                ? Paths.get(DEFAULT_OUTPUT) : Paths.get(reportDir);
+        List<String> files = new ArrayList<>();
+        if (!Files.isDirectory(dir)) {
+            return files;
+        }
+        File[] list = dir.toFile().listFiles();
+        if (list == null) {
+            return files;
+        }
+        java.util.Arrays.sort(list, Comparator.comparing(File::getName));
+        for (File f : list) {
+            if (f.isFile() && f.getName().toLowerCase().endsWith(".json")) {
+                files.add(f.getAbsolutePath());
+            }
+        }
+        return files;
     }
 
     private DatasetInfo describe(File f) {
