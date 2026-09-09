@@ -162,6 +162,11 @@ public class AgentProperties {
     private CollaborationConfig collaboration = new CollaborationConfig();
 
     /**
+     * 子代理动态生成配置（agent.subagent.*，H3 Agent-as-Tool）
+     */
+    private SubAgentConfig subagent = new SubAgentConfig();
+
+    /**
      * Redis 检索索引配置（agent.redis.*，db 形态下 Memory / RAG 召回共用；连接参数复用 spring.data.redis.*）
      */
     private RedisConfig redis = new RedisConfig();
@@ -406,6 +411,32 @@ public class AgentProperties {
 
         /** 悬挂 run 清理 TTL（毫秒），超期且 phase 仍为 GATE/SUSPENDED/RUNNING 的记录被清除（默认 24h） */
         private long staleTtlMs = 86_400_000L;
+    }
+
+    /**
+     * 子代理动态生成配置（agent.subagent.*，H3 Agent-as-Tool）。
+     * {@code enabled=false} 时 {@code spawn_agent} 工具不注册（系统零变化）；
+     * {@code enabled=true} 时工具以 `global=true` 进入所有 Agent 工具集。
+     */
+    @Data
+    public static class SubAgentConfig {
+        /** 子代理动态生成开关（默认关闭） */
+        private boolean enabled = false;
+
+        /** 每个子代理累计 token 预算（0 = 不限） */
+        private long budgetToken = 0;
+
+        /** 单次 spawn 超时（秒；&lt;=0 时复用 agent.security.tool-timeout） */
+        private int timeoutSeconds = 0;
+
+        /** 允许生成子代理的租户 id（空 = 全部；enabled 时生效） */
+        private List<String> allowedTenants = new ArrayList<>();
+
+        /** 子代理最多可再嵌套的深度（0 = 禁止嵌套 spawn；-1 = 不限） */
+        private int maxDescendants = 2;
+
+        /** 是否启用异步 spawn（切片 2 增强，默认关闭） */
+        private boolean async = false;
     }
 
     /**

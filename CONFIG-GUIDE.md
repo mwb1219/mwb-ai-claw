@@ -262,6 +262,26 @@ mwb-ai-claw --agent.collaboration.orchestration-run.store=local
 mwb-ai-claw --agent.eval.judge=rule --agent.eval.dataset-path=./dataset/qa.json
 ```
 
+### 8.4 子代理动态生成（agent.subagent.*，H3 Agent-as-Tool）
+
+主 Agent 在 ReAct 中经 `spawn_agent` 工具按需生成携带独立模型/上下文/预算的子代理完成单个任务，结果以工具 Observation 回传（与 delegate 静态候选池互补，二者可嵌套）。`enabled=true` 时 `spawn_agent` 工具以 `global=true` 注册进所有 Agent 工具集。
+
+| 配置 | 说明 | 默认 |
+| --- | --- | --- |
+| `agent.subagent.enabled` | 总开关（`false` 时工具不注册，系统零变化） | `false` |
+| `agent.subagent.budget-token` | 每个子代理累计 token 预算（`0` 不限） | `0` |
+| `agent.subagent.timeout-seconds` | 单次 spawn 超时（`<=0` 复用 `agent.security.tool-timeout`） | `0` |
+| `agent.subagent.allowed-tenants` | 允许生成子代理的租户 id（空 = 全部） | （空） |
+| `agent.subagent.max-descendants` | 子代理最多可再嵌套深度（`0` 禁止嵌套，`-1` 不限） | `2` |
+| `agent.subagent.async` | 是否启用异步 spawn（切片 2 增强，默认关闭） | `false` |
+
+`async=true`（且 `enabled=true`）时额外注册三个异步 spawn 工具：`spawn_subagent`（异步提交，立即返回 `agent_id`）、`subagent_status`（按 `agent_id` 轮询 `running/done/cancelled/not_found`）、`subagent_cancel`（按 `agent_id` 取消）。运行中的子代理记录在内存态 `SpawnedAgentRegistry`（`ConcurrentHashMap<agentId, Future>`），仅对发起方 `AgentScope` 可见、不跨请求持久化。
+
+```bash
+# 开启子代理动态生成示例
+mwb-ai-claw --agent.subagent.enabled=true --agent.subagent.timeout-seconds=60
+```
+
 ## 9. 数据与运行目录
 
 - 会话 / 记忆数据落在**运行目录** `.agent/` 下（按项目隔离）；

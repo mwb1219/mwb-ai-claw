@@ -68,7 +68,7 @@ agent:
       key-prefix: ${LOCK_KEY_PREFIX:claw:lock:}
   agent-id: default
   name: mwb-ai-claw
-  system-prompt: 你是 mwb-ai-claw 智能助手。当需要时可以调用工具来完成任务，完成后给出简洁回复。
+  system-prompt: 你是 mwb-ai-claw 智能助手。当需要时可以调用工具来完成任务，完成后给出简洁回复。当你判断某个任务适合交给一个拥有独立模型、专属人设或独立预算的专职子代理来处理时，请调用 spawn_agent 工具生成子代理完成任务，并用一句话汇总其结果。
   # 默认编排 id（引用 orchestrations.json 中的 id；多 Agent 协作编排经 invoke_* 工具由主 Agent 自主发起）
   orchestration: routing
   # 模型配置通过环境变量（.env / 系统环境变量）注入，避免密钥泄露
@@ -87,6 +87,17 @@ agent:
   # 技能（Skill）支持：渐进式披露 —— 技能清单常驻 system prompt，SKILL.md 正文按需经 use_skill 工具加载
   skills-enabled: true            # 技能总开关（false 时不加载技能、不注册 use_skill 工具）
   skills-dir: ""                  # 技能根目录（默认 ${user.dir}/skills；加载顺序：运行目录 → 安装目录 skills → classpath 内置）
+  # 子代理动态生成（agent.subagent.*，H3 Agent-as-Tool）
+  # 主 Agent 在 ReAct 中经 spawn_agent 工具按需生成携带独立模型/上下文/预算的子代理完成单个任务，
+  # 结果以工具 Observation 回传（与 delegate 静态候选池互补）
+  # enabled=true 时 spawn_agent 工具以 global=true 注册进所有 Agent 工具集，结果在推理轨迹中以子代理卡片展示
+  subagent:
+    enabled: true              # 总开关（true 时注册 spawn_agent 工具；false 时工具不注册，系统零变化）
+    budget-token: 0            # 每个子代理累计 token 预算（0 不限）
+    timeout-seconds: 0         # 单次 spawn 超时（<=0 复用 agent.security.tool-timeout）
+    allowed-tenants: []        # 允许生成子代理的租户 id（空=全部）
+    max-descendants: 2         # 子代理最多可再嵌套深度（0 禁止嵌套，-1 不限）
+    async: false               # 异步 spawn 生命周期工具（spawn_subagent/subagent_status/subagent_cancel）随可视化页面移除而关闭
   # 可用工具列表：缺省（不配置）= 绑定全部已注册工具（内置 + 全局/MCP）；
   # 指定后 = 强制仅绑定声明的工具（use_skill / MCP / invoke_* 等全局工具需显式加入）
   # tools:

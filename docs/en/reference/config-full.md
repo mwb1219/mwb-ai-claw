@@ -38,6 +38,12 @@ nav_order: 3
 | `SYNTHESIS_LOCK_WATCHDOG_INTERVAL` | `200` | Synthesis lock watchdog renew interval (seconds, default 1/3 TTL) |
 | `RUN_USAGE_STORE` | `local` | Run-usage storage: `local` (JSONL) \| `db` (table) |
 | `TRACE_ENABLED` / `TRACE_STORE` | `true` / `local` | Step-level trace switch / storage: `local` \| `db` |
+| `AGENT_SUBAGENT_ENABLED` | `false` | Sub-agent dynamic generation switch (H3 Agent-as-Tool) |
+| `AGENT_SUBAGENT_BUDGET_TOKEN` | `0` | Per-sub-agent cumulative token budget (`0` = unlimited) |
+| `AGENT_SUBAGENT_TIMEOUT_SECONDS` | `0` | Per-spawn timeout (`<=0` reuses `agent.security.tool-timeout`) |
+| `AGENT_SUBAGENT_ALLOWED_TENANTS` | (empty) | Tenants allowed to spawn sub-agents (empty = all) |
+| `AGENT_SUBAGENT_MAX_DESCENDANTS` | `2` | Max nested spawn depth (`0` = forbid nesting, `-1` = unlimited) |
+| `AGENT_SUBAGENT_ASYNC` | `false` | Async spawn (slice-2 enhancement, off by default) |
 
 ## 2. Spring Basics (application.yml)
 
@@ -65,6 +71,21 @@ nav_order: 3
 | `agent.skills-dir` | `${user.dir}/skills` | Skills root directory |
 | `agent.tools` | All registered tools | Force-bind to the declared tool list only |
 | `agent.storage.type` | `file` | Storage form (see `STORAGE_TYPE`): `file` fully local; `db` = MySQL storage + Redis Stack retrieval |
+
+### 3.10 Sub-Agent Dynamic Generation (agent.subagent.*, H3 Agent-as-Tool)
+
+The main agent, within its ReAct loop, uses the `spawn_agent` tool to generate on demand a sub-agent with its own model / context / budget to complete a single task; the result is returned as a tool Observation (complementary to the static delegate candidate pool; the two can be nested).
+
+| Config | Default | Description |
+| --- | --- | --- |
+| `agent.subagent.enabled` | `false` | Master switch (`false` = the `spawn_agent` tool is not registered, zero system change; `true` = the tool enters every agent's toolset as `global=true`) |
+| `agent.subagent.budget-token` | `0` | Per-sub-agent cumulative token budget (`0` = unlimited) |
+| `agent.subagent.timeout-seconds` | `0` | Per-spawn timeout (`<=0` reuses `agent.security.tool-timeout`) |
+| `agent.subagent.allowed-tenants` | (empty) | Tenants allowed to spawn sub-agents (empty = all) |
+| `agent.subagent.max-descendants` | `2` | Max nested spawn depth (`0` = forbid nesting, `-1` = unlimited) |
+| `agent.subagent.async` | `false` | Async spawn (slice-2 enhancement, off by default) |
+
+With `async=true` (and `enabled=true`), three async spawn tools are additionally registered: `spawn_subagent` (async submit, immediately returns `agent_id`), `subagent_status` (poll `running/done/cancelled/not_found` by `agent_id`), and `subagent_cancel` (cancel by `agent_id`). Running sub-agents are tracked in an in-memory `SpawnedAgentRegistry` (`ConcurrentHashMap<agentId, Future>`), visible only to the originating `AgentScope` and not persisted across requests.
 
 ## 4. Tiered Memory (agent.memory.*)
 

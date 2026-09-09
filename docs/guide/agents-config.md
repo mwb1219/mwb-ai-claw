@@ -139,8 +139,11 @@ nav_order: 7
 
 - [ ] `invoke_discussion` → team-discussion 编排（多方专家讨论收敛）
 - [ ] `invoke_delegate` → todo-delegate 编排（Todo 拆解委派）
+- [ ] `spawn_agent` → 子代理动态生成（agents-as-tools）：按需生成携带独立模型/上下文/预算的子代理完成单个任务，结果以工具 Observation 回传（`agent.subagent.enabled=true` 时注册）
+- [ ] `spawn_subagent` / `subagent_status` / `subagent_cancel` → 异步 spawn（`agent.subagent.async=true` 时注册；异步提交后按返回的 `agent_id` 轮询状态或取消）
 - [ ] 全局注册（global=true），无需在配置中声明
 - [ ] 编排嵌套组合：delegate 的 Todo 可指定 `orchestrationId` 调起其他编排（如 conversational），带防环检测
+- [ ] 与编排正交：spawn 属 agents-as-tools，由主 Agent 在 ReAct 中自主发起，无需在 `orchestrations.json` 声明；配置见 [配置指南](../../CONFIG-GUIDE.md) §8.4
 
 ## 5. 校验与排错
 

@@ -3,7 +3,7 @@
     {
       "id": "routing",
       "type": "routing",
-      "description": "单专家独立处理：按意图路由到最合适的 Agent。作为默认兜底编排",
+      "description": "单专家独立处理：按意图路由到最合适的 Agent。作为默认兜底编排；多 Agent 协作与子代理动态生成（agents-as-tools，spawn_agent/spawn_subagent）由主 Agent 在 ReAct 中自主发起，无需在此声明",
       "agents": ["marketing"]
     },
     {

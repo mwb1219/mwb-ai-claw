@@ -152,7 +152,7 @@ public class ReActLoopService {
                         : "ERROR: " + toolResult.getError();
 
                 session.addToolMessage(toolCall.getId(), observation);
-                String obs = "[Observation] " + truncate(observation);
+                String obs = "[Observation] " + truncateObservation(observation);
                 result.getTraceSteps().add(obs);
                 notify(callback, obs);
             }
@@ -227,6 +227,18 @@ public class ReActLoopService {
             return "";
         }
         return text.length() > 200 ? text.substring(0, 200) + "..." : text;
+    }
+
+    /**
+     * 截断工具 observation（SSE 事件 / 推理轨迹展示）。默认 200 字符对结构化结果（如子代理 {@code SubAgentResult} JSON、
+     * 含工具自身响应）过短，故放宽到 6000 字符；主 Agent 上下文仍写入完整 {@code observation}（见上方
+     * {@code session.addToolMessage}），此处仅限制展示层体积，避免单条 SSE 事件过大。
+     */
+    private String truncateObservation(String text) {
+        if (text == null) {
+            return "";
+        }
+        return text.length() > 6000 ? text.substring(0, 6000) + "..." : text;
     }
 
     /** 截断工具参数以免 trace step / SSE 事件过大 */

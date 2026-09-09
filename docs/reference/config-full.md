@@ -68,6 +68,21 @@ nav_order: 3
 | `agent.tools` | 全部注册工具 | 强制仅绑定声明的工具列表 |
 | `agent.storage.type` | `file` | 存储形态（见 `STORAGE_TYPE`）：`file` 全本地；`db` 走 MySQL 存储 + Redis Stack 召回 |
 
+### 3.10 子代理动态生成（agent.subagent.*，H3 Agent-as-Tool）
+
+主 Agent 在 ReAct 中经 `spawn_agent` 工具按需生成携带独立模型/上下文/预算的子代理完成单个任务，结果以工具 Observation 回传（与 delegate 静态候选池互补，二者可嵌套）。
+
+| 配置 | 默认值 | 说明 |
+| --- | --- | --- |
+| `agent.subagent.enabled` | `false` | 总开关（`false` 时 `spawn_agent` 工具不注册，系统零变化；`true` 时工具以 `global=true` 进入所有 Agent 工具集） |
+| `agent.subagent.budget-token` | `0` | 每个子代理累计 token 预算（`0` 不限） |
+| `agent.subagent.timeout-seconds` | `0` | 单次 spawn 超时（`<=0` 复用 `agent.security.tool-timeout`） |
+| `agent.subagent.allowed-tenants` | （空） | 允许生成子代理的租户 id（空 = 全部） |
+| `agent.subagent.max-descendants` | `2` | 子代理最多可再嵌套深度（`0` 禁止嵌套，`-1` 不限） |
+| `agent.subagent.async` | `false` | 是否启用异步 spawn（切片 2 增强，默认关闭） |
+
+`async=true`（且 `enabled=true`）时额外注册三个异步 spawn 工具：`spawn_subagent`（异步提交，立即返回 `agent_id`）、`subagent_status`（按 `agent_id` 轮询 `running/done/cancelled/not_found`）、`subagent_cancel`（按 `agent_id` 取消）。运行中的子代理记录在内存态 `SpawnedAgentRegistry`（`ConcurrentHashMap<agentId, Future>`），仅对发起方 `AgentScope` 可见、不跨请求持久化。
+
 ## 4. 分层记忆（agent.memory.*）
 
 | 配置 | 默认值 | 说明 |

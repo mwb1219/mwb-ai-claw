@@ -275,3 +275,38 @@ curl http://localhost:8080/trace/<traceId> -H "X-API-Key: sk-admin-bootstrap"
   `claw_rag_document` / `rag_index_entries`、`claw_trace` / `claw_run_usage`）的 MySQL 版见
   [db/mysql/framework-schema.sql](db/mysql/framework-schema.sql) 与 [db/mysql/example-web-schema.sql](db/mysql/example-web-schema.sql)，
   由 MySQL 容器首次初始化时自动执行。
+
+## 9. 子代理在推理轨迹中展示（H3 · Agent-as-Tool）
+
+> 对应框架 H3「Sub-Agent 动态生成 / Agent-as-Tool」：主 Agent 在 ReAct 中按需生成携带独立
+> 上下文 / 模型 / 预算的子代理完成任务，结果以工具 Observation 回传。本示例不再单独提供可视化页面，
+> 而是把子代理的执行结果**作为一张卡片直接融入对话的「推理轨迹」**，更贴近实际使用场景。
+
+### 9.1 启用条件
+
+- 后端 [application.yml](src/main/resources/application.yml) 需开启（示例默认已开）：
+  - `agent.subagent.enabled: true` —— 注册同步工具 `spawn_agent`（`global=true`，所有 Agent 可见）；
+  - `agent.subagent.async: false`（默认）—— 异步生命周期工具
+    （`spawn_subagent / subagent_status / subagent_cancel`）随可视化页面移除而关闭，不装配。
+- system prompt 已内置 `spawn_agent` 使用引导（见 `agent.system-prompt`），模型判断任务适合专职子代理时自动调用。
+
+### 9.2 推理轨迹中的子代理卡片
+
+触发 `spawn_agent` 后，工具返回的 `SubAgentResult`（含 `agentId / reply / traceSteps / stepsUsed / tokens /
+durationMs / success / error / cancelled`）以 `[Observation]` 形式传入主 Agent 推理轨迹。前端
+[TraceTimeline.tsx](../example-web-frontend/src/components/chat/TraceTimeline.tsx) 会对该 observation 做结构化识别，
+命中则渲染为一张子代理卡片：
+
+- **状态标签**：成功 / 失败 / 已取消（命中 `subagent-card` 样式，边框按状态着色）。
+- **结论**：子代理最终 `reply` 一句话摘要。
+- **元信息**：步数、tokens、耗时（ms）。
+- **可展开的子代理自身轨迹**：点击「查看子代理推理轨迹」折叠展示该子代理自身的
+  Thought / Action / Observation 步骤（来自返回的 `traceSteps`）。
+
+> 观察结果在展示层放宽至 6000 字符截断（`ReActLoopService#truncateObservation`），保证结构化 JSON 不被截断；
+> 主 Agent 上下文仍写入完整 observation，不影响后续推理。
+
+### 9.3 验证
+
+发起一次对话，提示模型调用 `spawn_agent`（例如「让一个子代理帮我分析 XX 问题」），
+在对话页右侧「推理轨迹」即可看到子代理卡片及其可展开的自身推理步骤。

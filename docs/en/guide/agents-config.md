@@ -139,8 +139,11 @@ Multi-agent collaboration is usually not triggered by pre-message intent routing
 
 - [ ] `invoke_discussion` → team-discussion orchestration (multi-party discussion and convergence)
 - [ ] `invoke_delegate` → todo-delegate orchestration (Todo breakdown and delegation)
+- [ ] `spawn_agent` → dynamic sub-agent generation (agents-as-tools): on-demand spawn of a sub-agent with its own model/context/budget to complete a single task, result returned as a tool Observation (registered when `agent.subagent.enabled=true`)
+- [ ] `spawn_subagent` / `subagent_status` / `subagent_cancel` → async spawn (registered when `agent.subagent.async=true`; after async submit, poll status or cancel by the returned `agent_id`)
 - [ ] Globally registered (global=true), no need to declare in config
 - [ ] Nested orchestration composition: a delegate todo can specify `orchestrationId` to invoke another orchestration (e.g. conversational), with cycle detection
+- [ ] Orthogonal to orchestration: spawn belongs to agents-as-tools, initiated autonomously by the main Agent in ReAct, no need to declare in `orchestrations.json`; see [Configuration Guide](../../CONFIG-GUIDE.md) §8.4
 
 ## 5. Validation & Troubleshooting
 

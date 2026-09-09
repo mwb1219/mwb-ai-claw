@@ -28,6 +28,7 @@ import org.springframework.util.ClassUtils;
 
 import com.mwb.ai.claw.domain.core.AgentGateway;
 import com.mwb.ai.claw.domain.core.ModelConfig;
+import com.mwb.ai.claw.domain.collaboration.spi.ExecutionUnit;
 import com.mwb.ai.claw.domain.llm.EmbeddingGateway;
 import com.mwb.ai.claw.domain.llm.LlmGateway;
 import com.mwb.ai.claw.domain.memory.layered.LayeredMemoryGateway;
@@ -54,6 +55,7 @@ import com.mwb.ai.claw.domain.rag.write.RagChunker;
 import com.mwb.ai.claw.domain.rag.write.RagDocumentParser;
 import com.mwb.ai.claw.domain.rag.write.RagIngestionService;
 import com.mwb.ai.claw.domain.skill.SkillGateway;
+import com.mwb.ai.claw.domain.subagent.SubAgentFactory;
 import com.mwb.ai.claw.domain.tool.ToolExecutor;
 import com.mwb.ai.claw.domain.tool.ToolGateway;
 import com.mwb.ai.claw.domain.tool.ToolPermissionChecker;
@@ -118,6 +120,9 @@ import com.mwb.ai.claw.infrastructure.rag.write.TextRagDocumentParser;
 import com.mwb.ai.claw.infrastructure.rag.write.WordRagDocumentParser;
 import com.mwb.ai.claw.infrastructure.skill.SkillLoader;
 import com.mwb.ai.claw.infrastructure.skill.SkillRegistryImpl;
+import com.mwb.ai.claw.infrastructure.subagent.SpawnedAgentRegistry;
+import com.mwb.ai.claw.infrastructure.subagent.SubAgentExecutor;
+import com.mwb.ai.claw.infrastructure.subagent.SubAgentFactoryImpl;
 import com.mwb.ai.claw.infrastructure.tool.ToolGatewayImpl;
 
 import io.lettuce.core.RedisURI;
@@ -724,6 +729,32 @@ public class ClawCoreAutoConfiguration {
                                          LongTermMemoryGateway longTermMemoryGateway,
                                          AgentRegistryLoader agentRegistryLoader) {
         return new AgentGatewayImpl(agentProperties, longTermMemoryGateway, agentRegistryLoader);
+    }
+
+    // ==================== 子代理动态生成（H3 · Agent-as-Tool） ====================
+    // SpawnAgentTool / SpawnSubAgentTool / SubAgentStatusTool / SubAgentCancelTool 仅在
+    // agent.subagent.enabled=true（异步工具还需 async=true）时以 @ConditionalOnProperty 注册；
+    // SubAgentFactory 默认实现无条件注册（使用方可覆盖），但 isAllowed 内部检查 enabled / 租户白名单。
+    @Bean
+    @ConditionalOnMissingBean(SubAgentFactory.class)
+    public SubAgentFactoryImpl subAgentFactory(AgentGateway agentGateway, AgentProperties agentProperties) {
+        return new SubAgentFactoryImpl(agentGateway, agentProperties);
+    }
+
+    // SubAgentExecutor：同步/异步 spawn 共用的执行逻辑，被 SpawnAgentTool 与三个异步工具委托。
+    @Bean
+    @ConditionalOnMissingBean(SubAgentExecutor.class)
+    public SubAgentExecutor subAgentExecutor(SubAgentFactory subAgentFactory, ExecutionUnit executionUnit,
+                                             AgentProperties agentProperties) {
+        return new SubAgentExecutor(subAgentFactory, executionUnit, agentProperties);
+    }
+
+    // SpawnedAgentRegistry：异步 spawn 内存态注册表，仅当 enabled=true 且 async=true 时装配（默认关闭零变化）。
+    @Bean
+    @ConditionalOnMissingBean(SpawnedAgentRegistry.class)
+    @ConditionalOnProperty(prefix = "agent.subagent", name = {"enabled", "async"}, havingValue = "true")
+    public SpawnedAgentRegistry spawnedAgentRegistry() {
+        return new SpawnedAgentRegistry();
     }
 
     // ==================== 存储后端（file | db 二选一） ====================
