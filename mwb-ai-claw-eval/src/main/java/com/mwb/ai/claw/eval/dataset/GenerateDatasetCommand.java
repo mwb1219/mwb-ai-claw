@@ -1,9 +1,12 @@
-package com.mwb.ai.claw.example.web.dto;
+package com.mwb.ai.claw.eval.dataset;
 
 import lombok.Data;
 
 /**
  * 自动生成评测数据集的请求体：按主题用 LLM 产出 {prompt, expected, rule} 用例并落盘为数据集文件。
+ * <p>
+ * 属于 {@code mwb-ai-claw-eval} 库能力，供 REST / shell 等任意接入方复用（如 example-web 的
+ * {@code POST /eval/dataset/generate}）。
  */
 @Data
 public class GenerateDatasetCommand {

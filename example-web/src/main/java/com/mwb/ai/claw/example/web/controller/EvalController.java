@@ -33,9 +33,9 @@ import com.mwb.ai.claw.eval.model.EvalDiff;
 import com.mwb.ai.claw.eval.model.EvalReport;
 import com.mwb.ai.claw.eval.report.ReportWriter;
 import com.mwb.ai.claw.eval.runner.EvalRunner;
-import com.mwb.ai.claw.example.web.dto.GenerateDatasetCommand;
-import com.mwb.ai.claw.example.web.dto.GenerateDatasetResult;
-import com.mwb.ai.claw.example.web.service.EvalDatasetGenerator;
+import com.mwb.ai.claw.eval.dataset.EvalDatasetGenerator;
+import com.mwb.ai.claw.eval.dataset.GenerateDatasetCommand;
+import com.mwb.ai.claw.eval.dataset.GenerateDatasetResult;
 import com.mwb.ai.claw.infrastructure.observability.MetricsRecorder;
 
 /**
@@ -69,11 +69,7 @@ public class EvalController {
     @Resource
     private ObjectProvider<TraceStore> traceStoreProvider;
 
-    /** LLM 驱动的数据集自动生成器 */
-    @Resource
-    private EvalDatasetGenerator evalDatasetGenerator;
-
-    /** 数据集落盘目录（与 EvalDatasetGenerator 一致；/eval/ls 未指定 dir 时作为默认） */
+    /** 数据集落盘目录（与 {@link EvalDatasetGenerator} 落盘目录一致；/eval/ls 未指定 dir 时作为默认） */
     @Value("${example.eval.dataset-dir:./generated-datasets}")
     private String datasetDir;
 
@@ -114,7 +110,8 @@ public class EvalController {
             if (cmd == null || cmd.getTopic() == null || cmd.getTopic().trim().isEmpty()) {
                 return SingleResponse.buildFailure("EVAL_BAD_REQUEST", "生成数据集需提供主题（topic）");
             }
-            GenerateDatasetResult result = evalDatasetGenerator.generate(cmd);
+            EvalDatasetGenerator generator = new EvalDatasetGenerator(llmGateway, agentGateway, datasetDir);
+            GenerateDatasetResult result = generator.generate(cmd);
             return SingleResponse.of(result);
         } catch (Exception e) {
             return SingleResponse.buildFailure("EVAL_GENERATE_FAILED", "生成数据集失败: " + e.getMessage());
