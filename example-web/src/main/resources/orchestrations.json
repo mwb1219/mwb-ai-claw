@@ -3,7 +3,7 @@
     {
       "id": "routing",
       "type": "routing",
-      "description": "单专家独立处理：适用于单一领域问题（写代码、查资料、答疑、修复等），由路由按意图选择最合适的 Agent。作为默认兜底编排；多 Agent 协作编排经 invoke_* 工具由主 Agent 自主发起，不再做消息前置意图路由",
+      "description": "单专家独立处理：适用于单一领域问题（写代码、查资料、答疑、修复等），由路由按意图选择最合适的 Agent。作为默认兜底编排；多 Agent 协作编排经 invoke_* 工具由主 Agent 自主发起，不再做消息前置意图路由；子代理动态生成（agents-as-tools）经 spawn_agent/spawn_subagent 工具同样由主 Agent 在 ReAct 中自主发起，均无需在此声明",
       "agents": ["coder", "researcher", "architect", "reviewer"]
     },
     {

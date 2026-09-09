@@ -36,6 +36,19 @@ agent:
   max-steps-extension: 2.0
   memory-dir: ""
 
+  # 子代理动态生成（agent.subagent.*，H3 Agent-as-Tool）
+  # 主 Agent 在 ReAct 中经 spawn_agent 工具按需生成携带独立模型/上下文/预算的子代理完成单个任务，
+  # 结果以工具 Observation 回传（与 delegate 静态候选池互补）
+  # enabled=true 时 spawn_agent 工具以 global=true 注册进所有 Agent 工具集
+  # async=true 时额外注册 spawn_subagent / subagent_status / subagent_cancel 三个异步工具（切片 2）
+  subagent:
+    enabled: false              # 总开关（false 时工具不注册，系统零变化）
+    budget-token: 0            # 每个子代理累计 token 预算（0 不限）
+    timeout-seconds: 0         # 单次 spawn 超时（<=0 复用 agent.security.tool-timeout）
+    allowed-tenants: []        # 允许生成子代理的租户 id（空=全部）
+    max-descendants: 2         # 子代理最多可再嵌套深度（0 禁止嵌套，-1 不限）
+    async: false               # 异步 spawn（切片 2 增强，默认关闭）
+
   # 分层记忆
   memory:
     enabled: true

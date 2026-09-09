@@ -1,6 +1,7 @@
 import { useChatStore } from '../../store/chat';
 import { Empty } from '../common/Empty';
 import { Tag } from '../common/Tag';
+import { SubAgentCard, tryParseSubAgent } from './SubAgentCard';
 
 /** 推理轨迹时间线 + 工具调用片段（右侧栏） */
 export function TraceTimeline() {
@@ -34,14 +35,23 @@ export function TraceTimeline() {
       {traceSteps.length > 0 ? (
         <div className="trace-list">
           <h4 className="timeline-title">推理轨迹</h4>
-          {traceSteps.map((step) => (
-            <div key={step.id} className={`trace-step trace-${step.type}`}>
-              <Tag tone={step.type === 'error' ? 'danger' : step.type === 'action' ? 'warning' : 'info'}>
-                {step.label}
-              </Tag>
-              <div className="trace-body">{step.body}</div>
-            </div>
-          ))}
+          {traceSteps.map((step) => {
+            // observation 中若是子代理结果 JSON，用结构化卡片展示
+            if (step.type === 'observation' || step.type === 'action' || step.type === 'thought') {
+              const sub = tryParseSubAgent(step.body);
+              if (sub) {
+                return <SubAgentCard key={step.id} data={sub} />;
+              }
+            }
+            return (
+              <div key={step.id} className={`trace-step trace-${step.type}`}>
+                <Tag tone={step.type === 'error' ? 'danger' : step.type === 'action' ? 'warning' : 'info'}>
+                  {step.label}
+                </Tag>
+                <div className="trace-body">{step.body}</div>
+              </div>
+            );
+          })}
         </div>
       ) : null}
     </div>

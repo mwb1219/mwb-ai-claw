@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.example.web.dto;
+package com.mwb.ai.claw.eval.dataset;
 
 import com.mwb.ai.claw.eval.model.EvalDataset;
 
@@ -6,6 +6,8 @@ import lombok.Data;
 
 /**
  * 自动生成评测数据集的结果：已落盘文件路径 + 数据集摘要 + 完整内容（供前端预览/回填）。
+ * <p>
+ * 与 {@link GenerateDatasetCommand} 配套，属于 {@code mwb-ai-claw-eval} 库能力。
  */
 @Data
 public class GenerateDatasetResult {

@@ -1,4 +1,4 @@
-package com.mwb.ai.claw.example.web.service;
+package com.mwb.ai.claw.eval.dataset;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -8,9 +8,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
-
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.MapperFeature;
@@ -23,41 +20,44 @@ import com.mwb.ai.claw.domain.llm.LlmGateway;
 import com.mwb.ai.claw.domain.llm.LlmMessage;
 import com.mwb.ai.claw.domain.llm.LlmRequest;
 import com.mwb.ai.claw.domain.llm.LlmResponse;
-import com.mwb.ai.claw.eval.dataset.DatasetLoader;
 import com.mwb.ai.claw.eval.model.EvalCase;
 import com.mwb.ai.claw.eval.model.EvalDataset;
 import com.mwb.ai.claw.eval.model.EvalRule;
 import com.mwb.ai.claw.eval.model.JudgeReplyMode;
 import com.mwb.ai.claw.eval.model.JudgeType;
 import com.mwb.ai.claw.eval.model.RuleType;
-import com.mwb.ai.claw.example.web.dto.GenerateDatasetCommand;
-import com.mwb.ai.claw.example.web.dto.GenerateDatasetResult;
 
 /**
  * LLM 驱动的评测数据集生成器：按主题调用 Agent 模型，产出符合数据集规范（task + cases[prompt/expected/rule]）
- * 的 JSON，校验后落盘到 {@code example.eval.dataset-dir}（默认 ./generated-datasets），返回路径 + 摘要。
+ * 的 JSON，校验后落盘到指定目录（默认 {@code ./generated-datasets}），返回路径 + 摘要。
  * <p>
+ * 属于 {@code mwb-ai-claw-eval} 库能力，默认以「构造注入 + 显式目录」的 POJO 形态供任意接入方复用
+ * （example-web 的 {@code POST /eval/dataset/generate}、shell CLI 等），不绑定 Spring 注解。
  * 生成用例自带 {@code rule(type=contains)}，可直接用 judge=rule 做低成本确定性回归；也支持 judge=both 语义兜底。
- * 不依赖核心执行链路，仅复用 {@link LlmGateway} / {@link AgentGateway} 已暴露的 Bean。
+ * 仅复用 {@link LlmGateway} / {@link AgentGateway} 已暴露的 Bean，不依赖核心执行链路。
  */
-@Component
 public class EvalDatasetGenerator {
 
     private static final int MAX_CASES = 20;
     private static final String DEFAULT_AGENT = "default";
+    private static final String DEFAULT_DATASET_DIR = "./generated-datasets";
 
     private final LlmGateway llmGateway;
     private final AgentGateway agentGateway;
     private final DatasetLoader datasetLoader;
     private final ObjectMapper mapper;
-
-    @Value("${example.eval.dataset-dir:./generated-datasets}")
-    private String datasetDir;
+    private final String datasetDir;
 
     public EvalDatasetGenerator(LlmGateway llmGateway, AgentGateway agentGateway) {
+        this(llmGateway, agentGateway, DEFAULT_DATASET_DIR);
+    }
+
+    public EvalDatasetGenerator(LlmGateway llmGateway, AgentGateway agentGateway, String datasetDir) {
         this.llmGateway = llmGateway;
         this.agentGateway = agentGateway;
         this.datasetLoader = new DatasetLoader();
+        this.datasetDir = datasetDir == null || datasetDir.trim().isEmpty()
+                ? DEFAULT_DATASET_DIR : datasetDir.trim();
         this.mapper = new ObjectMapper()
                 .enable(SerializationFeature.INDENT_OUTPUT)
                 .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
